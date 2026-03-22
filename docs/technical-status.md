@@ -12,9 +12,10 @@ _Last updated: 2026-03-22_
 
 ## Still unverified (needs real VM validation)
 
+- bootc delivery/integration on Arch is currently not solved in this repository.
 - End-to-end VM reliability across host environments.
 - Desktop session quality/stability beyond first login.
-- bootc lifecycle checks (rebase/rollback) on this Arch-based image.
+- bootc lifecycle checks (rebase/rollback) on this Arch-based image (blocked until bootc delivery on Arch is solved here).
 - Long-term assumptions around pacman DB relocation and bootc package behavior in Arch repos.
 
 ## Deferred intentionally

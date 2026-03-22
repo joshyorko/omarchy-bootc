@@ -2,9 +2,10 @@
 # One package name per line. Lines starting with # and blank lines are ignored.
 # Installed by build/10-base.sh using pacman.
 
-# ── bootc / immutable image tooling ──────────────────────────────────────────
-bootc
-
+# ── bootc status ─────────────────────────────────────────────────────────────
+# bootc package is intentionally NOT installed here right now because current
+# Arch repos in CI do not provide a resolvable `bootc` package.
+#
 # ── Boot-critical runtime packages for VM images ─────────────────────────────
 # These are intentionally minimal for first qcow2 bootability.
 linux

@@ -9,6 +9,7 @@ Implemented in this repository:
 
 - OCI build on `archlinux:base` using layered scripts in `build/`.
 - qcow2 generation path via `bootc-image-builder`.
+- Omarchy-style Arch VM session path (`greetd` + `tuigreet` + `Hyprland`) remains the active focus.
 - Explicit VM login path: `greetd + tuigreet + Hyprland`.
 - Explicit default POC user: `omarchy` / `omarchy` (documented insecure default for local VM testing).
 - One-shot root first-boot setup that seeds starter config and marks completion.
@@ -76,12 +77,15 @@ The image now includes explicit boot-critical packages (`linux`, `mkinitcpio`, `
 
 Remaining assumptions to validate in real VM boots:
 
+- `bootc` delivery/integration on Arch is not solved in this repo yet (package is not currently available in CI repos).
 - `bootc-image-builder` reliably produces a bootable Arch qcow2 from this image layout.
 - Arch `bootc` package behavior remains compatible with this flow over time.
 - Hyprland compositor behavior in a virtualized GPU environment is host/hypervisor dependent.
 
 ## Notes
 
-- This remains a technical POC.
+- This remains a technical POC for an Omarchy-style Arch image.
+- bootc delivery/integration on Arch is currently deferred until a real package/source path is validated.
+- Immediate objective is to keep the image building while preserving the first VM login/session path.
 - See `docs/technical-status.md` for what is working, what is assumed, and what is deferred.
 - Next milestone remains: **produce and validate a bootable qcow2 image in a VM**.

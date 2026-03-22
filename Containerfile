@@ -66,7 +66,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/tmp \
     bash /ctx/build/30-services.sh
 
-# ── Verify bootc compatibility ────────────────────────────────────────────────
-# This lint step catches common structural issues, but does not prove the image
-# will boot in a VM.
-RUN bootc container lint
+# ── bootc lint intentionally deferred ────────────────────────────────────────
+# `bootc` is not currently installable from Arch repos in CI for this project,
+# so `bootc container lint` is deferred until bootc delivery on Arch is solved.
+# Current CI goal: keep image build + VM session path green.
