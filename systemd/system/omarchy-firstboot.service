@@ -1,0 +1,17 @@
+[Unit]
+Description=Omarchy First-Boot Setup
+Documentation=https://github.com/joshyorko/omarchy-bootc
+After=network-online.target
+Wants=network-online.target
+# Run only on the very first boot — the stamp file is created on success.
+ConditionPathExists=!/var/lib/omarchy/.firstboot-done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/omarchy/omarchy-setup.sh
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
