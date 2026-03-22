@@ -24,4 +24,7 @@ bash
 vim
 
 # ── Container tooling ─────────────────────────────────────────────────────────
+# Explicit runtime provider keeps pacman non-interactive in CI when installing
+# podman (avoids provider prompt for oci-runtime).
+crun
 podman
