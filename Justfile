@@ -8,7 +8,23 @@ alias run-vm     := run-vm-qcow2
 
 [private]
 default:
-    @just --list
+    @just help
+
+# ── Help / discoverability ───────────────────────────────────────────────────
+
+# Show grouped recipes and practical notes for local usage.
+[group('Utility')]
+help:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "omarchy-bootc task runner"
+    echo
+    just --list --unsorted
+    echo
+    echo "Notes:"
+    echo "  - build-qcow2 / rebuild-qcow2 use rootful podman and --privileged bootc-image-builder."
+    echo "  - run-vm-* requires /dev/kvm and a local container runtime capable of --privileged."
+    echo "  - validate checks tool availability and required repo files before long builds."
 
 # ── Syntax helpers ────────────────────────────────────────────────────────────
 
@@ -35,6 +51,51 @@ fix:
     just --unstable --fmt -f Justfile || { exit 1; }
 
 # ── Utility ───────────────────────────────────────────────────────────────────
+
+# Validate host prerequisites and required repository files.
+[group('Utility')]
+validate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    REQUIRED_TOOLS=(podman just jq)
+    OPTIONAL_TOOLS=(shellcheck shfmt ss)
+
+    for t in "${REQUIRED_TOOLS[@]}"; do
+        if ! command -v "$t" >/dev/null 2>&1; then
+            echo "ERROR: required tool '$t' is not installed or not on PATH."
+            exit 1
+        fi
+    done
+
+    for t in "${OPTIONAL_TOOLS[@]}"; do
+        if ! command -v "$t" >/dev/null 2>&1; then
+            echo "WARN: optional tool '$t' not found (some recipes may be unavailable)."
+        fi
+    done
+
+    REQUIRED_FILES=(
+        Containerfile
+        custom/packages/base.packages
+        custom/packages/omarchy.packages
+        image/disk.toml
+        build/10-base.sh
+        build/20-omarchy.sh
+        build/30-services.sh
+    )
+
+    for f in "${REQUIRED_FILES[@]}"; do
+        if [[ ! -f "$f" ]]; then
+            echo "ERROR: required file '$f' is missing."
+            exit 1
+        fi
+    done
+
+    if [[ ! -e /dev/kvm ]]; then
+        echo "WARN: /dev/kvm not present. VM run recipes will be slow or may fail."
+    fi
+
+    echo "Validation complete."
 
 # Clean build artefacts
 [group('Utility')]
@@ -81,6 +142,7 @@ sudoif command *args:
         elif [[ "$(command -v sudo)" ]]; then
             /usr/bin/sudo "$@" || exit 1
         else
+            echo "ERROR: sudo is required for this recipe."
             exit 1
         fi
     }
@@ -91,7 +153,7 @@ sudoif command *args:
 # Build the OCI container image locally with podman
 # Usage: just build [target_image] [tag]
 [group('Build')]
-build $target_image=image_name $tag=default_tag:
+build $target_image=image_name $tag=default_tag: validate
     #!/usr/bin/env bash
     set -eoux pipefail
 
@@ -172,17 +234,17 @@ _rebuild-bib $target_image $tag $type $config: (build target_image tag) && (_bui
 
 # ── VM image targets ──────────────────────────────────────────────────────────
 
-# Build a qcow2 VM image  (primary target)
+# Build a qcow2 VM image (primary target)
 [group('Build Virtual Machine Image')]
-build-qcow2 $target_image=("localhost/" + image_name) $tag=default_tag: && (_build-bib target_image tag "qcow2" "image/disk.toml")
+build-qcow2 $target_image=("localhost/" + image_name) $tag=default_tag: validate && (_build-bib target_image tag "qcow2" "image/disk.toml")
 
 # Build a raw VM image
 [group('Build Virtual Machine Image')]
-build-raw $target_image=("localhost/" + image_name) $tag=default_tag: && (_build-bib target_image tag "raw" "image/disk.toml")
+build-raw $target_image=("localhost/" + image_name) $tag=default_tag: validate && (_build-bib target_image tag "raw" "image/disk.toml")
 
 # Rebuild (OCI + qcow2) in one step
 [group('Build Virtual Machine Image')]
-rebuild-qcow2 $target_image=("localhost/" + image_name) $tag=default_tag: && (_rebuild-bib target_image tag "qcow2" "image/disk.toml")
+rebuild-qcow2 $target_image=("localhost/" + image_name) $tag=default_tag: validate && (_rebuild-bib target_image tag "qcow2" "image/disk.toml")
 
 # ── Run VM ────────────────────────────────────────────────────────────────────
 
@@ -196,6 +258,11 @@ _run-vm $target_image $tag $type $config:
 
     if [[ ! -f "${image_file}" ]]; then
         just "build-${type}" "${target_image}" "${tag}"
+    fi
+
+    if ! command -v ss >/dev/null 2>&1; then
+        echo "ERROR: 'ss' command not found (install iproute2)."
+        exit 1
     fi
 
     port=8006
@@ -223,11 +290,11 @@ _run-vm $target_image $tag $type $config:
 
 # Run the qcow2 VM locally
 [group('Run Virtual Machine')]
-run-vm-qcow2 $target_image=("localhost/" + image_name) $tag=default_tag: && (_run-vm target_image tag "qcow2" "image/disk.toml")
+run-vm-qcow2 $target_image=("localhost/" + image_name) $tag=default_tag: validate && (_run-vm target_image tag "qcow2" "image/disk.toml")
 
 # Run the raw VM locally
 [group('Run Virtual Machine')]
-run-vm-raw $target_image=("localhost/" + image_name) $tag=default_tag: && (_run-vm target_image tag "raw" "image/disk.toml")
+run-vm-raw $target_image=("localhost/" + image_name) $tag=default_tag: validate && (_run-vm target_image tag "raw" "image/disk.toml")
 
 # Spawn a VM with systemd-vmspawn (alternative to qemux)
 [group('Run Virtual Machine')]

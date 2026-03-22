@@ -5,21 +5,25 @@ Build scripts are numbered and executed in order during `podman build`.
 | Script | Purpose |
 |---|---|
 | `10-base.sh` | Install core system packages (bootc, networking, containers) using **pacman** |
-| `20-omarchy.sh` | Install Hyprland and Omarchy-specific packages — **placeholder, see below** |
-| `30-services.sh` | Enable / disable systemd services |
+| `20-omarchy.sh` | Install a **minimal** Hyprland/Wayland baseline for technical POC credibility |
+| `30-services.sh` | Enable/disable systemd services and first-boot unit |
 
-All scripts follow the `set -eoux pipefail` convention and emit
-`::group::`/`::endgroup::` markers compatible with GitHub Actions log folding.
+All scripts use `set -eoux pipefail` and emit `::group::` / `::endgroup::`
+markers for easier CI log folding.
 
-## Adding packages
+## Package sources
 
-Packages are declared in `custom/packages/` — not hard-coded in the scripts —
-so they can be audited and diffed easily:
+Packages are declared in `custom/packages/` (not hard-coded in scripts):
 
-* `custom/packages/base.packages` — one package name per line; installed in `10-base.sh`
-* `custom/packages/omarchy.packages` — Hyprland / Omarchy packages; installed in `20-omarchy.sh`
+- `custom/packages/base.packages`
+- `custom/packages/omarchy.packages`
 
 Lines starting with `#` and blank lines are ignored.
+
+## Scope note
+
+The `20-omarchy.sh` layer is intentionally constrained: it provides a small,
+reviewable baseline rather than claiming full Omarchy parity.
 
 ## Adding a new build script
 
@@ -32,7 +36,7 @@ pacman -S --noconfirm --needed ttf-nerd-fonts-symbols
 echo "Fonts installed."
 ```
 
-Then add a corresponding `RUN` directive to the `Containerfile`:
+Then add a corresponding `RUN` directive to `Containerfile`:
 
 ```dockerfile
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
@@ -43,6 +47,4 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
 
 ## Note on package manager
 
-This image uses **pacman**, not dnf5, rpm-ostree, or any Fedora tooling.
-The pacman database is relocated to `/usr/lib/sysimage/pacman` for
-ostree / bootc immutable-root compatibility (see `Containerfile` for details).
+This image uses **pacman**, not dnf5/rpm-ostree/Fedora toolchains.

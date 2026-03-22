@@ -1,47 +1,40 @@
 # Omarchy / Hyprland packages for omarchy-bootc
-# One package name per line.  Lines starting with # and blank lines are ignored.
+# One package name per line. Lines starting with # and blank lines are ignored.
 # Installed by build/20-omarchy.sh using pacman.
 #
-# This file is intentionally left as a placeholder for the first working VM
-# image.  Uncomment packages as you validate them in the build.
-# All packages must be available in the official Arch repos (or AUR via a
-# custom AUR helper layer added to the Containerfile).
+# Goal for this list: a small, defensible first-pass user session stack that
+# can boot into an Arch system and has enough pieces for iterative Omarchy
+# integration. This is NOT a full Omarchy package set yet.
 
-# ── Wayland / Hyprland compositor ─────────────────────────────────────────────
-# hyprland
-# xdg-desktop-portal-hyprland
-# wayland
-# wl-clipboard
-# xdg-utils
+# ── Minimal Wayland session baseline ─────────────────────────────────────────
+hyprland
+wayland
+xdg-utils
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
 
-# ── Status bar & launcher ─────────────────────────────────────────────────────
-# waybar
-# wofi
-# rofi-wayland
+# ── Session usability ────────────────────────────────────────────────────────
+waybar
+wofi
+mako
+wl-clipboard
+alacritty
 
-# ── Notifications ─────────────────────────────────────────────────────────────
-# mako
+# ── Screenshots / lock ───────────────────────────────────────────────────────
+grim
+slurp
+swaylock
 
-# ── Screenshot / screen lock ──────────────────────────────────────────────────
-# grim
-# slurp
-# swaylock
+# ── Audio stack (required by most desktop sessions) ─────────────────────────
+pipewire
+wireplumber
 
-# ── Terminal emulator ─────────────────────────────────────────────────────────
-# alacritty
-# kitty
+# ── Fonts (minimal readable defaults) ────────────────────────────────────────
+noto-fonts
+noto-fonts-emoji
 
-# ── File manager ──────────────────────────────────────────────────────────────
-# thunar
-
-# ── Theming — Catppuccin Mocha (matches Omarchy defaults) ────────────────────
-# catppuccin-gtk-theme-mocha    (AUR)
-# papirus-icon-theme
-
-# ── Fonts ─────────────────────────────────────────────────────────────────────
-# ttf-nerd-fonts-symbols
-# noto-fonts
-# noto-fonts-emoji
-
-# ── Omarchy tooling ───────────────────────────────────────────────────────────
-# (add project-specific packages here — e.g. from omarchy's package list)
+# ── Deferred Omarchy-specific pieces ─────────────────────────────────────────
+# - Catppuccin theme packages are intentionally deferred because some are AUR
+#   and would require an explicit AUR toolchain in the image build.
+# - Additional Omarchy package parity should be added incrementally after VM
+#   boot validation.
