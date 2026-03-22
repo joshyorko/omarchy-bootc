@@ -1,9 +1,17 @@
 # Base packages for omarchy-bootc
-# One package name per line.  Lines starting with # and blank lines are ignored.
+# One package name per line. Lines starting with # and blank lines are ignored.
 # Installed by build/10-base.sh using pacman.
 
-# ── bootc — immutable OS management tooling ───────────────────────────────────
+# ── bootc / immutable image tooling ──────────────────────────────────────────
 bootc
+
+# ── Boot-critical runtime packages for VM images ─────────────────────────────
+# These are intentionally minimal for first qcow2 bootability.
+linux
+mkinitcpio
+kmod
+btrfs-progs
+linux-firmware
 
 # ── Networking ────────────────────────────────────────────────────────────────
 networkmanager
@@ -16,6 +24,3 @@ vim
 
 # ── Container tooling ─────────────────────────────────────────────────────────
 podman
-
-# ── Hardware / firmware support ───────────────────────────────────────────────
-linux-firmware

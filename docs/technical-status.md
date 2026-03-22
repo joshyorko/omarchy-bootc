@@ -4,9 +4,9 @@ _Last updated: 2026-03-22_
 
 ## Working now (implemented in repo)
 
-- Build scripts are layered and wired from `Containerfile`.
+- Build scripts are layered and wired from `Containerfile` with explicit boot-critical package lists in `custom/packages/base.packages`.
 - Local build/qcow2/run flow is defined in `Justfile` with consistent local image reference defaults.
-- A concrete VM login path is configured: `greetd` + `tuigreet` launching `Hyprland`.
+- A concrete VM login path is configured: `greetd` + `tuigreet` launching `Hyprland`, with minimal VM graphics/runtime packages (`mesa`, `vulkan-virtio`, `libinput`).
 - A default POC user is explicitly created at image build time: `omarchy`.
 - Root first-boot script seeds starter config and writes `/var/lib/omarchy/.firstboot-done`.
 

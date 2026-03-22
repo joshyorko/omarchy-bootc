@@ -4,7 +4,7 @@ Build scripts are numbered and executed in order during `podman build`.
 
 | Script | Purpose |
 |---|---|
-| `10-base.sh` | Install core packages and create explicit default VM user (`omarchy`) |
+| `10-base.sh` | Install core packages (including boot-critical kernel/initramfs bits) and create default VM user (`omarchy`) |
 | `20-omarchy.sh` | Install minimal Hyprland baseline and stage greetd config |
 | `30-services.sh` | Enable core services including `greetd` and first-boot unit |
 

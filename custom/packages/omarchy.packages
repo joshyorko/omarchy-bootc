@@ -8,6 +8,12 @@
 greetd
 tuigreet
 
+
+# ── VM graphics/runtime support for Hyprland ─────────────────────────────────
+mesa
+vulkan-virtio
+libinput
+
 # ── Minimal Wayland session baseline ─────────────────────────────────────────
 hyprland
 xorg-xwayland
@@ -30,6 +36,7 @@ swaylock
 
 # ── Audio stack (required by most desktop sessions) ─────────────────────────
 pipewire
+pipewire-pulse
 wireplumber
 
 # ── Fonts (minimal readable defaults) ────────────────────────────────────────

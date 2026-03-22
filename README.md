@@ -70,6 +70,16 @@ just run-vm
 > ⚠️ The default `omarchy/omarchy` credential is for first local VM bring-up only.
 > Change it immediately in any persistent environment.
 
+## Boot assumptions / known blockers
+
+The image now includes explicit boot-critical packages (`linux`, `mkinitcpio`, `kmod`, `btrfs-progs`) and a minimal VM graphics stack (`mesa`, `vulkan-virtio`, `libinput`).
+
+Remaining assumptions to validate in real VM boots:
+
+- `bootc-image-builder` reliably produces a bootable Arch qcow2 from this image layout.
+- Arch `bootc` package behavior remains compatible with this flow over time.
+- Hyprland compositor behavior in a virtualized GPU environment is host/hypervisor dependent.
+
 ## Notes
 
 - This remains a technical POC.
