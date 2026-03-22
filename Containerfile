@@ -54,17 +54,17 @@ RUN mkdir -p /usr/lib/sysimage && \
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \
     --mount=type=tmpfs,dst=/tmp \
-    /ctx/build/10-base.sh
+    bash /ctx/build/10-base.sh
 
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \
     --mount=type=tmpfs,dst=/tmp \
-    /ctx/build/20-omarchy.sh
+    bash /ctx/build/20-omarchy.sh
 
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \
     --mount=type=tmpfs,dst=/tmp \
-    /ctx/build/30-services.sh
+    bash /ctx/build/30-services.sh
 
 # ── Verify bootc compatibility ────────────────────────────────────────────────
 # This lint step catches common structural issues, but does not prove the image
