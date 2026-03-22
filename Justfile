@@ -1,6 +1,7 @@
 export image_name    := env("IMAGE_NAME",    "omarchy-bootc")
 export default_tag   := env("DEFAULT_TAG",   "stable")
 export bib_image     := env("BIB_IMAGE",     "quay.io/centos-bootc/bootc-image-builder:latest")
+export local_image   := env("LOCAL_IMAGE",  "localhost/" + image_name)
 
 alias build-vm   := build-qcow2
 alias rebuild-vm := rebuild-qcow2
@@ -153,7 +154,7 @@ sudoif command *args:
 # Build the OCI container image locally with podman
 # Usage: just build [target_image] [tag]
 [group('Build')]
-build $target_image=image_name $tag=default_tag: validate
+build $target_image=local_image $tag=default_tag: validate
     #!/usr/bin/env bash
     set -eoux pipefail
 
@@ -172,7 +173,7 @@ build $target_image=image_name $tag=default_tag: validate
 
 # Load a locally-built image into rootful podman (needed for BIB)
 [private]
-_rootful_load_image $target_image=image_name $tag=default_tag:
+_rootful_load_image $target_image=local_image $tag=default_tag:
     #!/usr/bin/bash
     set -eoux pipefail
 
@@ -236,15 +237,15 @@ _rebuild-bib $target_image $tag $type $config: (build target_image tag) && (_bui
 
 # Build a qcow2 VM image (primary target)
 [group('Build Virtual Machine Image')]
-build-qcow2 $target_image=("localhost/" + image_name) $tag=default_tag: validate && (_build-bib target_image tag "qcow2" "image/disk.toml")
+build-qcow2 $target_image=local_image $tag=default_tag: validate && (_build-bib target_image tag "qcow2" "image/disk.toml")
 
 # Build a raw VM image
 [group('Build Virtual Machine Image')]
-build-raw $target_image=("localhost/" + image_name) $tag=default_tag: validate && (_build-bib target_image tag "raw" "image/disk.toml")
+build-raw $target_image=local_image $tag=default_tag: validate && (_build-bib target_image tag "raw" "image/disk.toml")
 
 # Rebuild (OCI + qcow2) in one step
 [group('Build Virtual Machine Image')]
-rebuild-qcow2 $target_image=("localhost/" + image_name) $tag=default_tag: validate && (_rebuild-bib target_image tag "qcow2" "image/disk.toml")
+rebuild-qcow2 $target_image=local_image $tag=default_tag: validate && (_rebuild-bib target_image tag "qcow2" "image/disk.toml")
 
 # ── Run VM ────────────────────────────────────────────────────────────────────
 
@@ -290,11 +291,11 @@ _run-vm $target_image $tag $type $config:
 
 # Run the qcow2 VM locally
 [group('Run Virtual Machine')]
-run-vm-qcow2 $target_image=("localhost/" + image_name) $tag=default_tag: validate && (_run-vm target_image tag "qcow2" "image/disk.toml")
+run-vm-qcow2 $target_image=local_image $tag=default_tag: validate && (_run-vm target_image tag "qcow2" "image/disk.toml")
 
 # Run the raw VM locally
 [group('Run Virtual Machine')]
-run-vm-raw $target_image=("localhost/" + image_name) $tag=default_tag: validate && (_run-vm target_image tag "raw" "image/disk.toml")
+run-vm-raw $target_image=local_image $tag=default_tag: validate && (_run-vm target_image tag "raw" "image/disk.toml")
 
 # Spawn a VM with systemd-vmspawn (alternative to qemux)
 [group('Run Virtual Machine')]

@@ -2,12 +2,15 @@
 # One package name per line. Lines starting with # and blank lines are ignored.
 # Installed by build/20-omarchy.sh using pacman.
 #
-# Goal for this list: a small, defensible first-pass user session stack that
-# can boot into an Arch system and has enough pieces for iterative Omarchy
-# integration. This is NOT a full Omarchy package set yet.
+# Goal: smallest credible first VM login/session path.
+
+# ── Login/session entry ───────────────────────────────────────────────────────
+greetd
+tuigreet
 
 # ── Minimal Wayland session baseline ─────────────────────────────────────────
 hyprland
+xorg-xwayland
 wayland
 xdg-utils
 xdg-desktop-portal-hyprland
@@ -34,7 +37,5 @@ noto-fonts
 noto-fonts-emoji
 
 # ── Deferred Omarchy-specific pieces ─────────────────────────────────────────
-# - Catppuccin theme packages are intentionally deferred because some are AUR
-#   and would require an explicit AUR toolchain in the image build.
-# - Additional Omarchy package parity should be added incrementally after VM
-#   boot validation.
+# - Catppuccin theme packages are deferred (AUR-heavy).
+# - Broader package parity remains post-VM-boot work.

@@ -3,120 +3,75 @@
 An **Arch Linux**-based [bootc](https://github.com/bootc-dev/bootc) technical proof-of-concept for an
 Omarchy-aligned immutable desktop image.
 
-Repository structure is inspired by [projectbluefin/finpilot](https://github.com/projectbluefin/finpilot),
-but this project remains **Arch + pacman** focused.
+## Current POC scope
 
----
+Implemented in this repository:
 
-## Current status (honest summary)
+- OCI build on `archlinux:base` using layered scripts in `build/`.
+- qcow2 generation path via `bootc-image-builder`.
+- Explicit VM login path: `greetd + tuigreet + Hyprland`.
+- Explicit default POC user: `omarchy` / `omarchy` (documented insecure default for local VM testing).
+- One-shot root first-boot setup that seeds starter config and marks completion.
 
-What is currently implemented:
+Still intentionally out of scope:
 
-- OCI image build on `archlinux:base` with layered build scripts (`build/*.sh`).
-- Bootc-focused image layout assumptions (including pacman DB relocation into `/usr/lib/sysimage/pacman`).
-- A minimal Hyprland/Wayland package baseline in `custom/packages/omarchy.packages`.
-- A first-boot root service that seeds starter user config when a regular user exists.
-- Local workflow recipes (`just`) for image build, qcow2 conversion via bootc-image-builder, and VM run.
-
-What is **not** yet proven here:
-
-- End-to-end validated boot/rebase lifecycle in real VMs across upgrades.
-- Full Omarchy package/config parity.
+- Full Omarchy parity.
 - Installer media.
-- BuildStream-based flow.
-
-See `docs/technical-status.md` for a precise breakdown of working vs unverified areas.
-
----
+- BuildStream flow.
 
 ## Repository layout
 
 ```text
 omarchy-bootc/
-├── .github/workflows/build.yml         # Build + publish container image
-├── build/
-│   ├── 10-base.sh                      # Base package + staged assets
-│   ├── 20-omarchy.sh                   # Minimal Omarchy/Hyprland baseline
-│   ├── 30-services.sh                  # Service enablement
-│   └── README.md
-├── custom/
-│   ├── first-boot/omarchy-setup.sh     # Root first-boot setup
-│   ├── hypr/hyprland.conf.example      # Starter Hyprland config
-│   └── packages/
-│       ├── base.packages
-│       └── omarchy.packages
-├── docs/technical-status.md            # Working/assumed/deferred matrix
-├── image/disk.toml                     # bootc-image-builder config
+├── build/                              # image build-time scripts
+├── custom/packages/                    # package lists
+├── custom/greetd/config.toml           # greetd/tuigreet login command
+├── custom/first-boot/omarchy-setup.sh  # root first-boot logic
 ├── systemd/system/omarchy-firstboot.service
-├── Containerfile
+├── image/disk.toml                     # bootc-image-builder config
 ├── Justfile
-└── README.md
+└── docs/technical-status.md
 ```
-
----
 
 ## Prerequisites
 
 - `podman`
 - `just`
 - `jq`
-- `sudo` (for rootful bootc-image-builder usage)
-- VM runtime support (`/dev/kvm` strongly recommended)
+- `sudo` (for rootful bootc-image-builder)
+- `/dev/kvm` for practical VM boot testing
 
-Optional but useful:
+Run `just validate` before build.
 
-- `shellcheck`, `shfmt`, `ss` (iproute2)
-
-Run `just validate` before builds to check expected tools/files.
-
----
-
-## Local workflow
+## Local build + VM smoke test
 
 ```bash
-# inspect recipe groups and notes
-just help
-
-# verify host + repo preconditions
-just validate
-
-# build OCI image
+# 1) Build local OCI image (tag/ref used by all recipes)
 just build
 
-# convert OCI image to qcow2 via bootc-image-builder (requires sudo/rootful podman)
+# 2) Convert to qcow2
 just build-qcow2
 
-# run VM using qemux wrapper (requires /dev/kvm)
+# 3) Boot VM
 just run-vm
 ```
 
-Expected qcow2 output path:
+### Login/session path in VM
 
-```text
-output/qcow2/disk.qcow2
-```
+1. At `tuigreet`, log in as:
+   - user: `omarchy`
+   - password: `omarchy`
+2. Session command is preconfigured to start `Hyprland`.
+3. Verify first boot completed:
+   ```bash
+   test -f /var/lib/omarchy/.firstboot-done && echo OK
+   ```
 
----
+> ⚠️ The default `omarchy/omarchy` credential is for first local VM bring-up only.
+> Change it immediately in any persistent environment.
 
-## CI workflow summary
+## Notes
 
-`.github/workflows/build.yml` currently:
-
-- builds on PRs and pushes to `main`
-- pushes images to GHCR only on default-branch pushes
-- includes optional (commented) sections for cosign signing + SBOM attestations
-
-It intentionally avoids claiming release-grade provenance until signing/SBOM policy is enabled.
-
----
-
-## Scope boundaries
-
-This repository is intentionally conservative in v1 scope:
-
-- **in scope now:** bootable-image POC work, qcow2 conversion path, minimal desktop baseline
-- **deferred:** BuildStream, installer media, full Omarchy reproduction
-
-Next milestone remains:
-
-> Produce and validate a bootable qcow2 image in a VM.
+- This remains a technical POC.
+- See `docs/technical-status.md` for what is working, what is assumed, and what is deferred.
+- Next milestone remains: **produce and validate a bootable qcow2 image in a VM**.
