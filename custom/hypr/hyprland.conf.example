@@ -1,0 +1,51 @@
+# Hyprland configuration — omarchy-bootc skeleton
+#
+# This file is a starting-point placeholder.  It is staged at build time to
+# /usr/share/omarchy/hypr/hyprland.conf.example and can be deployed by the
+# first-boot script to ~/.config/hypr/hyprland.conf.
+#
+# For upstream Omarchy defaults see: https://github.com/basecamp/omarchy
+
+# ── Monitor ───────────────────────────────────────────────────────────────────
+# monitor=,preferred,auto,1
+
+# ── Input ─────────────────────────────────────────────────────────────────────
+# input {
+#     kb_layout = us
+#     follow_mouse = 1
+#     touchpad {
+#         natural_scroll = yes
+#     }
+# }
+
+# ── General ───────────────────────────────────────────────────────────────────
+# general {
+#     gaps_in  = 5
+#     gaps_out = 10
+#     border_size = 2
+#     col.active_border   = rgba(cba6f7ff)   # Catppuccin Mocha mauve
+#     col.inactive_border = rgba(6c7086aa)
+# }
+
+# ── Decoration ────────────────────────────────────────────────────────────────
+# decoration {
+#     rounding = 10
+#     blur {
+#         enabled = true
+#         size    = 3
+#         passes  = 1
+#     }
+# }
+
+# ── Animations ────────────────────────────────────────────────────────────────
+# animations {
+#     enabled = yes
+#     bezier = myBezier, 0.05, 0.9, 0.1, 1.05
+#     animation = windows, 1, 7, myBezier
+# }
+
+# ── Key bindings (example) ────────────────────────────────────────────────────
+# $mod = SUPER
+# bind = $mod, Return, exec, alacritty
+# bind = $mod, D,      exec, wofi --show drun
+# bind = $mod, Q,      killactive

@@ -1,0 +1,194 @@
+---
+name: Build and publish container image
+
+on:
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '05 10 * * *'   # 10:05 UTC daily
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**/README.md'
+  workflow_dispatch:
+
+env:
+  IMAGE_DESC: "Omarchy-compatible Arch-based bootc immutable desktop image"
+  IMAGE_KEYWORDS: "bootc,arch,hyprland,omarchy,immutable"
+  IMAGE_NAME: "${{ github.event.repository.name }}"
+  IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
+  DEFAULT_TAG: "stable"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build_push:
+    name: Build and push image
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Prepare environment
+        run: |
+          echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> "${GITHUB_ENV}"
+          echo "IMAGE_NAME=${IMAGE_NAME,,}"         >> "${GITHUB_ENV}"
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      # Free up space on the runner — Arch images can be large.
+      # Uncomment if builds exceed runner disk limits.
+      # - name: Maximize build space
+      #   uses: ublue-os/remove-unwanted-software@517622d6452028f266b7ba4cc9a123b5f58a6b53 # v7
+      #   with:
+      #     remove-codeql: true
+
+      - name: Mount BTRFS for podman storage
+        id: container-storage-action
+        uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140 # main
+        continue-on-error: true
+        with:
+          target-dir: /var/lib/containers
+          mount-opts: compress-force=zstd:2
+
+      - name: Get current date
+        id: date
+        run: |
+          echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> "$GITHUB_OUTPUT"
+
+      - name: Image Metadata
+        uses: docker/metadata-action@902fa8ec7d6ecbea8a04b6e2dd6b9e226b01f85c # v5
+        id: metadata
+        with:
+          tags: |
+            type=raw,value=${{ env.DEFAULT_TAG }}
+            type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}
+            type=raw,value={{date 'YYYYMMDD'}}
+            type=sha,enable=${{ github.event_name == 'pull_request' }}
+            type=ref,event=pr
+          labels: |
+            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/${{ github.sha }}/README.md
+            org.opencontainers.image.created=${{ steps.date.outputs.date }}
+            org.opencontainers.image.description=${{ env.IMAGE_DESC }}
+            org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/${{ github.sha }}/README.md
+            org.opencontainers.image.source=https://github.com/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/blob/${{ github.sha }}/Containerfile
+            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/tree/${{ github.sha }}
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+            org.opencontainers.image.version=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}
+            io.artifacthub.package.keywords=${{ env.IMAGE_KEYWORDS }}
+            io.artifacthub.package.license=Apache-2.0
+            io.artifacthub.package.prerelease=false
+            containers.bootc=1
+          sep-tags: " "
+          sep-annotations: " "
+
+      - name: Build Image
+        id: build_image
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2
+        with:
+          containerfiles: |
+            ./Containerfile
+          image: ${{ env.IMAGE_NAME }}
+          tags: ${{ env.DEFAULT_TAG }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          oci: false
+
+      - name: Tag for registry
+        run: |
+          for tag in ${{ steps.metadata.outputs.tags }}; do
+            podman tag "${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}" \
+                       "${{ env.IMAGE_NAME }}:${tag}"
+          done
+
+      # ── OPTIONAL: Software Bill of Materials (SBOM) ─────────────────────────
+      # To enable: uncomment the two steps below AND the attestation step further
+      # down, then also enable image signing.
+      # Documentation: https://github.com/anchore/syft
+
+      # - name: Setup Syft
+      #   id: setup-syft
+      #   uses: anchore/sbom-action/download-syft@8e94d75ddd33f69f691467e42275782e4bfefe84 # v0.20.9
+      #   with:
+      #     syft-version: v1.20.0
+      #
+      # - name: Generate SBOM
+      #   id: generate-sbom
+      #   env:
+      #     IMAGE: ${{ env.IMAGE_NAME }}
+      #     DEFAULT_TAG: ${{ env.DEFAULT_TAG }}
+      #     SYFT_CMD: ${{ steps.setup-syft.outputs.cmd }}
+      #   run: |
+      #     OUTPUT_PATH="$(mktemp -d)/sbom.json"
+      #     export SYFT_PARALLELISM=$(($(nproc)*2))
+      #     $SYFT_CMD "${IMAGE}:${DEFAULT_TAG}" -o spdx-json="${OUTPUT_PATH}"
+      #     echo "OUTPUT_PATH=${OUTPUT_PATH}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to GHCR
+        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        id: push
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ github.token }}
+        with:
+          registry: ${{ env.IMAGE_REGISTRY }}
+          image: ${{ env.IMAGE_NAME }}
+          tags: ${{ steps.metadata.outputs.tags }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+
+      # ── OPTIONAL: Image signing with Cosign ─────────────────────────────────
+      # To enable:
+      #   1. Generate a key pair:  cosign generate-key-pair
+      #   2. Add COSIGN_PRIVATE_KEY as a repository secret (Settings → Secrets)
+      #   3. Commit cosign.pub to the repo root
+      #   4. Uncomment the two steps below
+      # Documentation: https://docs.sigstore.dev/cosign/overview/
+
+      # - name: Install Cosign
+      #   uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+      #   if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      #
+      # - name: Sign container image
+      #   if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      #   run: |
+      #     IMAGE_FULL="${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}"
+      #     for tag in ${{ steps.metadata.outputs.tags }}; do
+      #       cosign sign -y --key env://COSIGN_PRIVATE_KEY "${IMAGE_FULL}:${tag}"
+      #     done
+      #   env:
+      #     COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+
+      # ── OPTIONAL: SBOM attestation ──────────────────────────────────────────
+      # Requires image signing to be enabled first (see above).
+      # - name: Add SBOM Attestation
+      #   if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      #   env:
+      #     IMAGE: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
+      #     DIGEST: ${{ steps.push.outputs.digest }}
+      #     COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+      #     SBOM_OUTPUT: ${{ steps.generate-sbom.outputs.OUTPUT_PATH }}
+      #   run: |
+      #     cd "$(dirname "$SBOM_OUTPUT")"
+      #     cosign attest -y \
+      #       --predicate "$(basename "$SBOM_OUTPUT")" \
+      #       --type spdxjson \
+      #       --key env://COSIGN_PRIVATE_KEY \
+      #       "${IMAGE}@${DIGEST}"

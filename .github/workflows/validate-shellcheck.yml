@@ -1,0 +1,35 @@
+---
+name: Validate shell scripts (shellcheck)
+
+on:
+  pull_request:
+    paths:
+      - '**.sh'
+      - 'build/**'
+      - 'custom/first-boot/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '**.sh'
+      - 'build/**'
+      - 'custom/first-boot/**'
+  workflow_dispatch:
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: '.'
+          severity: warning

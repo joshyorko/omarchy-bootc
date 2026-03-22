@@ -12,3 +12,12 @@
 
 pkg/
 src/
+
+# bootc-image-builder output
+output/
+*_build*/
+
+# Local build artefacts
+previous.manifest.json
+changelog.md
+output.env

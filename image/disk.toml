@@ -1,0 +1,14 @@
+# Bootc Image Builder configuration for qcow2 VM image
+#
+# Used by:  just build-qcow2
+#           just run-vm-qcow2
+#
+# Documentation:
+#   https://github.com/osbuild/bootc-image-builder
+#
+# Optimised for the first working VM image — not installer media.
+# BuildStream support is intentionally deferred for v1.
+
+[[customizations.filesystem]]
+mountpoint = "/"
+minsize    = "20 GiB"
