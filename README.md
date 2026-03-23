@@ -9,8 +9,8 @@ Implemented in this repository:
 
 - OCI build on `archlinux:base` using layered scripts in `build/`.
 - qcow2 generation path via `bootc-image-builder`.
-- Omarchy-style Arch VM session path (`greetd` + `tuigreet` + `Hyprland`) remains the active focus.
-- Explicit VM login path: `greetd + tuigreet + Hyprland`.
+- Omarchy-style Arch VM session path (`greetd` + `agreety` + `Hyprland`) remains the active focus.
+- Explicit VM login path: `greetd + agreety + Hyprland`.
 - Explicit default POC user: `omarchy` / `omarchy` (documented insecure default for local VM testing).
 - One-shot root first-boot setup that seeds starter user config and marks completion.
 - Imported Omarchy-inspired desktop defaults for:
@@ -33,7 +33,7 @@ Still intentionally out of scope:
 omarchy-bootc/
 ├── build/                              # image build-time scripts
 ├── custom/packages/                    # package lists
-├── custom/greetd/config.toml           # greetd/tuigreet login command
+├── custom/greetd/config.toml           # greetd/agreety login command
 ├── custom/first-boot/omarchy-setup.sh  # root first-boot logic
 ├── custom/hypr/                         # staged Hyprland defaults
 ├── custom/skel/                         # starter home config skeleton
@@ -68,7 +68,7 @@ just run-vm
 
 ### Login/session path in VM
 
-1. At `tuigreet`, log in as:
+1. At `agreety`, log in as:
    - user: `omarchy`
    - password: `omarchy`
 2. Session command is preconfigured to start `Hyprland`.

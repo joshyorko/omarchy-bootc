@@ -6,7 +6,7 @@ _Last updated: 2026-03-23_
 
 - Build scripts are layered and wired from `Containerfile` with explicit boot-critical package lists in `custom/packages/base.packages`.
 - Local build/qcow2/run flow is defined in `Justfile` with consistent local image reference defaults.
-- A concrete VM login path is configured: `greetd` + `tuigreet` launching `Hyprland`, with minimal VM graphics/runtime packages (`mesa`, `vulkan-virtio`, `libinput`).
+- A concrete VM login path is configured: `greetd` + `agreety` launching `Hyprland`, with minimal VM graphics/runtime packages (`mesa`, `vulkan-virtio`, `libinput`).
 - A default POC user is explicitly created at image build time: `omarchy`.
 - Root first-boot script seeds starter config and writes `/var/lib/omarchy/.firstboot-done`.
 - Omarchy-style desktop defaults are imported in a constrained slice:
@@ -43,7 +43,7 @@ _Last updated: 2026-03-23_
 1. `just build`
 2. `just build-qcow2`
 3. `just run-vm`
-4. At tuigreet login with:
+4. At agreety login with:
    - user: `omarchy`
    - password: `omarchy`
 5. Confirm Hyprland session starts.

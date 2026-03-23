@@ -102,6 +102,16 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           oci: false
 
+
+      - name: Install VM smoke test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
+
+      - name: VM smoke test (headless qemu + ssh)
+        run: |
+          ./scripts/ci/vm-smoke.sh "${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}"
+
       - name: Tag for registry
         run: |
           for tag in ${{ steps.metadata.outputs.tags }}; do
