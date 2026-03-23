@@ -16,7 +16,7 @@ _Last updated: 2026-03-23_
   - Mako notification defaults
   - lock/screenshot UX bindings wired to shipped tools (`swaylock`, `grim`, `slurp`, `wl-clipboard`)
 
-## Still unverified (needs real VM validation)
+## Still unverified (needs broader VM validation)
 
 - bootc delivery/integration on Arch is currently not solved in this repository.
 - End-to-end VM reliability across host environments.
@@ -52,4 +52,4 @@ _Last updated: 2026-03-23_
 
 Next milestone remains unchanged:
 
-> Produce and validate a bootable qcow2 image in a VM.
+> Keep qcow2 generation + headless VM smoke checks green in CI, then expand diagnostics and stability coverage.

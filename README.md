@@ -103,4 +103,5 @@ Remaining assumptions to validate in real VM boots:
 - Immediate objective is to keep the image building while preserving the first VM login/session path.
 - Desktop defaults are now intentionally Omarchy-inspired but trimmed to the current package set and no-AUR policy.
 - See `docs/technical-status.md` for what is working, what is assumed, and what is deferred.
-- Next milestone remains: **produce and validate a bootable qcow2 image in a VM**.
+- Current CI focus: keep image build + headless VM smoke validation green.
+- Next milestone remains: harden the smoke path with richer failure artifacts/log collection.
