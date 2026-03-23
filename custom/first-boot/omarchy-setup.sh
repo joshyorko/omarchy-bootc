@@ -31,14 +31,18 @@ fi
 USER_HOME=$(getent passwd "${DEFAULT_USER}" | cut -d: -f6)
 echo "  Session user: ${DEFAULT_USER} (home: ${USER_HOME})"
 
-# Seed starter Hyprland config from image-staged skeleton.
-HYPR_CONF_DIR="${USER_HOME}/.config/hypr"
-HYPR_CONF="${HYPR_CONF_DIR}/hyprland.conf"
-SKELETON="/usr/share/omarchy/hypr/hyprland.conf.example"
+# Seed starter desktop config from image-staged skeleton.
+if [[ -d /usr/share/omarchy/skel ]]; then
+    cp -a -n /usr/share/omarchy/skel/. "${USER_HOME}/"
+fi
 
-if [[ ! -f "${HYPR_CONF}" && -f "${SKELETON}" ]]; then
+# Seed starter Hyprland config from image-staged defaults.
+HYPR_CONF_DIR="${USER_HOME}/.config/hypr"
+SKELETON_DIR="/usr/share/omarchy/hypr"
+
+if [[ -d "${SKELETON_DIR}" ]]; then
     mkdir -p "${HYPR_CONF_DIR}"
-    cp "${SKELETON}" "${HYPR_CONF}"
+    cp -a -n "${SKELETON_DIR}/". "${HYPR_CONF_DIR}/"
 fi
 
 # Record deferred user-session tasks in the user's home.
@@ -57,7 +61,10 @@ Deferred work:
 EOT
 fi
 
+mkdir -p "${USER_HOME}/Pictures/Screenshots"
+
 chown -R "${DEFAULT_USER}:${DEFAULT_USER}" "${USER_HOME}/.config"
+chown -R "${DEFAULT_USER}:${DEFAULT_USER}" "${USER_HOME}/Pictures"
 touch "${FIRSTBOOT_STAMP}"
 
 echo ":: omarchy-bootc first-boot setup complete."

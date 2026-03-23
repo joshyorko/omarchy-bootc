@@ -12,13 +12,20 @@ Implemented in this repository:
 - Omarchy-style Arch VM session path (`greetd` + `tuigreet` + `Hyprland`) remains the active focus.
 - Explicit VM login path: `greetd + tuigreet + Hyprland`.
 - Explicit default POC user: `omarchy` / `omarchy` (documented insecure default for local VM testing).
-- One-shot root first-boot setup that seeds starter config and marks completion.
+- One-shot root first-boot setup that seeds starter user config and marks completion.
+- Imported Omarchy-inspired desktop defaults for:
+  - Hyprland modular config (`~/.config/hypr/*`)
+  - Waybar defaults
+  - Wofi launcher defaults
+  - Mako notification defaults
+  - Lock/screenshot keybindings (`swaylock`, `grim`, `slurp`, `wl-clipboard`)
 
 Still intentionally out of scope:
 
 - Full Omarchy parity.
 - Installer media.
 - BuildStream flow.
+- AUR-heavy theming stack and Omarchy helper-script ecosystem.
 
 ## Repository layout
 
@@ -28,6 +35,8 @@ omarchy-bootc/
 ├── custom/packages/                    # package lists
 ├── custom/greetd/config.toml           # greetd/tuigreet login command
 ├── custom/first-boot/omarchy-setup.sh  # root first-boot logic
+├── custom/hypr/                         # staged Hyprland defaults
+├── custom/skel/                         # starter home config skeleton
 ├── systemd/system/omarchy-firstboot.service
 ├── image/disk.toml                     # bootc-image-builder config
 ├── Justfile
@@ -67,6 +76,10 @@ just run-vm
    ```bash
    test -f /var/lib/omarchy/.firstboot-done && echo OK
    ```
+4. Verify starter config seeded:
+   ```bash
+   ls ~/.config/hypr ~/.config/waybar ~/.config/wofi ~/.config/mako
+   ```
 
 > ⚠️ The default `omarchy/omarchy` credential is for first local VM bring-up only.
 > Change it immediately in any persistent environment.
@@ -87,5 +100,6 @@ Remaining assumptions to validate in real VM boots:
 - This remains a technical POC for an Omarchy-style Arch image.
 - bootc delivery/integration on Arch is currently deferred until a real package/source path is validated.
 - Immediate objective is to keep the image building while preserving the first VM login/session path.
+- Desktop defaults are now intentionally Omarchy-inspired but trimmed to the current package set and no-AUR policy.
 - See `docs/technical-status.md` for what is working, what is assumed, and what is deferred.
 - Next milestone remains: **produce and validate a bootable qcow2 image in a VM**.

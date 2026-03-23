@@ -1,0 +1,22 @@
+window {
+  margin: 0px;
+  border: 2px solid #33ccff;
+  background-color: #111111;
+  color: #e6e6e6;
+}
+
+#input {
+  margin: 8px;
+  border: 1px solid #333333;
+  background-color: #1a1a1a;
+  color: #e6e6e6;
+}
+
+#entry {
+  padding: 6px 10px;
+}
+
+#entry:selected {
+  background-color: #1f2d33;
+  color: #ffffff;
+}

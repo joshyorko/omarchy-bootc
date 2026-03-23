@@ -25,6 +25,11 @@ if [[ -d /ctx/custom/hypr ]]; then
     cp -r /ctx/custom/hypr/. /usr/share/omarchy/hypr/
 fi
 
+if [[ -d /ctx/custom/skel ]]; then
+    mkdir -p /usr/share/omarchy/skel
+    cp -r /ctx/custom/skel/. /usr/share/omarchy/skel/
+fi
+
 # Install project-managed greetd config for explicit VM login path.
 if [[ -f /ctx/custom/greetd/config.toml ]]; then
     mkdir -p /etc/greetd
