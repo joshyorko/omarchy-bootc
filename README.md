@@ -86,11 +86,12 @@ just run-vm
 
 ## Boot assumptions / known blockers
 
-The image now includes explicit boot-critical packages (`linux`, `mkinitcpio`, `kmod`, `btrfs-progs`) and a minimal VM graphics stack (`mesa`, `vulkan-virtio`, `libinput`).
+The image now includes explicit boot-critical packages (`linux`, `dracut`, `kmod`, `btrfs-progs`) and a minimal VM graphics stack (`mesa`, `vulkan-virtio`, `libinput`).
 
 Remaining assumptions to validate in real VM boots:
 
 - `bootc` delivery/integration on Arch is not solved in this repo yet (package is not currently available in CI repos).
+- `bootc-image-builder` relies on `lsinitrd` during manifest/qcow2 generation; this image now provides it via `dracut`.
 - `bootc-image-builder` reliably produces a bootable Arch qcow2 from this image layout.
 - Arch `bootc` package behavior remains compatible with this flow over time.
 - Hyprland compositor behavior in a virtualized GPU environment is host/hypervisor dependent.
