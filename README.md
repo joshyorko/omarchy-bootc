@@ -68,7 +68,7 @@ just run-vm
 
 ### Login/session path in VM
 
-1. At `agreety`, log in as:
+1. At the `agreety` prompt, log in as:
    - user: `omarchy`
    - password: `omarchy`
 2. Session command is preconfigured to start `Hyprland`.
@@ -95,6 +95,8 @@ Remaining assumptions to validate in real VM boots:
 - `bootc-image-builder` reliably produces a bootable Arch qcow2 from this image layout.
 - Arch `bootc` package behavior remains compatible with this flow over time.
 - Hyprland compositor behavior in a virtualized GPU environment is host/hypervisor dependent.
+
+See `docs/bootc-delivery-options.md` for current Arch bootc delivery options and the recommended path forward.
 
 ## Notes
 

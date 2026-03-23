@@ -43,7 +43,7 @@ _Last updated: 2026-03-23_
 1. `just build`
 2. `just build-qcow2`
 3. `just run-vm`
-4. At agreety login with:
+4. At the agreety prompt login with:
    - user: `omarchy`
    - password: `omarchy`
 5. Confirm Hyprland session starts.
