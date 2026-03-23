@@ -86,11 +86,12 @@ just run-vm
 
 ## Boot assumptions / known blockers
 
-The image now includes explicit boot-critical packages (`linux`, `mkinitcpio`, `kmod`, `btrfs-progs`) and a minimal VM graphics stack (`mesa`, `vulkan-virtio`, `libinput`).
+The image now includes explicit boot-critical packages (`linux`, `dracut`, `kmod`, `btrfs-progs`) and a minimal VM graphics stack (`mesa`, `vulkan-virtio`, `libinput`).
 
 Remaining assumptions to validate in real VM boots:
 
 - `bootc` delivery/integration on Arch is not solved in this repo yet (package is not currently available in CI repos).
+- `bootc-image-builder` relies on `lsinitrd` during manifest/qcow2 generation; this image now provides it via `dracut`.
 - `bootc-image-builder` reliably produces a bootable Arch qcow2 from this image layout.
 - Arch `bootc` package behavior remains compatible with this flow over time.
 - Hyprland compositor behavior in a virtualized GPU environment is host/hypervisor dependent.
@@ -104,4 +105,5 @@ See `docs/bootc-delivery-options.md` for current Arch bootc delivery options and
 - Immediate objective is to keep the image building while preserving the first VM login/session path.
 - Desktop defaults are now intentionally Omarchy-inspired but trimmed to the current package set and no-AUR policy.
 - See `docs/technical-status.md` for what is working, what is assumed, and what is deferred.
-- Next milestone remains: **produce and validate a bootable qcow2 image in a VM**.
+- Current CI focus: keep image build + headless VM smoke validation green.
+- Next milestone remains: harden the smoke path with richer failure artifacts/log collection.

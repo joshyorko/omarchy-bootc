@@ -8,8 +8,9 @@
 #
 # ── Boot-critical runtime packages for VM images ─────────────────────────────
 # These are intentionally minimal for first qcow2 bootability.
+# dracut is used so lsinitrd is present for bootc-image-builder manifest generation.
 linux
-mkinitcpio
+dracut
 kmod
 btrfs-progs
 linux-firmware

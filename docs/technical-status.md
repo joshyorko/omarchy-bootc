@@ -4,7 +4,7 @@ _Last updated: 2026-03-23_
 
 ## Working now (implemented in repo)
 
-- Build scripts are layered and wired from `Containerfile` with explicit boot-critical package lists in `custom/packages/base.packages`.
+- Build scripts are layered and wired from `Containerfile` with explicit boot-critical package lists in `custom/packages/base.packages` (including `dracut` so `lsinitrd` is available for bootc-image-builder manifest generation).
 - Local build/qcow2/run flow is defined in `Justfile` with consistent local image reference defaults.
 - A concrete VM login path is configured: `greetd` + `agreety` launching `Hyprland`, with minimal VM graphics/runtime packages (`mesa`, `vulkan-virtio`, `libinput`).
 - A default POC user is explicitly created at image build time: `omarchy`.
@@ -16,7 +16,7 @@ _Last updated: 2026-03-23_
   - Mako notification defaults
   - lock/screenshot UX bindings wired to shipped tools (`swaylock`, `grim`, `slurp`, `wl-clipboard`)
 
-## Still unverified (needs real VM validation)
+## Still unverified (needs broader VM validation)
 
 - bootc delivery/integration on Arch is currently not solved in this repository.
 - End-to-end VM reliability across host environments.
@@ -52,4 +52,4 @@ _Last updated: 2026-03-23_
 
 Next milestone remains unchanged:
 
-> Produce and validate a bootable qcow2 image in a VM.
+> Keep qcow2 generation + headless VM smoke checks green in CI, then expand diagnostics and stability coverage.
