@@ -97,6 +97,7 @@ Remaining assumptions to validate in real VM boots:
 - Hyprland compositor behavior in a virtualized GPU environment is host/hypervisor dependent.
 
 See `docs/bootc-delivery-options.md` for current Arch bootc delivery options and the recommended path forward.
+See `docs/bootcrew-comparison.md` for how bootcrew’s Arch bootc images differ and the minimal next step to align.
 
 ## Notes
 
