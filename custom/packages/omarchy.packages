@@ -5,9 +5,8 @@
 # Goal: smallest credible first VM login/session path.
 
 # ── Login/session entry ───────────────────────────────────────────────────────
+# Use greetd + agreety from official Arch repos (no AUR greeter dependency).
 greetd
-tuigreet
-
 
 # ── VM graphics/runtime support for Hyprland ─────────────────────────────────
 mesa
