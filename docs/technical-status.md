@@ -1,6 +1,6 @@
 # Technical status: omarchy-bootc POC
 
-_Last updated: 2026-03-22_
+_Last updated: 2026-03-23_
 
 ## Working now (implemented in repo)
 
@@ -9,6 +9,12 @@ _Last updated: 2026-03-22_
 - A concrete VM login path is configured: `greetd` + `tuigreet` launching `Hyprland`, with minimal VM graphics/runtime packages (`mesa`, `vulkan-virtio`, `libinput`).
 - A default POC user is explicitly created at image build time: `omarchy`.
 - Root first-boot script seeds starter config and writes `/var/lib/omarchy/.firstboot-done`.
+- Omarchy-style desktop defaults are imported in a constrained slice:
+  - modular Hyprland config files (autostart, bindings, input, look/feel, monitors, window rules)
+  - Waybar config/style defaults
+  - Wofi launcher config/style defaults
+  - Mako notification defaults
+  - lock/screenshot UX bindings wired to shipped tools (`swaylock`, `grim`, `slurp`, `wl-clipboard`)
 
 ## Still unverified (needs real VM validation)
 
@@ -20,10 +26,17 @@ _Last updated: 2026-03-22_
 
 ## Deferred intentionally
 
-- Full Omarchy package/config parity.
+- Full Omarchy package/config parity (Omarchy helper command ecosystem, theme engine, app presets).
 - AUR-heavy theming stack in base image.
 - BuildStream.
 - Installer media.
+
+## Explicitly deferred from imported Omarchy behavior
+
+- Omarchy-specific wrapper commands (`omarchy-*`) referenced in upstream configs are not imported in this slice.
+- Walker-based launcher workflow is deferred; this image continues using `wofi` defaults.
+- Theme/template expansion pipeline (`~/.config/omarchy/current/theme/*`) is deferred.
+- User-level setup tooling beyond first-boot config seeding remains deferred.
 
 ## Manual smoke test (target path)
 

@@ -1,0 +1,36 @@
+* {
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+  font-family: 'monospace';
+  font-size: 12px;
+  color: #e6e6e6;
+  background-color: #111111;
+}
+
+.modules-left {
+  margin-left: 8px;
+}
+
+.modules-right {
+  margin-right: 8px;
+}
+
+#workspaces button {
+  all: initial;
+  padding: 0 6px;
+  margin: 0 1px;
+  min-width: 10px;
+}
+
+#clock,
+#network,
+#pulseaudio,
+#cpu,
+#memory {
+  margin: 0 8px;
+}
+
+tooltip {
+  padding: 2px;
+}
