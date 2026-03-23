@@ -95,6 +95,8 @@ Remaining assumptions to validate in real VM boots:
 - Arch `bootc` package behavior remains compatible with this flow over time.
 - Hyprland compositor behavior in a virtualized GPU environment is host/hypervisor dependent.
 
+See `docs/bootc-delivery-options.md` for current Arch bootc delivery options and the recommended path forward.
+
 ## Notes
 
 - This remains a technical POC for an Omarchy-style Arch image.
