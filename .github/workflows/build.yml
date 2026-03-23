@@ -1,5 +1,5 @@
 ---
-name: Build and publish container image
+name: Build and optionally publish bootc image
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_DESC: "Omarchy-compatible Arch-based bootc immutable desktop image"
+  IMAGE_DESC: "Unofficial Arch-based bootc Omarchy POC image"
   IMAGE_KEYWORDS: "bootc,arch,hyprland,omarchy,immutable"
   IMAGE_NAME: "${{ github.event.repository.name }}"
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
@@ -65,7 +65,7 @@ jobs:
           echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> "$GITHUB_OUTPUT"
 
       - name: Image Metadata
-        uses: docker/metadata-action@902fa8ec7d6ecbea8a04b6e2dd6b9e226b01f85c # v5
+        uses: docker/metadata-action@v5
         id: metadata
         with:
           tags: |
@@ -85,8 +85,8 @@ jobs:
             org.opencontainers.image.vendor=${{ github.repository_owner }}
             org.opencontainers.image.version=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}
             io.artifacthub.package.keywords=${{ env.IMAGE_KEYWORDS }}
-            io.artifacthub.package.license=Apache-2.0
-            io.artifacthub.package.prerelease=false
+            io.artifacthub.package.license=NOASSERTION
+            io.artifacthub.package.prerelease=true
             containers.bootc=1
           sep-tags: " "
           sep-annotations: " "
@@ -154,6 +154,7 @@ jobs:
           username: ${{ env.REGISTRY_USER }}
           password: ${{ env.REGISTRY_PASSWORD }}
 
+      # TODO: Enable signing before any release/stability claims.
       # ── OPTIONAL: Image signing with Cosign ─────────────────────────────────
       # To enable:
       #   1. Generate a key pair:  cosign generate-key-pair
@@ -176,6 +177,7 @@ jobs:
       #   env:
       #     COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
 
+      # TODO: Enable SBOM attestation with signing for provenance completeness.
       # ── OPTIONAL: SBOM attestation ──────────────────────────────────────────
       # Requires image signing to be enabled first (see above).
       # - name: Add SBOM Attestation

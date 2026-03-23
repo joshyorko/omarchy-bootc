@@ -1,36 +1,36 @@
 #!/usr/bin/bash
 # shellcheck shell=bash
 #
-# 20-omarchy.sh — Install Hyprland and Omarchy-specific packages
-#
-# This script is intentionally left as a placeholder for the first
-# working VM image.  Uncomment and populate the package list in
-# custom/packages/omarchy.packages to activate.
+# 20-omarchy.sh — Install minimal Hyprland/Omarchy session packages
 
 set -eoux pipefail
 
 echo "::group:: Install Omarchy / Hyprland packages"
 
-# Read package list — strip comments and blank lines
 mapfile -t OMARCHY_PKGS < <(grep -v '^#' /ctx/custom/packages/omarchy.packages | grep -v '^$')
 
 if [[ ${#OMARCHY_PKGS[@]} -gt 0 ]]; then
     pacman -S --noconfirm --needed "${OMARCHY_PKGS[@]}"
 else
-    echo "  (no packages listed — skipping)"
+    echo "ERROR: custom/packages/omarchy.packages is empty after filtering."
+    exit 1
 fi
 
 echo "::endgroup::"
 
-echo "::group:: Stage Hyprland config skeleton"
+echo "::group:: Stage Hyprland + greetd config"
 
-# Copy Hyprland config placeholders to a system-wide location.
-# The first-boot script will offer to deploy them to ~/.config/hypr/.
 if [[ -d /ctx/custom/hypr ]]; then
     mkdir -p /usr/share/omarchy/hypr
     cp -r /ctx/custom/hypr/. /usr/share/omarchy/hypr/
 fi
 
+# Install project-managed greetd config for explicit VM login path.
+if [[ -f /ctx/custom/greetd/config.toml ]]; then
+    mkdir -p /etc/greetd
+    cp -v /ctx/custom/greetd/config.toml /etc/greetd/config.toml
+fi
+
 echo "::endgroup::"
 
-echo "Omarchy build complete."
+echo "Omarchy layer complete (minimal baseline)."

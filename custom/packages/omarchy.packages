@@ -1,47 +1,47 @@
 # Omarchy / Hyprland packages for omarchy-bootc
-# One package name per line.  Lines starting with # and blank lines are ignored.
+# One package name per line. Lines starting with # and blank lines are ignored.
 # Installed by build/20-omarchy.sh using pacman.
 #
-# This file is intentionally left as a placeholder for the first working VM
-# image.  Uncomment packages as you validate them in the build.
-# All packages must be available in the official Arch repos (or AUR via a
-# custom AUR helper layer added to the Containerfile).
+# Goal: smallest credible first VM login/session path.
 
-# ── Wayland / Hyprland compositor ─────────────────────────────────────────────
-# hyprland
-# xdg-desktop-portal-hyprland
-# wayland
-# wl-clipboard
-# xdg-utils
+# ── Login/session entry ───────────────────────────────────────────────────────
+# Use greetd + agreety from official Arch repos (no AUR greeter dependency).
+greetd
 
-# ── Status bar & launcher ─────────────────────────────────────────────────────
-# waybar
-# wofi
-# rofi-wayland
+# ── VM graphics/runtime support for Hyprland ─────────────────────────────────
+mesa
+vulkan-virtio
+libinput
 
-# ── Notifications ─────────────────────────────────────────────────────────────
-# mako
+# ── Minimal Wayland session baseline ─────────────────────────────────────────
+hyprland
+xorg-xwayland
+wayland
+xdg-utils
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
 
-# ── Screenshot / screen lock ──────────────────────────────────────────────────
-# grim
-# slurp
-# swaylock
+# ── Session usability ────────────────────────────────────────────────────────
+waybar
+wofi
+mako
+wl-clipboard
+alacritty
 
-# ── Terminal emulator ─────────────────────────────────────────────────────────
-# alacritty
-# kitty
+# ── Screenshots / lock ───────────────────────────────────────────────────────
+grim
+slurp
+swaylock
 
-# ── File manager ──────────────────────────────────────────────────────────────
-# thunar
+# ── Audio stack (required by most desktop sessions) ─────────────────────────
+pipewire
+pipewire-pulse
+wireplumber
 
-# ── Theming — Catppuccin Mocha (matches Omarchy defaults) ────────────────────
-# catppuccin-gtk-theme-mocha    (AUR)
-# papirus-icon-theme
+# ── Fonts (minimal readable defaults) ────────────────────────────────────────
+noto-fonts
+noto-fonts-emoji
 
-# ── Fonts ─────────────────────────────────────────────────────────────────────
-# ttf-nerd-fonts-symbols
-# noto-fonts
-# noto-fonts-emoji
-
-# ── Omarchy tooling ───────────────────────────────────────────────────────────
-# (add project-specific packages here — e.g. from omarchy's package list)
+# ── Deferred Omarchy-specific pieces ─────────────────────────────────────────
+# - Catppuccin theme packages are deferred (AUR-heavy).
+# - Broader package parity remains post-VM-boot work.

@@ -1,9 +1,9 @@
 [Unit]
-Description=Omarchy First-Boot Setup
+Description=Omarchy bootc first-boot root setup
 Documentation=https://github.com/joshyorko/omarchy-bootc
 After=network-online.target
 Wants=network-online.target
-# Run only on the very first boot — the stamp file is created on success.
+# One-shot gate: script also writes this stamp to stay idempotent.
 ConditionPathExists=!/var/lib/omarchy/.firstboot-done
 
 [Service]

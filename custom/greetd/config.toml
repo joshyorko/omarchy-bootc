@@ -1,0 +1,9 @@
+# greetd configuration for the omarchy-bootc VM POC.
+# Uses agreety (shipped with greetd) to prompt for login and launch Hyprland.
+
+[terminal]
+vt = 1
+
+[default_session]
+command = "agreety --cmd Hyprland"
+user = "greeter"
