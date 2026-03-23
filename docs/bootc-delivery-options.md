@@ -4,9 +4,9 @@ _Last updated: 2026-03-23_
 
 ## Current state
 
-- bootc is intentionally omitted from the base package list because Arch repos in CI have not provided a resolvable package (`custom/packages/base.packages`).
-- Container builds defer `bootc container lint` for the same reason (`Containerfile` notes).
-- The image path relies on `bootc-image-builder` (CentOS container) to create qcow2 output; the Arch image itself does not yet include bootc.
+- bootc is built from upstream source during the image build (pinned via `BOOTC_REF`, default `v1.13.0`), and `bootc container lint` now runs in the image build.
+- Pacman/sysroot layout is shifted under `/usr/lib/sysimage`, composefs/ostree is enabled, and dracut is rebuilt with the bootc module.
+- qcow2/raw output is produced via `bootc install --composefs-backend --via-loopback`; bootc-image-builder remains available as a fallback (`build-qcow2-bib`).
 
 ## Candidate delivery options
 
@@ -42,14 +42,14 @@ _Last updated: 2026-03-23_
 
 ## Recommendation
 
-- Prepare a self-maintained pacman repo path for bootc, built from a pinned PKGBUILD we track in-repo. Consume it via an opt-in pacman repo stanza only after the package is proven to build and pass minimal `bootc container lint` in CI.
+- Continue pinning upstream bootc via `BOOTC_REF`, keep `bootc container lint` green, and consider moving to a self-maintained pacman repo once the source build is stable in CI.
 
 ## Do not do yet
 
-- Do not add bootc to `custom/packages/base.packages` or enable `bootc container lint` in `Containerfile`.
 - Do not switch the image build to a third-party binary repo by default.
 - Do not add installer/BuildStream work in this spike.
+- Do not assume Arch will ship a bootc package soon; keep the pinned source build path maintained.
 
 ## Smallest next step (safe experiment)
 
-- Mirror a vetted PKGBUILD (start with `bootc` or `bootc-git` from AUR) into a scratch branch, run `makepkg` in CI to produce a signed package artifact, and publish it to a temporary repo directory. Do not wire the main image build to that repo yet; use the artifact only to validate bootc runs and `bootc container lint` in CI.
+- Add automated coverage for `bootc` upgrade/rebase/rollback on the composefs sysroot and evaluate whether a self-maintained pacman package would simplify long-term maintenance.

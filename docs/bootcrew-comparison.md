@@ -12,18 +12,20 @@ Summary of how bootcrew ships real `bootc` on Arch and how this repository diffe
 
 ## How omarchy-bootc differs today
 
-- bootc is intentionally not installed; the image relies on `bootc-image-builder` (CentOS container) to emit qcow2 output, not on `bootc install` from within the Arch image.
-- Pacman DB is relocated only (to `/usr/lib/sysimage/pacman`); the rest of `/var` remains in place and composefs/ostree prep is not applied.
-- Initramfs is not rebuilt with bootc modules; no dracut drop-ins for bootc are present.
-- The image omits `bootc container lint` and the `containers.bootc=1` label because bootc itself is absent.
-- Boot assumptions lean on bootc-image-builder (lsinitrd via `dracut` package) rather than the bootc-in-image workflow bootcrew uses.
+- bootc is built from source in-image (default `BOOTC_REF=v1.13.0`), dracut drop-ins add the `bootc` module, and initramfs is rebuilt during the image build.
+- Sysroot/pacman layout matches bootcrew: `/usr/lib/sysimage` pacman paths, `/var` as mutable prefix, `HOME=/var/home`, composefs enabled via `prepare-root.conf`, tmpfiles for mutable dirs.
+- `bootc container lint` and `containers.bootc=1` label are now applied.
+- Primary qcow2 path uses `bootc install --composefs-backend --via-loopback` (raw then qcow2 via `qemu-img`); legacy bootc-image-builder remains as `build-qcow2-bib`.
+- Omarchy desktop/session customizations remain on top of the bootcrew-aligned bootc base.
 
 ## What blocks real bootc integration here
 
-- No bootc binary/package in the Arch image, so we cannot run `bootc container lint` or `bootc install` from inside the image.
-- No bootc-aware initramfs (dracut module) or composefs/ostree root prep, which bootcrew applies to make the image bootc-ready.
-- Image metadata/labels and bootc lifecycle checks are missing because bootc is absent.
+- Coverage for bootc lifecycle (upgrade/rebase/rollback) on Arch remains missing.
+- Host dependency on `qemu-img` for qcow2 conversion after `bootc install` (raw output is first-class).
+- Validation across host/container runtimes for the new bootc install-to-disk path still needs to be broadened.
 
 ## Smallest next step to align safely
 
-- Introduce an optional, pinned bootc-from-source builder stage (mirroring `bootcrew/mono`’s builder+system split) that can be toggled on for experiments without altering the default image flow. Pair it with gated dracut drop-ins to add the bootc module when bootc is present. Keep the current bootc-less default until the source build is validated in CI.
+- Add automated bootc lifecycle tests (rebase/rollback) against the composefs/ostree sysroot.
+- Track and periodically refresh the pinned `BOOTC_REF` while keeping lint/install runs green.
+- Decide when to retire the bootc-image-builder fallback once the native bootc install path is stable in CI.

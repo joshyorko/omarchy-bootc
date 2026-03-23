@@ -23,7 +23,8 @@ help:
     just --list --unsorted
     echo
     echo "Notes:"
-    echo "  - build-qcow2 / rebuild-qcow2 use rootful podman and --privileged bootc-image-builder."
+    echo "  - build-qcow2 / rebuild-qcow2 use rootful podman and bootc install-to-disk (composefs)."
+    echo "  - bootc-image-builder fallback remains as build-qcow2-bib / build-raw-bib."
     echo "  - run-vm-* requires /dev/kvm and a local container runtime capable of --privileged."
     echo "  - validate checks tool availability and required repo files before long builds."
 
@@ -60,7 +61,7 @@ validate:
     set -euo pipefail
 
     REQUIRED_TOOLS=(podman just jq)
-    OPTIONAL_TOOLS=(shellcheck shfmt ss)
+    OPTIONAL_TOOLS=(shellcheck shfmt ss qemu-img)
 
     for t in "${REQUIRED_TOOLS[@]}"; do
         if ! command -v "$t" >/dev/null 2>&1; then
@@ -169,7 +170,7 @@ build $target_image=local_image $tag=default_tag: validate
         --tag "${target_image}:${tag}" \
         .
 
-# ── Bootc Image Builder helpers ───────────────────────────────────────────────
+# ── Bootc Image Builder helpers (fallback) ────────────────────────────────────
 
 # Load a locally-built image into rootful podman (needed for BIB)
 [private]
@@ -233,19 +234,85 @@ _build-bib $target_image $tag $type $config: (_rootful_load_image target_image t
 [private]
 _rebuild-bib $target_image $tag $type $config: (build target_image tag) && (_build-bib target_image tag type config)
 
-# ── VM image targets ──────────────────────────────────────────────────────────
+# ── Bootc native install targets ──────────────────────────────────────────────
 
-# Build a qcow2 VM image (primary target)
+# Build a qcow2 VM image via bootc install-to-disk (default)
 [group('Build Virtual Machine Image')]
-build-qcow2 $target_image=local_image $tag=default_tag: validate && (_build-bib target_image tag "qcow2" "image/disk.toml")
+build-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="20G": validate && (build target_image tag)
+    #!/usr/bin/env bash
+    set -euo pipefail
 
-# Build a raw VM image
-[group('Build Virtual Machine Image')]
-build-raw $target_image=local_image $tag=default_tag: validate && (_build-bib target_image tag "raw" "image/disk.toml")
+    raw_path="output/raw/disk.raw"
+    mkdir -p "$(dirname "${raw_path}")"
+    if [[ ! -f "${raw_path}" ]]; then
+        if command -v fallocate >/dev/null 2>&1; then
+            fallocate -l "{{ size }}" "${raw_path}"
+        else
+            truncate -s "{{ size }}" "${raw_path}"
+        fi
+    fi
 
-# Rebuild (OCI + qcow2) in one step
+    sudo podman run \
+        --rm --privileged --pid=host \
+        --pull=newer \
+        -v /dev:/dev \
+        -v /var/lib/containers:/var/lib/containers \
+        -v /etc/containers:/etc/containers \
+        -v "$(pwd):/data" \
+        "{{ target_image }}:{{ tag }}" \
+        bootc install to-disk --composefs-backend --via-loopback "/data/${raw_path}" --filesystem "{{ filesystem }}" --wipe --bootloader systemd
+
+    if ! command -v qemu-img >/dev/null 2>&1; then
+        echo "ERROR: qemu-img not found; install qemu-img or use build-raw. Raw image available at ${raw_path}."
+        exit 1
+    fi
+
+    mkdir -p output/qcow2
+    qemu-img convert -O qcow2 "${raw_path}" output/qcow2/disk.qcow2
+
+# Build a raw VM image via bootc install-to-disk
 [group('Build Virtual Machine Image')]
-rebuild-qcow2 $target_image=local_image $tag=default_tag: validate && (_rebuild-bib target_image tag "qcow2" "image/disk.toml")
+build-raw $target_image=local_image $tag=default_tag size="20G": validate && (build target_image tag)
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    raw_path="output/raw/disk.raw"
+    mkdir -p "$(dirname "${raw_path}")"
+    if [[ ! -f "${raw_path}" ]]; then
+        if command -v fallocate >/dev/null 2>&1; then
+            fallocate -l "{{ size }}" "${raw_path}"
+        else
+            truncate -s "{{ size }}" "${raw_path}"
+        fi
+    fi
+
+    sudo podman run \
+        --rm --privileged --pid=host \
+        --pull=newer \
+        -v /dev:/dev \
+        -v /var/lib/containers:/var/lib/containers \
+        -v /etc/containers:/etc/containers \
+        -v "$(pwd):/data" \
+        "{{ target_image }}:{{ tag }}" \
+        bootc install to-disk --composefs-backend --via-loopback "/data/${raw_path}" --filesystem "btrfs" --wipe --bootloader systemd
+
+# Rebuild (OCI + qcow2) in one step using bootc install-to-disk
+[group('Build Virtual Machine Image')]
+rebuild-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="20G": validate
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just build-qcow2 "{{ target_image }}" "{{ tag }}" "{{ filesystem }}" "{{ size }}"
+
+# ── Bootc Image Builder (legacy) targets ─────────────────────────────────────
+
+[group('Build Virtual Machine Image')]
+build-qcow2-bib $target_image=local_image $tag=default_tag: validate && (_build-bib target_image tag "qcow2" "image/disk.toml")
+
+[group('Build Virtual Machine Image')]
+build-raw-bib $target_image=local_image $tag=default_tag: validate && (_build-bib target_image tag "raw" "image/disk.toml")
+
+[group('Build Virtual Machine Image')]
+rebuild-qcow2-bib $target_image=local_image $tag=default_tag: validate && (_rebuild-bib target_image tag "qcow2" "image/disk.toml")
 
 # ── Run VM ────────────────────────────────────────────────────────────────────
 

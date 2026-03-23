@@ -7,11 +7,16 @@ if [[ -z "${IMAGE_REF}" ]]; then
     exit 1
 fi
 
-BIB_IMAGE="${BIB_IMAGE:-quay.io/centos-bootc/bootc-image-builder:latest}"
 SSH_PORT="${SSH_PORT:-2222}"
 QCOW_PATH="output/qcow2/disk.qcow2"
+RAW_PATH="output/raw/disk.raw"
 QEMU_PIDFILE="${RUNNER_TEMP:-/tmp}/omarchy-bootc-qemu.pid"
 QEMU_LOG="${RUNNER_TEMP:-/tmp}/omarchy-bootc-qemu.log"
+
+if ! command -v qemu-img >/dev/null 2>&1; then
+    echo "qemu-img is required for bootc install-to-disk smoke tests."
+    exit 1
+fi
 
 cleanup() {
     if [[ -f "${QEMU_PIDFILE}" ]]; then
@@ -22,23 +27,31 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p output
-rm -rf output/qcow2
+rm -rf output/qcow2 output/raw
 
-echo "::group::Prepare rootful image for bootc-image-builder"
+echo "::group::Prepare rootful image for bootc install"
 podman image save "${IMAGE_REF}" -o output/image.tar
 sudo podman image load -i output/image.tar
 rm -f output/image.tar
 echo "::endgroup::"
 
-echo "::group::Generate qcow2 from container image"
-sudo podman run --rm --privileged --pull=newer --net=host \
-    -v "${PWD}/image/disk.toml:/config.toml:ro" \
-    -v "${PWD}/output:/output" \
-    -v /var/lib/containers/storage:/var/lib/containers/storage \
-    "${BIB_IMAGE}" \
-    --type qcow2 \
-    --rootfs btrfs \
-    "${IMAGE_REF}"
+echo "::group::Generate qcow2 via bootc install-to-disk"
+mkdir -p "$(dirname "${RAW_PATH}")" "$(dirname "${QCOW_PATH}")"
+if command -v fallocate >/dev/null 2>&1; then
+    fallocate -l 20G "${RAW_PATH}"
+else
+    truncate -s 20G "${RAW_PATH}"
+fi
+
+sudo podman run --rm --privileged --pid=host --pull=newer \
+    -v /dev:/dev \
+    -v /var/lib/containers:/var/lib/containers \
+    -v /etc/containers:/etc/containers \
+    -v "${PWD}:/data" \
+    "${IMAGE_REF}" \
+    bootc install to-disk --composefs-backend --via-loopback "/data/${RAW_PATH}" --filesystem btrfs --wipe --bootloader systemd
+
+qemu-img convert -O qcow2 "${RAW_PATH}" "${QCOW_PATH}"
 echo "::endgroup::"
 
 if [[ ! -f "${QCOW_PATH}" ]]; then

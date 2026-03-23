@@ -66,6 +66,8 @@ just build-qcow2
 just run-vm
 ```
 
+> Default qcow2 generation uses `bootc install --composefs-backend --via-loopback` and requires host `qemu-img` plus `--privileged` podman. Use `just build-qcow2-bib` if you need the legacy bootc-image-builder path.
+
 ### Login/session path in VM
 
 1. At the `agreety` prompt, log in as:
@@ -86,24 +88,23 @@ just run-vm
 
 ## Boot assumptions / known blockers
 
-The image now includes explicit boot-critical packages (`linux`, `dracut`, `kmod`, `btrfs-progs`) and a minimal VM graphics stack (`mesa`, `vulkan-virtio`, `libinput`).
+The image now includes explicit boot-critical packages (`linux`, `dracut`, `kmod`, `btrfs-progs`) and a minimal VM graphics stack (`mesa`, `vulkan-virtio`, `libinput`). `bootc` is built from source during the image build with dracut drop-ins, and the sysroot is prepared for composefs/ostree (`HOME=/var/home`).
 
 Remaining assumptions to validate in real VM boots:
 
-- `bootc` delivery/integration on Arch is not solved in this repo yet (package is not currently available in CI repos).
-- `bootc-image-builder` relies on `lsinitrd` during manifest/qcow2 generation; this image now provides it via `dracut`.
-- `bootc-image-builder` reliably produces a bootable Arch qcow2 from this image layout.
-- Arch `bootc` package behavior remains compatible with this flow over time.
+- `bootc install to-disk` (used by `just build-qcow2` / CI smoke) remains reliable across host environments; qcow2 conversion requires `qemu-img`.
+- `bootc` lifecycle operations (upgrade/rebase/rollback) on this Arch-based image still need broader validation.
+- `bootc-image-builder` remains available as a fallback path via `just build-qcow2-bib`.
 - Hyprland compositor behavior in a virtualized GPU environment is host/hypervisor dependent.
 
-See `docs/bootc-delivery-options.md` for current Arch bootc delivery options and the recommended path forward.
-See `docs/bootcrew-comparison.md` for how bootcrew’s Arch bootc images differ and the minimal next step to align.
+See `docs/bootc-delivery-options.md` for current Arch bootc delivery options and the recommended path forward (now implemented via source build).
+See `docs/bootcrew-comparison.md` for how bootcrew’s Arch bootc images differ and what remains to align.
 
 ## Notes
 
 - This remains a technical POC for an Omarchy-style Arch image.
-- bootc delivery/integration on Arch is currently deferred until a real package/source path is validated.
-- Immediate objective is to keep the image building while preserving the first VM login/session path.
+- bootc is shipped from source inside the image; keep validating the bootc/composefs flow over time.
+- Immediate objective is to keep the image building while preserving the first VM login/session path and the bootc install-to-disk smoke path.
 - Desktop defaults are now intentionally Omarchy-inspired but trimmed to the current package set and no-AUR policy.
 - See `docs/technical-status.md` for what is working, what is assumed, and what is deferred.
 - Current CI focus: keep image build + headless VM smoke validation green.
