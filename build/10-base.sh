@@ -44,7 +44,12 @@ compress=zstd
 add_dracutmodules+=" ostree bootc "
 EOT
 
-dracut --force "$(find /usr/lib/modules -maxdepth 1 -type d | grep -v -E "*.img" | tail -n 1)/initramfs.img"
+latest_kver="$(
+    find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
+        | sort -V \
+        | tail -n 1
+)"
+dracut --force "/usr/lib/modules/${latest_kver}/initramfs.img"
 
 pacman -Rns --noconfirm make git rust go-md2man || true
 pacman -S --clean --noconfirm
@@ -57,7 +62,20 @@ echo "::group:: Prepare bootc sysroot"
 
 sed -i 's|^HOME=.*|HOME=/var/home|' "/etc/default/useradd"
 
-rm -rf /boot /home /root /usr/local /srv /opt /mnt /var /usr/lib/sysimage/log /usr/lib/sysimage/cache/pacman/pkg
+cleanup_paths=(
+    /boot
+    /home
+    /root
+    /usr/local
+    /srv
+    /opt
+    /mnt
+    /var
+    /usr/lib/sysimage/log
+)
+for path in "${cleanup_paths[@]}"; do
+    rm -rf -- "${path}"
+done
 mkdir -p /sysroot /boot /usr/lib/ostree /var /var/lib
 ln -sT sysroot/ostree /ostree
 ln -sT var/roothome /root
