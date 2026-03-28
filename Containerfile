@@ -39,9 +39,14 @@ RUN --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \
 
 # ── Relocate pacman-managed /var content into /usr/lib/sysimage ───────────────
 # Align with bootcrew/arch-bootc to keep /var mutable and /usr image-owned.
-RUN grep "= */var" /etc/pacman.conf | sed "/= *\\/var/s/.*=// ; s/ //" | \
-        xargs -n1 sh -c 'mkdir -p "/usr/lib/sysimage/$(dirname $(echo $1 | sed \"s@/var/@@\"))\" && mv -v \"$1\" \"/usr/lib/sysimage/$(echo \"$1\" | sed \"s@/var/@@\")\"' '' && \
-    sed -i -e "/= *\\/var/ s/^#//" -e "s@= */var@= /usr/lib/sysimage@g" -e "/DownloadUser/d" /etc/pacman.conf
+RUN set -euo pipefail; \
+    awk -F= '/= *\/var/ { gsub(/ /, "", $2); print $2 }' /etc/pacman.conf | \
+    while read -r path; do \
+        dest="/usr/lib/sysimage/${path#/var/}"; \
+        mkdir -p "$(dirname "${dest}")"; \
+        mv -v "${path}" "${dest}"; \
+    done && \
+    sed -i -e '/= *\/var/ s/^#//' -e 's@= */var@= /usr/lib/sysimage@g' -e '/DownloadUser/d' /etc/pacman.conf
 
 # ── Keep full locales/help available and refresh glibc after relocation ───────
 RUN sed -i 's/^[[:space:]]*NoExtract/#&/' /etc/pacman.conf
