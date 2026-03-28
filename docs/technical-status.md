@@ -1,11 +1,13 @@
 # Technical status: omarchy-bootc POC
 
-_Last updated: 2026-03-23_
+_Last updated: 2026-03-28_
 
 ## Working now (implemented in repo)
 
 - Build scripts are layered and wired from `Containerfile` with explicit boot-critical package lists in `custom/packages/base.packages` (including `dracut` so `lsinitrd` is available for bootc-image-builder manifest generation).
 - Local build/qcow2/run flow is defined in `Justfile` with consistent local image reference defaults.
+- GitHub Actions builds the image, generates a qcow2 via `bootc-image-builder`, boots it in headless QEMU, and performs an SSH-based smoke test.
+- CI smoke runs now retain host/QEMU/guest diagnostics as workflow artifacts (`bootc-image-builder` log, podman load/save logs, QEMU serial log, qcow metadata, guest journal/unit status).
 - A concrete VM login path is configured: `greetd` + `agreety` launching `Hyprland`, with minimal VM graphics/runtime packages (`mesa`, `vulkan-virtio`, `libinput`).
 - A default POC user is explicitly created at image build time: `omarchy`.
 - Root first-boot script seeds starter config and writes `/var/lib/omarchy/.firstboot-done`.
@@ -50,6 +52,6 @@ _Last updated: 2026-03-23_
 6. Verify first-boot completion in VM:
    - `test -f /var/lib/omarchy/.firstboot-done && echo OK`
 
-Next milestone remains unchanged:
+Next milestone:
 
-> Keep qcow2 generation + headless VM smoke checks green in CI, then expand diagnostics and stability coverage.
+> Broaden stability coverage beyond the single headless smoke path, with stronger in-guest assertions and wider host-environment validation.

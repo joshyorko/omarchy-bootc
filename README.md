@@ -106,5 +106,5 @@ See `docs/bootcrew-comparison.md` for how bootcrew’s Arch bootc images differ 
 - Immediate objective is to keep the image building while preserving the first VM login/session path.
 - Desktop defaults are now intentionally Omarchy-inspired but trimmed to the current package set and no-AUR policy.
 - See `docs/technical-status.md` for what is working, what is assumed, and what is deferred.
-- Current CI focus: keep image build + headless VM smoke validation green.
-- Next milestone remains: harden the smoke path with richer failure artifacts/log collection.
+- Current CI focus: keep image build + headless VM smoke validation green, with retained diagnostics from host, QEMU, and guest state.
+- Next milestone: broaden stability coverage beyond the single headless smoke path.

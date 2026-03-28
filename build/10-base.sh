@@ -21,6 +21,36 @@ fi
 
 echo "::endgroup::"
 
+echo "::group:: Add kernel-version compatibility symlinks"
+
+latest_kver=""
+if [[ -d /usr/lib/modules ]]; then
+    latest_kver="$(
+        find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
+            | sort -V \
+            | tail -n 1
+    )"
+fi
+
+if [[ -n "${latest_kver}" ]]; then
+    if [[ -f /boot/initramfs-linux.img ]]; then
+        ln -sfn initramfs-linux.img "/boot/initramfs-${latest_kver}.img"
+        ln -sfn ../../../boot/initramfs-linux.img "/usr/lib/modules/${latest_kver}/initramfs.img"
+    fi
+
+    if [[ -f /boot/vmlinuz-linux ]]; then
+        ln -sfn vmlinuz-linux "/boot/vmlinuz-${latest_kver}"
+    fi
+
+    ls -l /boot/initramfs-linux.img "/boot/initramfs-${latest_kver}.img" || true
+    ls -l /boot/vmlinuz-linux "/boot/vmlinuz-${latest_kver}" || true
+    ls -l "/usr/lib/modules/${latest_kver}/initramfs.img" || true
+else
+    echo "WARN: no kernel version directory found under /usr/lib/modules"
+fi
+
+echo "::endgroup::"
+
 echo "::group:: Create default POC user"
 
 # Explicit VM login user for POC smoke tests.

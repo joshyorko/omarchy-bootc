@@ -87,7 +87,6 @@ jobs:
             io.artifacthub.package.keywords=${{ env.IMAGE_KEYWORDS }}
             io.artifacthub.package.license=NOASSERTION
             io.artifacthub.package.prerelease=true
-            containers.bootc=1
           sep-tags: " "
           sep-annotations: " "
 
@@ -109,8 +108,18 @@ jobs:
           sudo apt-get install -y qemu-system-x86 qemu-utils sshpass
 
       - name: VM smoke test (headless qemu + ssh)
+        env:
+          CI_ARTIFACT_DIR: ${{ runner.temp }}/vm-smoke-artifacts
         run: |
           ./scripts/ci/vm-smoke.sh "${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}"
+
+      - name: Upload VM smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vm-smoke-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/vm-smoke-artifacts
+          if-no-files-found: warn
 
       - name: Tag for registry
         run: |
