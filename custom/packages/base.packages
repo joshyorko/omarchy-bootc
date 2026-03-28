@@ -2,18 +2,20 @@
 # One package name per line. Lines starting with # and blank lines are ignored.
 # Installed by build/10-base.sh using pacman.
 
-# ── bootc status ─────────────────────────────────────────────────────────────
-# bootc package is intentionally NOT installed here right now because current
-# Arch repos in CI do not provide a resolvable `bootc` package.
-#
-# ── Boot-critical runtime packages for VM images ─────────────────────────────
-# These are intentionally minimal for first qcow2 bootability.
-# dracut is used so lsinitrd is present for bootc-image-builder manifest generation.
+# ── Boot-critical runtime packages for bootc/composefs sysroot ───────────────
+# bootc itself is built from source during the image build (see build/10-base.sh).
+base
 linux
+linux-firmware
 dracut
 kmod
+cpio
 btrfs-progs
-linux-firmware
+e2fsprogs
+xfsprogs
+dosfstools
+ostree
+skopeo
 
 # ── Networking ────────────────────────────────────────────────────────────────
 networkmanager
@@ -23,9 +25,13 @@ openssh
 sudo
 bash
 vim
+shadow
 
 # ── Container tooling ─────────────────────────────────────────────────────────
 # Explicit runtime provider keeps pacman non-interactive in CI when installing
 # podman (avoids provider prompt for oci-runtime).
 crun
 podman
+dbus
+dbus-glib
+glib2

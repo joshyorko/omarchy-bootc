@@ -6,12 +6,11 @@
 #
 # IMPORTANT STATUS NOTES
 # - This Containerfile targets a technical POC, not production parity.
-# - bootc availability in Arch repositories is assumed here and must be
-#   revalidated periodically.
-# - pacman DB relocation for immutable /usr is based on known bootc/ostree
-#   patterns but should still be validated against real upgrade flows.
-# - bootc-image-builder compatibility is expected for qcow2 output, but only
-#   runtime VM tests should be treated as proof.
+# - bootc is built from upstream source (BOOTC_REF) during the image build.
+# - pacman/sysroot relocation to /usr/lib/sysimage follows bootc/ostree patterns
+#   and should be validated against real upgrade/rebase flows.
+# - qcow2 output is generated via bootc install-to-disk; bootc-image-builder
+#   remains as a fallback helper.
 ###############################################################################
 
 # ── Context stage ─────────────────────────────────────────────────────────────
@@ -28,6 +27,9 @@ COPY systemd /systemd
 # Example: FROM archlinux:base@sha256:<digest>
 FROM archlinux:base
 
+ARG BOOTC_REF="v1.13.0"
+ENV BOOTC_REF=${BOOTC_REF}
+
 # ── Pacman keyring + full system update ───────────────────────────────────────
 # Layer is separate so the package cache can be shared across rebuilds.
 RUN --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \
@@ -35,38 +37,42 @@ RUN --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \
     pacman-key --populate archlinux && \
     pacman -Syu --noconfirm
 
-# ── Relocate pacman DB for immutable-root expectations ────────────────────────
-# bootc/ostree-style systems generally treat /var as mutable state and /usr as
-# image-owned content. Moving pacman DB to /usr/lib/sysimage/pacman is an
-# explicit compatibility assumption for this POC and should be tested during
-# upgrade/rebase validation.
-RUN mkdir -p /usr/lib/sysimage && \
-    cp -a /var/lib/pacman /usr/lib/sysimage/pacman && \
-    rm -rf /var/lib/pacman && \
-    ln -s /usr/lib/sysimage/pacman /var/lib/pacman && \
-    sed -i 's|^#\?DBPath\s*=.*|DBPath      = /usr/lib/sysimage/pacman|' \
-        /etc/pacman.conf
+# ── Relocate pacman-managed /var content into /usr/lib/sysimage ───────────────
+# Align with bootcrew/arch-bootc to keep /var mutable and /usr image-owned.
+RUN set -euo pipefail; \
+    awk -F= '/= *\/var/ { gsub(/ /, "", $2); print $2 }' /etc/pacman.conf | \
+    while read -r path; do \
+        dest="/usr/lib/sysimage/${path#/var/}"; \
+        mkdir -p "$(dirname "${dest}")"; \
+        mv -v "${path}" "${dest}"; \
+    done && \
+    sed -i -e '/= *\/var/ s/^#//' -e 's@= */var@= /usr/lib/sysimage@g' -e '/DownloadUser/d' /etc/pacman.conf
+
+# ── Keep full locales/help available and refresh glibc after relocation ───────
+RUN sed -i 's/^[[:space:]]*NoExtract/#&/' /etc/pacman.conf
+RUN --mount=type=tmpfs,dst=/tmp \
+    --mount=type=cache,dst=/usr/lib/sysimage/cache/pacman/pkg,sharing=locked \
+    pacman -Sy glibc --noconfirm
 
 # ── Build-time OS customisation — numbered scripts run in order ───────────────
 # 10-base.sh    core system packages (bootc, networking, containers)
 # 20-omarchy.sh minimal Wayland/Hyprland session baseline for POC credibility
 # 30-services.sh enable / disable systemd services
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \
+    --mount=type=cache,dst=/usr/lib/sysimage/cache/pacman/pkg,sharing=locked \
     --mount=type=tmpfs,dst=/tmp \
     bash /ctx/build/10-base.sh
 
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \
+    --mount=type=cache,dst=/usr/lib/sysimage/cache/pacman/pkg,sharing=locked \
     --mount=type=tmpfs,dst=/tmp \
     bash /ctx/build/20-omarchy.sh
 
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \
+    --mount=type=cache,dst=/usr/lib/sysimage/cache/pacman/pkg,sharing=locked \
     --mount=type=tmpfs,dst=/tmp \
     bash /ctx/build/30-services.sh
 
-# ── bootc lint intentionally deferred ────────────────────────────────────────
-# `bootc` is not currently installable from Arch repos in CI for this project,
-# so `bootc container lint` is deferred until bootc delivery on Arch is solved.
-# Current CI goal: keep image build + VM session path green.
+# ── bootc metadata + lint ─────────────────────────────────────────────────────
+LABEL containers.bootc=1
+RUN bootc container lint

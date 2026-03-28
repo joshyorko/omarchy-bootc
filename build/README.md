@@ -13,5 +13,4 @@ Packages are declared in `custom/packages/`.
 This remains a technical POC focused on a first credible VM boot/login path,
 not full Omarchy parity.
 
-
-Note: `bootc` package installation is currently deferred because CI Arch repos do not currently resolve it for this project.
+Note: `bootc` is built from source inside `10-base.sh` (mirroring bootcrew) and dracut is rebuilt with the `bootc` module enabled; the sysroot is prepared for composefs/ostree layout with `/var` as the mutable prefix.

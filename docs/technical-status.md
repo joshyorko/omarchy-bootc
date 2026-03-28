@@ -4,8 +4,11 @@ _Last updated: 2026-03-23_
 
 ## Working now (implemented in repo)
 
-- Build scripts are layered and wired from `Containerfile` with explicit boot-critical package lists in `custom/packages/base.packages` (including `dracut` so `lsinitrd` is available for bootc-image-builder manifest generation).
+- Build scripts are layered and wired from `Containerfile` with explicit boot-critical package lists in `custom/packages/base.packages` (including `dracut` for bootc initramfs rebuilds and BIB fallback if needed).
+- bootc is built from source during image build (default `BOOTC_REF=v1.13.0`), dracut is rebuilt with the `bootc` module, and bootc container metadata/lint are applied.
+- Sysroot is prepared for bootc/composefs (`HOME=/var/home`, `/usr/lib/sysimage` pacman paths, tmpfiles for mutable dirs, `prepare-root.conf` enabling composefs/readonly sysroot).
 - Local build/qcow2/run flow is defined in `Justfile` with consistent local image reference defaults.
+- Native `bootc install to-disk` path emits raw/qcow2 images via `just build-qcow2`; legacy bootc-image-builder targets remain available as `build-qcow2-bib` / `build-raw-bib`.
 - A concrete VM login path is configured: `greetd` + `agreety` launching `Hyprland`, with minimal VM graphics/runtime packages (`mesa`, `vulkan-virtio`, `libinput`).
 - A default POC user is explicitly created at image build time: `omarchy`.
 - Root first-boot script seeds starter config and writes `/var/lib/omarchy/.firstboot-done`.
@@ -18,11 +21,11 @@ _Last updated: 2026-03-23_
 
 ## Still unverified (needs broader VM validation)
 
-- bootc delivery/integration on Arch is currently not solved in this repository.
+- bootc lifecycle checks (upgrade/rebase/rollback) on this Arch-based image.
+- Reliability of `bootc install --composefs-backend --via-loopback` across host/container runtimes; qcow2 conversion relies on host `qemu-img`.
 - End-to-end VM reliability across host environments.
 - Desktop session quality/stability beyond first login.
-- bootc lifecycle checks (rebase/rollback) on this Arch-based image (blocked until bootc delivery on Arch is solved here).
-- Long-term assumptions around pacman DB relocation and bootc package behavior in Arch repos.
+- Long-term assumptions around pacman DB relocation and bootc source build behavior over time.
 
 ## Deferred intentionally
 
