@@ -10,6 +10,7 @@ fi
 SSH_PORT="${SSH_PORT:-2222}"
 QCOW_PATH="output/qcow2/disk.qcow2"
 RAW_PATH="output/raw/disk.raw"
+SOURCE_OCI_DIR="output/source-oci"
 ARTIFACT_DIR="${CI_ARTIFACT_DIR:-${RUNNER_TEMP:-/tmp}/omarchy-bootc-artifacts}"
 QEMU_PIDFILE="${RUNNER_TEMP:-/tmp}/omarchy-bootc-qemu.pid"
 QEMU_LOG="${RUNNER_TEMP:-/tmp}/omarchy-bootc-qemu.log"
@@ -128,7 +129,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p output
-rm -rf output/qcow2 output/raw
+rm -rf output/qcow2 output/raw "${SOURCE_OCI_DIR}"
 
 echo "::group::Preflight bootc image state"
 IMAGE_REF="$(podman inspect -t image "${IMAGE_REF}" --format '{{index .RepoTags 0}}')"
@@ -147,6 +148,13 @@ rootful_copy_image "${IMAGE_REF}" \
     2>&1 | tee "${ARTIFACT_DIR}/rootful-image-copy.log"
 echo "::endgroup::"
 
+echo "::group::Export explicit install source image"
+podman save --format oci-dir --output "${SOURCE_OCI_DIR}" "${IMAGE_REF}" \
+    2>&1 | tee "${ARTIFACT_DIR}/source-oci-export.log"
+SOURCE_IMGREF="oci:/data/${SOURCE_OCI_DIR}"
+echo "Using source imgref: ${SOURCE_IMGREF}" | tee "${ARTIFACT_DIR}/source-imgref.txt"
+echo "::endgroup::"
+
 echo "::group::Generate qcow2 via bootc install-to-disk"
 mkdir -p "$(dirname "${RAW_PATH}")" "$(dirname "${QCOW_PATH}")"
 if command -v fallocate >/dev/null 2>&1; then
@@ -161,7 +169,7 @@ sudo podman run --rm --privileged --pid=host --pull=newer \
     -v /etc/containers:/etc/containers \
     -v "${PWD}:/data" \
     "${IMAGE_REF}" \
-    bootc install to-disk --composefs-backend --via-loopback "/data/${RAW_PATH}" --filesystem btrfs --wipe --bootloader systemd \
+    bootc install to-disk --source-imgref "${SOURCE_IMGREF}" --composefs-backend --via-loopback "/data/${RAW_PATH}" --filesystem btrfs --wipe --bootloader systemd \
     2>&1 | tee "${ARTIFACT_DIR}/bootc-install.log"
 
 qemu-img convert -O qcow2 "${RAW_PATH}" "${QCOW_PATH}"
