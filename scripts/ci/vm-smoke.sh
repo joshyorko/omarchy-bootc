@@ -20,6 +20,30 @@ SSH_OPTS=(
     -p "${SSH_PORT}"
 )
 
+rootful_copy_image() {
+    local image_ref="${1}"
+    local rootless_id=""
+    local rootful_id=""
+    local copy_tmp=""
+
+    rootless_id="$(podman images --filter "reference=${image_ref}" --format '{{.ID}}' | head -n 1)"
+    if [[ -z "${rootless_id}" ]]; then
+        echo "Unable to locate rootless image for ${image_ref}"
+        exit 1
+    fi
+
+    rootful_id="$(sudo podman images --filter "reference=${image_ref}" --format '{{.ID}}' | head -n 1 || true)"
+    if [[ "${rootful_id}" == "${rootless_id}" ]]; then
+        return
+    fi
+
+    copy_tmp="$(mktemp -d -p "${PWD}" -t _build_podman_scp.XXXXXXXXXX)"
+    sudo TMPDIR="${copy_tmp}" podman image scp \
+        "$(id -u)@localhost::${image_ref}" \
+        "root@localhost::${image_ref}"
+    rm -rf "${copy_tmp}"
+}
+
 if ! command -v qemu-img >/dev/null 2>&1; then
     echo "qemu-img is required for bootc install-to-disk smoke tests."
     exit 1
@@ -102,6 +126,9 @@ mkdir -p output
 rm -rf output/qcow2 output/raw
 
 echo "::group::Preflight bootc image state"
+IMAGE_REF="$(podman inspect -t image "${IMAGE_REF}" --format '{{index .RepoTags 0}}')"
+echo "Resolved image ref: ${IMAGE_REF}" | tee "${ARTIFACT_DIR}/image-ref.txt"
+
 podman run --rm "${IMAGE_REF}" bash -lc '
 set -euo pipefail
 echo "bootc=$(bootc --version | head -n1)"
@@ -111,11 +138,8 @@ find /usr/lib/modules -mindepth 1 -maxdepth 2 \( -name initramfs.img -o -name vm
 echo "::endgroup::"
 
 echo "::group::Prepare rootful image for bootc install"
-podman image save "${IMAGE_REF}" -o output/image.tar \
-    2>&1 | tee "${ARTIFACT_DIR}/podman-image-save.log"
-sudo podman image load -i output/image.tar \
-    2>&1 | tee "${ARTIFACT_DIR}/podman-image-load.log"
-rm -f output/image.tar
+rootful_copy_image "${IMAGE_REF}" \
+    2>&1 | tee "${ARTIFACT_DIR}/rootful-image-copy.log"
 echo "::endgroup::"
 
 echo "::group::Generate qcow2 via bootc install-to-disk"

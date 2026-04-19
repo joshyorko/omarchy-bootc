@@ -1,11 +1,11 @@
-export image_name    := env("IMAGE_NAME",    "omarchy-bootc")
-export default_tag   := env("DEFAULT_TAG",   "stable")
-export bib_image     := env("BIB_IMAGE",     "quay.io/centos-bootc/bootc-image-builder:latest")
-export local_image   := env("LOCAL_IMAGE",  "localhost/" + image_name)
+export image_name := env("IMAGE_NAME", "omarchy-bootc")
+export default_tag := env("DEFAULT_TAG", "stable")
+export bib_image := env("BIB_IMAGE", "quay.io/centos-bootc/bootc-image-builder:latest")
+export local_image := env("LOCAL_IMAGE", "localhost/" + image_name)
 
-alias build-vm   := build-qcow2
+alias build-vm := build-qcow2
 alias rebuild-vm := rebuild-qcow2
-alias run-vm     := run-vm-qcow2
+alias run-vm := run-vm-qcow2
 
 [private]
 default:
@@ -151,8 +151,8 @@ sudoif command *args:
     sudoif {{ command }} {{ args }}
 
 # ── Container image build ─────────────────────────────────────────────────────
-
 # Build the OCI container image locally with podman
+
 # Usage: just build [target_image] [tag]
 [group('Build')]
 build $target_image=local_image $tag=default_tag: validate
@@ -242,6 +242,8 @@ build-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="
     #!/usr/bin/env bash
     set -euo pipefail
 
+    just _rootful_load_image "{{ target_image }}" "{{ tag }}"
+
     raw_path="output/raw/disk.raw"
     mkdir -p "$(dirname "${raw_path}")"
     if [[ ! -f "${raw_path}" ]]; then
@@ -275,6 +277,8 @@ build-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="
 build-raw $target_image=local_image $tag=default_tag size="20G": validate && (build target_image tag)
     #!/usr/bin/env bash
     set -euo pipefail
+
+    just _rootful_load_image "{{ target_image }}" "{{ tag }}"
 
     raw_path="output/raw/disk.raw"
     mkdir -p "$(dirname "${raw_path}")"
