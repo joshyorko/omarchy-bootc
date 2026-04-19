@@ -61,7 +61,7 @@ validate:
     set -euo pipefail
 
     REQUIRED_TOOLS=(podman just jq)
-    OPTIONAL_TOOLS=(shellcheck shfmt ss qemu-img)
+    OPTIONAL_TOOLS=(shellcheck shfmt ss qemu-img machinectl)
 
     for t in "${REQUIRED_TOOLS[@]}"; do
         if ! command -v "$t" >/dev/null 2>&1; then
@@ -193,6 +193,10 @@ _rootful_load_image $target_image=local_image $tag=default_tag:
     if [[ $return_code -eq 0 ]]; then
         ID=$(just sudoif podman images --filter reference="${target_image}:${tag}" --format "{{{{.ID}}}}")
         if [[ "$ID" != "$USER_IMG_ID" ]]; then
+            if ! command -v machinectl >/dev/null 2>&1; then
+                echo "ERROR: machinectl is required for podman image scp when copying images into rootful podman."
+                exit 1
+            fi
             COPYTMP=$(mktemp -p "${PWD}" -d -t _build_podman_scp.XXXXXXXXXX)
             just sudoif TMPDIR="${COPYTMP}" podman image scp \
                 "${UID}@localhost::${target_image}:${tag}" \

@@ -48,6 +48,7 @@ omarchy-bootc/
 - `podman`
 - `just`
 - `jq`
+- `machinectl` (required when the native disk-image recipes need to copy a rootless-built image into rootful podman)
 - `sudo` (for rootful bootc-image-builder)
 - `/dev/kvm` for practical VM boot testing
 

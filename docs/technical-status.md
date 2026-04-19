@@ -10,6 +10,7 @@ _Last updated: 2026-04-19_
 - Local build/qcow2/run flow is defined in `Justfile` with consistent local image reference defaults.
 - Native `bootc install to-disk` path emits raw/qcow2 images via `just build-qcow2`; legacy bootc-image-builder targets remain available as `build-qcow2-bib` / `build-raw-bib`.
 - Rootful/rootless image handoff is now explicit for the native disk-image path: `Justfile` and `scripts/ci/vm-smoke.sh` copy the already-built image into rootful podman before running `bootc install to-disk`.
+- CI installs `systemd-container` so `machinectl` is available for the `podman image scp` handoff used by the smoke path.
 - A concrete VM login path is configured: `greetd` + `agreety` launching `Hyprland`, with minimal VM graphics/runtime packages (`mesa`, `vulkan-virtio`, `libinput`).
 - A default POC user is explicitly created at image build time: `omarchy`.
 - Root first-boot script seeds starter config and writes `/var/lib/omarchy/.firstboot-done`.

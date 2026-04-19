@@ -26,6 +26,11 @@ rootful_copy_image() {
     local rootful_id=""
     local copy_tmp=""
 
+    if ! command -v machinectl >/dev/null 2>&1; then
+        echo "machinectl is required for podman image scp when copying into rootful podman"
+        exit 1
+    fi
+
     rootless_id="$(podman images --filter "reference=${image_ref}" --format '{{.ID}}' | head -n 1)"
     if [[ -z "${rootless_id}" ]]; then
         echo "Unable to locate rootless image for ${image_ref}"
