@@ -111,11 +111,12 @@ find /usr/lib/modules -mindepth 1 -maxdepth 2 \( -name initramfs.img -o -name vm
 echo "::endgroup::"
 
 echo "::group::Prepare rootful image for bootc install"
-podman image save "${IMAGE_REF}" -o output/image.tar \
+IMAGE_ARCHIVE="output/image.oci.tar"
+podman image save --format oci-archive "${IMAGE_REF}" -o "${IMAGE_ARCHIVE}" \
     2>&1 | tee "${ARTIFACT_DIR}/podman-image-save.log"
-sudo podman image load -i output/image.tar \
+sudo podman image load -i "${IMAGE_ARCHIVE}" \
     2>&1 | tee "${ARTIFACT_DIR}/podman-image-load.log"
-rm -f output/image.tar
+rm -f "${IMAGE_ARCHIVE}"
 echo "::endgroup::"
 
 echo "::group::Generate qcow2 via bootc install-to-disk"
