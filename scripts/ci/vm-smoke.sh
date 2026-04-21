@@ -191,7 +191,7 @@ qemu-system-x86_64 \
     -cpu max \
     -smp 2 \
     -m 4096 \
-    -nographic \
+    -display none \
     -serial file:"${QEMU_LOG}" \
     -monitor none \
     -drive if=virtio,format=qcow2,file="${QCOW_PATH}" \
