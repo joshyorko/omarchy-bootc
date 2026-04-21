@@ -48,6 +48,7 @@ omarchy-bootc/
 - `podman`
 - `just`
 - `jq`
+- `machinectl` (required when the native disk-image recipes need to copy a rootless-built image into rootful podman)
 - `sudo` (for rootful bootc-image-builder)
 - `/dev/kvm` for practical VM boot testing
 
@@ -67,6 +68,7 @@ just run-vm
 ```
 
 > Default qcow2 generation uses `bootc install --composefs-backend --via-loopback` and requires host `qemu-img` plus `--privileged` podman. Use `just build-qcow2-bib` if you need the legacy bootc-image-builder path.
+> The native disk-image recipes automatically copy the locally-built image into rootful podman before `bootc install to-disk`, which is required when the build itself ran rootless.
 
 ### Login/session path in VM
 
@@ -92,7 +94,7 @@ The image now includes explicit boot-critical packages (`linux`, `dracut`, `kmod
 
 Remaining assumptions to validate in real VM boots:
 
-- `bootc install to-disk` (used by `just build-qcow2` / CI smoke) remains reliable across host environments; qcow2 conversion requires `qemu-img`.
+- `bootc install to-disk` (used by `just build-qcow2` / CI smoke) remains reliable across host environments once the rootful image handoff is in place; qcow2 conversion requires `qemu-img`.
 - `bootc` lifecycle operations (upgrade/rebase/rollback) on this Arch-based image still need broader validation.
 - `bootc-image-builder` remains available as a fallback path via `just build-qcow2-bib`.
 - Hyprland compositor behavior in a virtualized GPU environment is host/hypervisor dependent.

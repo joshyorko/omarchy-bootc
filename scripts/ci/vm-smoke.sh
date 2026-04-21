@@ -10,6 +10,7 @@ fi
 SSH_PORT="${SSH_PORT:-2222}"
 QCOW_PATH="output/qcow2/disk.qcow2"
 RAW_PATH="output/raw/disk.raw"
+SOURCE_OCI_DIR="output/source-oci"
 ARTIFACT_DIR="${CI_ARTIFACT_DIR:-${RUNNER_TEMP:-/tmp}/omarchy-bootc-artifacts}"
 QEMU_PIDFILE="${RUNNER_TEMP:-/tmp}/omarchy-bootc-qemu.pid"
 QEMU_LOG="${RUNNER_TEMP:-/tmp}/omarchy-bootc-qemu.log"
@@ -19,6 +20,35 @@ SSH_OPTS=(
     -o ConnectTimeout=3
     -p "${SSH_PORT}"
 )
+
+rootful_copy_image() {
+    local image_ref="${1}"
+    local rootless_id=""
+    local rootful_id=""
+    local copy_tmp=""
+
+    if ! command -v machinectl >/dev/null 2>&1; then
+        echo "machinectl is required for podman image scp when copying into rootful podman"
+        exit 1
+    fi
+
+    rootless_id="$(podman images --filter "reference=${image_ref}" --format '{{.ID}}' | head -n 1)"
+    if [[ -z "${rootless_id}" ]]; then
+        echo "Unable to locate rootless image for ${image_ref}"
+        exit 1
+    fi
+
+    rootful_id="$(sudo podman images --filter "reference=${image_ref}" --format '{{.ID}}' | head -n 1 || true)"
+    if [[ "${rootful_id}" == "${rootless_id}" ]]; then
+        return
+    fi
+
+    copy_tmp="$(mktemp -d -p "${PWD}" -t _build_podman_scp.XXXXXXXXXX)"
+    sudo TMPDIR="${copy_tmp}" podman image scp \
+        "$(id -u)@localhost::${image_ref}" \
+        "root@localhost::${image_ref}"
+    rm -rf "${copy_tmp}"
+}
 
 if ! command -v qemu-img >/dev/null 2>&1; then
     echo "qemu-img is required for bootc install-to-disk smoke tests."
@@ -99,9 +129,12 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p output
-rm -rf output/qcow2 output/raw
+rm -rf output/qcow2 output/raw "${SOURCE_OCI_DIR}"
 
 echo "::group::Preflight bootc image state"
+IMAGE_REF="$(podman inspect -t image "${IMAGE_REF}" --format '{{index .RepoTags 0}}')"
+echo "Resolved image ref: ${IMAGE_REF}" | tee "${ARTIFACT_DIR}/image-ref.txt"
+
 podman run --rm "${IMAGE_REF}" bash -lc '
 set -euo pipefail
 echo "bootc=$(bootc --version | head -n1)"
@@ -111,12 +144,15 @@ find /usr/lib/modules -mindepth 1 -maxdepth 2 \( -name initramfs.img -o -name vm
 echo "::endgroup::"
 
 echo "::group::Prepare rootful image for bootc install"
-IMAGE_ARCHIVE="output/image.oci.tar"
-podman image save --format oci-archive "${IMAGE_REF}" -o "${IMAGE_ARCHIVE}" \
-    2>&1 | tee "${ARTIFACT_DIR}/podman-image-save.log"
-sudo podman image load -i "${IMAGE_ARCHIVE}" \
-    2>&1 | tee "${ARTIFACT_DIR}/podman-image-load.log"
-rm -f "${IMAGE_ARCHIVE}"
+rootful_copy_image "${IMAGE_REF}" \
+    2>&1 | tee "${ARTIFACT_DIR}/rootful-image-copy.log"
+echo "::endgroup::"
+
+echo "::group::Export explicit install source image"
+podman save --format oci-dir --output "${SOURCE_OCI_DIR}" "${IMAGE_REF}" \
+    2>&1 | tee "${ARTIFACT_DIR}/source-oci-export.log"
+SOURCE_IMGREF="oci:/data/${SOURCE_OCI_DIR}"
+echo "Using source imgref: ${SOURCE_IMGREF}" | tee "${ARTIFACT_DIR}/source-imgref.txt"
 echo "::endgroup::"
 
 echo "::group::Generate qcow2 via bootc install-to-disk"
@@ -133,7 +169,7 @@ sudo podman run --rm --privileged --pid=host --pull=newer \
     -v /etc/containers:/etc/containers \
     -v "${PWD}:/data" \
     "${IMAGE_REF}" \
-    bootc install to-disk --composefs-backend --via-loopback "/data/${RAW_PATH}" --filesystem btrfs --wipe --bootloader systemd \
+    bootc install to-disk --source-imgref "${SOURCE_IMGREF}" --composefs-backend --via-loopback "/data/${RAW_PATH}" --filesystem btrfs --wipe --bootloader systemd \
     2>&1 | tee "${ARTIFACT_DIR}/bootc-install.log"
 
 qemu-img convert -O qcow2 "${RAW_PATH}" "${QCOW_PATH}"

@@ -1,11 +1,11 @@
-export image_name    := env("IMAGE_NAME",    "omarchy-bootc")
-export default_tag   := env("DEFAULT_TAG",   "stable")
-export bib_image     := env("BIB_IMAGE",     "quay.io/centos-bootc/bootc-image-builder:latest")
-export local_image   := env("LOCAL_IMAGE",  "localhost/" + image_name)
+export image_name := env("IMAGE_NAME", "omarchy-bootc")
+export default_tag := env("DEFAULT_TAG", "stable")
+export bib_image := env("BIB_IMAGE", "quay.io/centos-bootc/bootc-image-builder:latest")
+export local_image := env("LOCAL_IMAGE", "localhost/" + image_name)
 
-alias build-vm   := build-qcow2
+alias build-vm := build-qcow2
 alias rebuild-vm := rebuild-qcow2
-alias run-vm     := run-vm-qcow2
+alias run-vm := run-vm-qcow2
 
 [private]
 default:
@@ -61,7 +61,7 @@ validate:
     set -euo pipefail
 
     REQUIRED_TOOLS=(podman just jq)
-    OPTIONAL_TOOLS=(shellcheck shfmt ss qemu-img)
+    OPTIONAL_TOOLS=(shellcheck shfmt ss qemu-img machinectl)
 
     for t in "${REQUIRED_TOOLS[@]}"; do
         if ! command -v "$t" >/dev/null 2>&1; then
@@ -151,8 +151,8 @@ sudoif command *args:
     sudoif {{ command }} {{ args }}
 
 # ── Container image build ─────────────────────────────────────────────────────
-
 # Build the OCI container image locally with podman
+
 # Usage: just build [target_image] [tag]
 [group('Build')]
 build $target_image=local_image $tag=default_tag: validate
@@ -193,6 +193,10 @@ _rootful_load_image $target_image=local_image $tag=default_tag:
     if [[ $return_code -eq 0 ]]; then
         ID=$(just sudoif podman images --filter reference="${target_image}:${tag}" --format "{{{{.ID}}}}")
         if [[ "$ID" != "$USER_IMG_ID" ]]; then
+            if ! command -v machinectl >/dev/null 2>&1; then
+                echo "ERROR: machinectl is required for podman image scp when copying images into rootful podman."
+                exit 1
+            fi
             COPYTMP=$(mktemp -p "${PWD}" -d -t _build_podman_scp.XXXXXXXXXX)
             just sudoif TMPDIR="${COPYTMP}" podman image scp \
                 "${UID}@localhost::${target_image}:${tag}" \
@@ -242,6 +246,8 @@ build-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="
     #!/usr/bin/env bash
     set -euo pipefail
 
+    just _rootful_load_image "{{ target_image }}" "{{ tag }}"
+
     raw_path="output/raw/disk.raw"
     mkdir -p "$(dirname "${raw_path}")"
     if [[ ! -f "${raw_path}" ]]; then
@@ -275,6 +281,8 @@ build-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="
 build-raw $target_image=local_image $tag=default_tag size="20G": validate && (build target_image tag)
     #!/usr/bin/env bash
     set -euo pipefail
+
+    just _rootful_load_image "{{ target_image }}" "{{ tag }}"
 
     raw_path="output/raw/disk.raw"
     mkdir -p "$(dirname "${raw_path}")"
