@@ -181,9 +181,13 @@ fi
 
 echo "::group::Boot qcow2 in headless QEMU"
 QEMU_ACCEL="tcg"
-if [[ -e /dev/kvm ]]; then
+if [[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then
     QEMU_ACCEL="kvm"
+elif [[ -e /dev/kvm ]]; then
+    echo "KVM device exists but is not accessible; falling back to software emulation." \
+        | tee -a "${ARTIFACT_DIR}/qemu-accel.txt"
 fi
+echo "Using QEMU accelerator: ${QEMU_ACCEL}" | tee -a "${ARTIFACT_DIR}/qemu-accel.txt"
 
 qemu-system-x86_64 \
     -name omarchy-bootc-smoke \
