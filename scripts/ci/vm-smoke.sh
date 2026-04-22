@@ -185,7 +185,7 @@ if [[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then
     QEMU_ACCEL="kvm"
 elif [[ -e /dev/kvm ]]; then
     echo "KVM device exists but is not accessible; falling back to software emulation." \
-        | tee "${ARTIFACT_DIR}/qemu-accel.txt"
+        | tee -a "${ARTIFACT_DIR}/qemu-accel.txt"
 fi
 echo "Using QEMU accelerator: ${QEMU_ACCEL}" | tee -a "${ARTIFACT_DIR}/qemu-accel.txt"
 
