@@ -6,6 +6,7 @@ export local_image := env("LOCAL_IMAGE", "localhost/" + image_name)
 alias build-vm := build-qcow2
 alias rebuild-vm := rebuild-qcow2
 alias run-vm := run-vm-qcow2
+alias run-iso := run-installer-iso
 
 [private]
 default:
@@ -25,6 +26,8 @@ help:
     echo "Notes:"
     echo "  - build-qcow2 / rebuild-qcow2 use rootful podman and bootc install-to-disk (composefs)."
     echo "  - bootc-image-builder fallback remains as build-qcow2-bib / build-raw-bib."
+    echo "  - build-iso-local runs the installer ISO workflow locally with act."
+    echo "  - run-installer-iso boots output/*.iso through the same browser VM UI as run-vm."
     echo "  - run-vm-* requires /dev/kvm and a local container runtime capable of --privileged."
     echo "  - validate checks tool availability and required repo files before long builds."
 
@@ -207,6 +210,16 @@ _rootful_load_image $target_image=local_image $tag=default_tag:
         just sudoif podman pull "${target_image}:${tag}"
     fi
 
+# Export the locally built image to an OCI directory for bootc install-to-disk.
+[private]
+_export_bootc_source_oci $target_image=local_image $tag=default_tag $source_dir="output/source-oci":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    rm -rf "{{ source_dir }}"
+    mkdir -p "$(dirname "{{ source_dir }}")"
+    podman save --format oci-dir --output "{{ source_dir }}" "{{ target_image }}:{{ tag }}"
+
 # Internal: run bootc-image-builder to produce a bootable image
 [private]
 _build-bib $target_image $tag $type $config: (_rootful_load_image target_image tag)
@@ -247,6 +260,9 @@ build-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="
     set -euo pipefail
 
     just _rootful_load_image "{{ target_image }}" "{{ tag }}"
+    source_oci_dir="output/source-oci"
+    source_imgref="oci:/data/${source_oci_dir}"
+    just _export_bootc_source_oci "{{ target_image }}" "{{ tag }}" "${source_oci_dir}"
 
     raw_path="output/raw/disk.raw"
     mkdir -p "$(dirname "${raw_path}")"
@@ -266,7 +282,7 @@ build-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="
         -v /etc/containers:/etc/containers \
         -v "$(pwd):/data" \
         "{{ target_image }}:{{ tag }}" \
-        bootc install to-disk --composefs-backend --via-loopback "/data/${raw_path}" --filesystem "{{ filesystem }}" --wipe --bootloader systemd
+        bootc install to-disk --source-imgref "${source_imgref}" --composefs-backend --via-loopback "/data/${raw_path}" --filesystem "{{ filesystem }}" --wipe --bootloader systemd
 
     if ! command -v qemu-img >/dev/null 2>&1; then
         echo "ERROR: qemu-img not found; install qemu-img or use build-raw. Raw image available at ${raw_path}."
@@ -283,6 +299,9 @@ build-raw $target_image=local_image $tag=default_tag size="20G": validate && (bu
     set -euo pipefail
 
     just _rootful_load_image "{{ target_image }}" "{{ tag }}"
+    source_oci_dir="output/source-oci"
+    source_imgref="oci:/data/${source_oci_dir}"
+    just _export_bootc_source_oci "{{ target_image }}" "{{ tag }}" "${source_oci_dir}"
 
     raw_path="output/raw/disk.raw"
     mkdir -p "$(dirname "${raw_path}")"
@@ -302,7 +321,7 @@ build-raw $target_image=local_image $tag=default_tag size="20G": validate && (bu
         -v /etc/containers:/etc/containers \
         -v "$(pwd):/data" \
         "{{ target_image }}:{{ tag }}" \
-        bootc install to-disk --composefs-backend --via-loopback "/data/${raw_path}" --filesystem "btrfs" --wipe --bootloader systemd
+        bootc install to-disk --source-imgref "${source_imgref}" --composefs-backend --via-loopback "/data/${raw_path}" --filesystem "btrfs" --wipe --bootloader systemd
 
 # Rebuild (OCI + qcow2) in one step using bootc install-to-disk
 [group('Build Virtual Machine Image')]
@@ -321,6 +340,77 @@ build-raw-bib $target_image=local_image $tag=default_tag: validate && (_build-bi
 
 [group('Build Virtual Machine Image')]
 rebuild-qcow2-bib $target_image=local_image $tag=default_tag: validate && (_rebuild-bib target_image tag "qcow2" "image/disk.toml")
+
+# ── Installer ISO ────────────────────────────────────────────────────────────
+
+# Build the installer ISO locally by running the same workflow used in GitHub Actions.
+[group('Installer ISO')]
+build-iso-local $tag=default_tag $install_image_ref="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v act >/dev/null 2>&1; then
+        echo "ERROR: act is required for local ISO workflow runs."
+        echo "Install it, then retry: just build-iso-local {{ tag }}"
+        exit 1
+    fi
+
+    mkdir -p output/act-artifacts
+    act workflow_dispatch \
+        -W .github/workflows/build-iso.yml \
+        -P ubuntu-24.04=ghcr.io/catthehacker/ubuntu:act-24.04 \
+        --container-options "--privileged" \
+        --input "image_tag={{ tag }}" \
+        --input "install_image_ref={{ install_image_ref }}" \
+        --artifact-server-path output/act-artifacts
+
+# Run an installer ISO locally through the qemux/qemu browser VM UI.
+[group('Installer ISO')]
+run-installer-iso iso_path="" ram="8G" disk_size="64G":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    iso_file="{{ iso_path }}"
+    if [[ -z "${iso_file}" ]]; then
+        iso_file="$(find output -maxdepth 2 -type f -name '*.iso' | sort | tail -n 1)"
+    fi
+
+    if [[ -z "${iso_file}" || ! -f "${iso_file}" ]]; then
+        echo "ERROR: installer ISO not found."
+        echo "Build one first with: just build-iso-local"
+        echo "Or pass a path: just run-installer-iso path/to/installer.iso"
+        exit 1
+    fi
+    iso_file="$(realpath "${iso_file}")"
+
+    if ! command -v ss >/dev/null 2>&1; then
+        echo "ERROR: 'ss' command not found (install iproute2)."
+        exit 1
+    fi
+
+    port=8006
+    while grep -q ":${port}" <<< "$(ss -tunalp)"; do
+        port=$(( port + 1 ))
+    done
+    echo "Booting installer ISO: ${iso_file}"
+    echo "Using port: ${port}"
+    echo "Connect to: http://localhost:${port}"
+
+    run_args=(
+        --rm --privileged
+        --pull=newer
+        --publish "127.0.0.1:${port}:8006"
+        --env "CPU_CORES=4"
+        --env "RAM_SIZE={{ ram }}"
+        --env "DISK_SIZE={{ disk_size }}"
+        --env "TPM=Y"
+        --env "GPU=Y"
+        --device=/dev/kvm
+        --volume "${iso_file}:/boot.iso:ro"
+    )
+
+    (sleep 30 && xdg-open "http://localhost:${port}") &
+    podman run "${run_args[@]}" docker.io/qemux/qemu
 
 # ── Run VM ────────────────────────────────────────────────────────────────────
 

@@ -14,11 +14,21 @@ on:
       - '**/README.md'
   workflow_dispatch:
     inputs:
+      run_vm_smoke:
+        description: 'Run the expensive qcow2 + headless VM smoke test before publishing.'
+        required: false
+        default: false
+        type: boolean
       build_iso:
         description: 'Also build the initial installer ISO after the container image publishes.'
         required: false
         default: false
         type: boolean
+      install_image_ref:
+        description: 'Full OCI image reference for installer ISO testing. Defaults to this repo and image_tag.'
+        required: false
+        default: ""
+        type: string
 
 env:
   IMAGE_DESC: "Unofficial Arch-based bootc Omarchy POC image"
@@ -117,18 +127,20 @@ jobs:
 
 
       - name: Install VM smoke test dependencies
+        if: github.event_name == 'workflow_dispatch' && inputs.run_vm_smoke
         run: |
           sudo apt-get update
           sudo apt-get install -y ovmf qemu-system-x86 qemu-utils sshpass systemd-container
 
       - name: VM smoke test (headless qemu + ssh)
+        if: github.event_name == 'workflow_dispatch' && inputs.run_vm_smoke
         env:
           CI_ARTIFACT_DIR: ${{ runner.temp }}/vm-smoke-artifacts
         run: |
           ./scripts/ci/vm-smoke.sh "${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}"
 
       - name: Upload VM smoke artifacts
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.run_vm_smoke
         uses: actions/upload-artifact@v4
         with:
           name: vm-smoke-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
@@ -241,6 +253,7 @@ jobs:
     uses: ./.github/workflows/reusable-build-iso.yml
     with:
       image_tag: ${{ needs.build_push.outputs.image_tag }}
+      install_image_ref: ${{ inputs.install_image_ref }}
       checkout_ref: ${{ github.sha }}
       upload_artifacts: true
     secrets: inherit

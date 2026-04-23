@@ -8,6 +8,10 @@ on:
         description: OCI image tag to build the installer from
         type: string
         default: stable
+      install_image_ref:
+        description: Full OCI image reference to install. Overrides image_tag when set.
+        type: string
+        default: ""
       checkout_ref:
         description: Git ref to check out for hook scripts and workflow files
         type: string
@@ -49,9 +53,15 @@ jobs:
 
       - name: Prepare image references
         id: image_refs
+        env:
+          INSTALL_IMAGE_REF_INPUT: ${{ inputs.install_image_ref }}
         run: |
           set -euo pipefail
-          install_image_ref="ghcr.io/${GITHUB_REPOSITORY,,}:${{ inputs.image_tag }}"
+          if [[ -n "${INSTALL_IMAGE_REF_INPUT}" ]]; then
+            install_image_ref="${INSTALL_IMAGE_REF_INPUT}"
+          else
+            install_image_ref="ghcr.io/${GITHUB_REPOSITORY,,}:${{ inputs.image_tag }}"
+          fi
           image_name="${GITHUB_REPOSITORY##*/}"
           image_name="${image_name,,}"
           artifact_name="${image_name}-${{ inputs.image_tag }}-installer-x86_64"

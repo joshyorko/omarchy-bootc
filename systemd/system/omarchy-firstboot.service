@@ -1,8 +1,8 @@
 [Unit]
 Description=Omarchy bootc first-boot root setup
 Documentation=https://github.com/joshyorko/omarchy-bootc
-After=network-online.target
-Wants=network-online.target
+After=local-fs.target
+Before=greetd.service
 # One-shot gate: script also writes this stamp to stay idempotent.
 ConditionPathExists=!/var/lib/omarchy/.firstboot-done
 

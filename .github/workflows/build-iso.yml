@@ -9,6 +9,11 @@ on:
         required: false
         default: stable
         type: string
+      install_image_ref:
+        description: Full OCI image reference to install. Overrides image_tag when set.
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -23,6 +28,7 @@ jobs:
     uses: ./.github/workflows/reusable-build-iso.yml
     with:
       image_tag: ${{ inputs.image_tag }}
+      install_image_ref: ${{ inputs.install_image_ref }}
       checkout_ref: ${{ github.sha }}
       upload_artifacts: true
     secrets: inherit

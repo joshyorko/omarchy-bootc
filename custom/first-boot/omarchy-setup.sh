@@ -24,7 +24,7 @@ mkdir -p /var/lib/omarchy
 # Fallback: ensure the documented default user exists, even if image creation
 # changed in the future.
 if ! id -u "${DEFAULT_USER}" >/dev/null 2>&1; then
-    useradd -m -G wheel,video,audio,input,network,podman -s /bin/bash "${DEFAULT_USER}"
+    useradd -m -G wheel,video,audio,input,network -s /bin/bash "${DEFAULT_USER}"
     echo "${DEFAULT_USER}:${DEFAULT_USER}" | chpasswd
 fi
 
@@ -41,8 +41,9 @@ HYPR_CONF_DIR="${USER_HOME}/.config/hypr"
 SKELETON_DIR="/usr/share/omarchy/hypr"
 
 if [[ -d "${SKELETON_DIR}" ]]; then
+    rm -rf "${HYPR_CONF_DIR}"
     mkdir -p "${HYPR_CONF_DIR}"
-    cp -a -n "${SKELETON_DIR}/". "${HYPR_CONF_DIR}/"
+    cp -a "${SKELETON_DIR}/". "${HYPR_CONF_DIR}/"
 fi
 
 # Record deferred user-session tasks in the user's home.
