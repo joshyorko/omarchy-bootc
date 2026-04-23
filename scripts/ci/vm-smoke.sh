@@ -78,13 +78,13 @@ OVMF_CODE_PATH="$(find_first_existing_file \
     /usr/share/OVMF/OVMF_CODE.fd \
     /usr/share/edk2/x64/OVMF_CODE.fd \
     /usr/share/edk2/ovmf/OVMF_CODE.fd \
-)"
+    || true)"
 OVMF_VARS_TEMPLATE="$(find_first_existing_file \
     /usr/share/OVMF/OVMF_VARS_4M.fd \
     /usr/share/OVMF/OVMF_VARS.fd \
     /usr/share/edk2/x64/OVMF_VARS.fd \
     /usr/share/edk2/ovmf/OVMF_VARS.fd \
-)"
+    || true)"
 
 if [[ -z "${OVMF_CODE_PATH}" || -z "${OVMF_VARS_TEMPLATE}" ]]; then
     echo "Unable to locate OVMF UEFI firmware. Install the ovmf package (or equivalent) before running the VM smoke test."

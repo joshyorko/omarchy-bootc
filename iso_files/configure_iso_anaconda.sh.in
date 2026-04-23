@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+
+set -eoux pipefail
+
+INSTALL_IMAGE_REF="@@INSTALL_IMAGE_REF@@"
+
+enable_fedora_iso_repos() {
+    local repo_dirs=(
+        /etc/yum.repos.d
+        /usr/etc/yum.repos.d
+    )
+    local repo_names=(
+        fedora.repo
+        fedora-updates.repo
+    )
+    local repo_dir repo_name repo_path
+
+    for repo_dir in "${repo_dirs[@]}"; do
+        [[ -d "${repo_dir}" ]] || continue
+
+        for repo_name in "${repo_names[@]}"; do
+            repo_path="${repo_dir}/${repo_name}"
+            [[ -f "${repo_path}" ]] || continue
+
+            sed -i 's/^enabled=0$/enabled=1/g' "${repo_path}"
+        done
+    done
+}
+
+enable_fedora_iso_repos
+
+tee /usr/share/glib-2.0/schemas/zz2-org.gnome.shell.gschema.override <<'EOF'
+[org.gnome.shell]
+welcome-dialog-last-shown-version='4294967295'
+favorite-apps = ['anaconda.desktop', 'org.mozilla.firefox.desktop', 'org.gnome.Nautilus.desktop']
+EOF
+
+tee /usr/share/glib-2.0/schemas/zz3-omarchy-installer-power.gschema.override <<'EOF'
+[org.gnome.settings-daemon.plugins.power]
+sleep-inactive-ac-type='nothing'
+sleep-inactive-battery-type='nothing'
+sleep-inactive-ac-timeout=0
+sleep-inactive-battery-timeout=0
+
+[org.gnome.desktop.session]
+idle-delay=uint32 0
+EOF
+
+rm -f /etc/xdg/autostart/org.gnome.Software.desktop
+
+tee /usr/share/gnome-shell/search-providers/org.gnome.Software-search-provider.ini <<'EOF'
+DefaultDisabled=true
+EOF
+
+glib-compile-schemas /usr/share/glib-2.0/schemas
+
+systemctl disable rpm-ostree-countme.service || true
+systemctl disable tailscaled.service || true
+systemctl disable bootloader-update.service || true
+systemctl disable brew-upgrade.timer || true
+systemctl disable brew-update.timer || true
+systemctl disable brew-setup.service || true
+systemctl disable rpm-ostreed-automatic.timer || true
+systemctl disable uupd.timer || true
+systemctl disable ublue-system-setup.service || true
+systemctl disable flatpak-preinstall.service || true
+systemctl --global disable ublue-flatpak-manager.service || true
+systemctl --global disable podman-auto-update.timer || true
+systemctl --global disable ublue-user-setup.service || true
+
+# Work around the Bluefin logo package conflict that shows up once the Fedora
+# installer payload is layered into the live rootfs.
+rpm --erase --nodeps --justdb generic-logos || true
+rpm --erase --nodeps --justdb bluefin-logos || true
+dnf download -y fedora-logos
+rpm -i --replacefiles --justdb fedora-logos*.rpm
+
+mkdir -p /etc/anaconda/profile.d
+mkdir -p /etc/motd.d
+mkdir -p /usr/share/omarchy-installer
+mkdir -p /usr/share/anaconda/post-scripts
+
+dnf install -y \
+    libblockdev-btrfs \
+    libblockdev-lvm \
+    libblockdev-dm \
+    anaconda-live \
+    firefox
+
+rpm --erase --nodeps --justdb fedora-logos || true
+
+tee /etc/anaconda/profile.d/omarchy.conf <<'EOF'
+# Anaconda configuration file for omarchy-bootc
+
+[Profile]
+profile_id = omarchy
+
+[Profile Detection]
+os_id = bluefin
+
+[Network]
+default_on_boot = FIRST_WIRED_WITH_LINK
+
+[Bootloader]
+efi_dir = fedora
+menu_auto_hide = True
+
+[Storage]
+default_scheme = BTRFS
+btrfs_compression = zstd:1
+default_partitioning =
+    /     (min 1 GiB, max 70 GiB)
+    /home (min 500 MiB, free 50 GiB)
+    /var  (btrfs)
+
+[User Interface]
+hidden_spokes =
+    NetworkSpoke
+    PasswordSpoke
+    UserSpoke
+hidden_webui_pages =
+    anaconda-screen-accounts
+
+[Localization]
+use_geolocation = False
+EOF
+
+echo "Omarchy bootc installer" >/etc/system-release
+sed -i 's/ANACONDA_PRODUCTVERSION=.*/ANACONDA_PRODUCTVERSION=""/' /usr/{,s}bin/liveinst || true
+sed -i 's| Fedora| Omarchy|' /usr/share/anaconda/gnome/fedora-welcome || true
+
+tee -a /usr/share/anaconda/interactive-defaults.ks <<EOF
+ostreecontainer --url=${INSTALL_IMAGE_REF} --transport=containers-storage
+%include /usr/share/anaconda/post-scripts/install-configure-upgrade.ks
+EOF
+
+tee /usr/share/anaconda/post-scripts/install-configure-upgrade.ks <<EOF
+%post --erroronfail
+bootc switch --mutate-in-place --transport registry ${INSTALL_IMAGE_REF}
+%end
+EOF

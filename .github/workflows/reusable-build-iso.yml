@@ -1,0 +1,114 @@
+---
+name: Reusable installer ISO build
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: OCI image tag to build the installer from
+        type: string
+        default: stable
+      checkout_ref:
+        description: Git ref to check out for hook scripts and workflow files
+        type: string
+        default: ""
+      upload_artifacts:
+        description: Upload the generated ISO and checksum as Actions artifacts
+        type: boolean
+        default: true
+      live_rootfs_image:
+        description: Fedora-based live rootfs image used for the installer environment
+        type: string
+        default: ghcr.io/ublue-os/bluefin-dx:stable
+
+jobs:
+  build:
+    name: Build installer ISO
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
+
+      - name: Install Just
+        uses: extractions/setup-just@e33e0265a09d6d736e2ee1e0eb685ef1de4669ff # v3
+
+      - name: Install validation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Run validation checks
+        run: just validate
+
+      - name: Prepare image references
+        id: image_refs
+        run: |
+          set -euo pipefail
+          install_image_ref="ghcr.io/${GITHUB_REPOSITORY,,}:${{ inputs.image_tag }}"
+          image_name="${GITHUB_REPOSITORY##*/}"
+          image_name="${image_name,,}"
+          artifact_name="${image_name}-${{ inputs.image_tag }}-installer-x86_64"
+          {
+            echo "install_image_ref=${install_image_ref}"
+            echo "live_rootfs_image=${{ inputs.live_rootfs_image }}"
+            echo "artifact_name=${artifact_name}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Render ISO hook script
+        id: render_hook
+        env:
+          INSTALL_IMAGE_REF: ${{ steps.image_refs.outputs.install_image_ref }}
+        run: |
+          set -euo pipefail
+          hook_dir="${RUNNER_TEMP}/iso-hooks"
+          mkdir -p "${hook_dir}"
+          sed "s|@@INSTALL_IMAGE_REF@@|${INSTALL_IMAGE_REF}|g" \
+            "${GITHUB_WORKSPACE}/iso_files/configure_iso_anaconda.sh.in" \
+            > "${hook_dir}/configure_iso_anaconda.sh"
+          chmod +x "${hook_dir}/configure_iso_anaconda.sh"
+          echo "configure_hook=${hook_dir}/configure_iso_anaconda.sh" >> "${GITHUB_OUTPUT}"
+
+      - name: Build installer ISO
+        id: build
+        uses: ublue-os/titanoboa@840217d97bd0bc9a52466508c54d8dda5c5ba2fd # main
+        with:
+          image-ref: ${{ steps.image_refs.outputs.live_rootfs_image }}
+          container-image: ${{ steps.image_refs.outputs.install_image_ref }}
+          hook-pre-initramfs: ${{ github.workspace }}/iso_files/pre_initramfs_enable_repos.sh
+          hook-post-rootfs: ${{ steps.render_hook.outputs.configure_hook }}
+          kargs: NONE
+          builder-distro: fedora
+
+      - name: Rename ISO and generate checksum
+        id: package
+        env:
+          OUTPUT_PATH: ${{ steps.build.outputs.iso-dest }}
+          OUTPUT_NAME: ${{ steps.image_refs.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          output_directory="$(realpath output)"
+          mv "${OUTPUT_PATH}" "${output_directory}/${OUTPUT_NAME}.iso"
+          (
+            cd "${output_directory}"
+            sha256sum "${OUTPUT_NAME}.iso" | tee "${OUTPUT_NAME}.iso-CHECKSUM"
+          )
+          echo "output_directory=${output_directory}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload ISO artifacts
+        if: inputs.upload_artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.image_refs.outputs.artifact_name }}
+          if-no-files-found: error
+          path: ${{ steps.package.outputs.output_directory }}
+          retention-days: 7
+          compression-level: 0
+          overwrite: true

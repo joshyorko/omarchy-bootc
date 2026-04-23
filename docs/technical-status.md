@@ -9,6 +9,8 @@ _Last updated: 2026-04-19_
 - Sysroot is prepared for bootc/composefs (`HOME=/var/home`, `/usr/lib/sysimage` pacman paths, tmpfiles for mutable dirs, `prepare-root.conf` enabling composefs/readonly sysroot).
 - Local build/qcow2/run flow is defined in `Justfile` with consistent local image reference defaults.
 - Native `bootc install to-disk` path emits raw/qcow2 images via `just build-qcow2`; legacy bootc-image-builder targets remain available as `build-qcow2-bib` / `build-raw-bib`.
+- Manual/opt-in installer ISO workflows now exist in GitHub Actions: `build-iso.yml` can build an ISO from a published tag, and `build.yml` has a manual `build_iso` toggle.
+- The initial installer path uses a Fedora-based Bluefin live rootfs with Titanoboa, but installs the published `ghcr.io/joshyorko/omarchy-bootc:<tag>` container onto the target system.
 - Rootful/rootless image handoff is now explicit for the native disk-image path: `Justfile` and `scripts/ci/vm-smoke.sh` copy the already-built image into rootful podman before running `bootc install to-disk`.
 - CI installs `systemd-container` so `machinectl` is available for the `podman image scp` handoff used by the smoke path.
 - A concrete VM login path is configured: `greetd` + `agreety` launching `Hyprland`, with minimal VM graphics/runtime packages (`mesa`, `vulkan-virtio`, `libinput`).
@@ -33,6 +35,7 @@ _Last updated: 2026-04-19_
 - End-to-end confirmation of the rootful-image handoff fix in GitHub Actions after a fresh workflow rerun.
 - Reliability of `bootc install --composefs-backend --via-loopback` across host/container runtimes; qcow2 conversion relies on host `qemu-img`.
 - End-to-end VM reliability across host environments.
+- End-to-end validation of the new ISO installer flow, especially the Bluefin live rootfs -> omarchy target handoff.
 - Desktop session quality/stability beyond first login.
 - Long-term assumptions around pacman DB relocation and bootc source build behavior over time.
 
@@ -41,7 +44,6 @@ _Last updated: 2026-04-19_
 - Full Omarchy package/config parity (Omarchy helper command ecosystem, theme engine, app presets).
 - AUR-heavy theming stack in base image.
 - BuildStream.
-- Installer media.
 
 ## Explicitly deferred from imported Omarchy behavior
 

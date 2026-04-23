@@ -13,6 +13,12 @@ on:
     paths-ignore:
       - '**/README.md'
   workflow_dispatch:
+    inputs:
+      build_iso:
+        description: 'Also build the initial installer ISO after the container image publishes.'
+        required: false
+        default: false
+        type: boolean
 
 env:
   IMAGE_DESC: "Unofficial Arch-based bootc Omarchy POC image"
@@ -214,3 +220,20 @@ jobs:
       #       --type spdxjson \
       #       --key env://COSIGN_PRIVATE_KEY \
       #       "${IMAGE}@${DIGEST}"
+
+  build_installer_iso:
+    name: Build installer ISO
+    needs: [build_push]
+    if: github.event_name == 'workflow_dispatch' && inputs.build_iso
+
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+
+    uses: ./.github/workflows/reusable-build-iso.yml
+    with:
+      image_tag: ${{ env.DEFAULT_TAG }}
+      checkout_ref: ${{ github.sha }}
+      upload_artifacts: true
+    secrets: inherit

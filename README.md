@@ -8,7 +8,7 @@ Omarchy-aligned immutable desktop image.
 Implemented in this repository:
 
 - OCI build on `archlinux:base` using layered scripts in `build/`.
-- qcow2 generation path via `bootc-image-builder`.
+- qcow2 generation path via native `bootc install to-disk`, with `bootc-image-builder` kept as the fallback path.
 - Omarchy-style Arch VM session path (`greetd` + `agreety` + `Hyprland`) remains the active focus.
 - Explicit VM login path: `greetd + agreety + Hyprland`.
 - Explicit default POC user: `omarchy` / `omarchy` (documented insecure default for local VM testing).
@@ -23,7 +23,6 @@ Implemented in this repository:
 Still intentionally out of scope:
 
 - Full Omarchy parity.
-- Installer media.
 - BuildStream flow.
 - AUR-heavy theming stack and Omarchy helper-script ecosystem.
 
@@ -35,8 +34,8 @@ omarchy-bootc/
 ├── custom/packages/                    # package lists
 ├── custom/greetd/config.toml           # greetd/agreety login command
 ├── custom/first-boot/omarchy-setup.sh  # root first-boot logic
-├── custom/hypr/                         # staged Hyprland defaults
-├── custom/skel/                         # starter home config skeleton
+├── custom/hypr/                        # staged Hyprland defaults
+├── iso_files/                          # installer hook templates/scripts
 ├── systemd/system/omarchy-firstboot.service
 ├── image/disk.toml                     # bootc-image-builder config
 ├── Justfile
@@ -69,6 +68,16 @@ just run-vm
 
 > Default qcow2 generation uses `bootc install --composefs-backend --via-loopback` and requires host `qemu-img` plus `--privileged` podman. Use `just build-qcow2-bib` if you need the legacy bootc-image-builder path.
 > The native disk-image recipes automatically copy the locally-built image into rootful podman before `bootc install to-disk`, which is required when the build itself ran rootless.
+
+## CI installer ISO workflow
+
+Installer media now follows the Dudley-style flow shape: build and publish the container image first, then build the ISO from the published tag only when you ask for it.
+
+- `build-iso.yml` is manual-only and defaults to `stable`
+- `build.yml` exposes a `build_iso` toggle on manual dispatch; it defaults to `false`
+- the ISO workflow uses `ublue-os/titanoboa`, but the live installer rootfs is a Fedora-based Bluefin image while the installed target is `ghcr.io/joshyorko/omarchy-bootc:<tag>`
+
+That split matters here because Titanoboa’s live rootfs still expects Fedora tooling, while the installed system remains the Arch-based omarchy bootc image.
 
 ### Login/session path in VM
 
@@ -109,5 +118,5 @@ See `docs/bootcrew-comparison.md` for how bootcrew’s Arch bootc images differ 
 - Immediate objective is to keep the image building while preserving the first VM login/session path and the bootc install-to-disk smoke path.
 - Desktop defaults are now intentionally Omarchy-inspired but trimmed to the current package set and no-AUR policy.
 - See `docs/technical-status.md` for what is working, what is assumed, and what is deferred.
-- Current CI focus: keep image build + headless VM smoke validation green.
-- Next milestone remains: harden the smoke path with richer failure artifacts/log collection.
+- Current CI focus: keep image build + headless VM smoke validation green while bringing the first installer ISO path online.
+- Next milestone remains: harden the smoke path with richer failure artifacts/log collection and validate the first installer ISO end to end.
