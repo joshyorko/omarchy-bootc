@@ -14,12 +14,28 @@ SOURCE_OCI_DIR="output/source-oci"
 ARTIFACT_DIR="${CI_ARTIFACT_DIR:-${RUNNER_TEMP:-/tmp}/omarchy-bootc-artifacts}"
 QEMU_PIDFILE="${RUNNER_TEMP:-/tmp}/omarchy-bootc-qemu.pid"
 QEMU_LOG="${RUNNER_TEMP:-/tmp}/omarchy-bootc-qemu.log"
+QEMU_OVMF_VARS="${RUNNER_TEMP:-/tmp}/omarchy-bootc-ovmf-vars.fd"
 SSH_OPTS=(
     -o StrictHostKeyChecking=no
     -o UserKnownHostsFile=/dev/null
     -o ConnectTimeout=3
     -p "${SSH_PORT}"
 )
+OVMF_CODE_PATH=""
+OVMF_VARS_TEMPLATE=""
+
+find_first_existing_file() {
+    local candidate=""
+
+    for candidate in "$@"; do
+        if [[ -f "${candidate}" ]]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    done
+
+    return 1
+}
 
 rootful_copy_image() {
     local image_ref="${1}"
@@ -56,6 +72,31 @@ if ! command -v qemu-img >/dev/null 2>&1; then
 fi
 
 mkdir -p "${ARTIFACT_DIR}"
+
+OVMF_CODE_PATH="$(find_first_existing_file \
+    /usr/share/OVMF/OVMF_CODE_4M.fd \
+    /usr/share/OVMF/OVMF_CODE.fd \
+    /usr/share/edk2/x64/OVMF_CODE.fd \
+    /usr/share/edk2/ovmf/OVMF_CODE.fd \
+)"
+OVMF_VARS_TEMPLATE="$(find_first_existing_file \
+    /usr/share/OVMF/OVMF_VARS_4M.fd \
+    /usr/share/OVMF/OVMF_VARS.fd \
+    /usr/share/edk2/x64/OVMF_VARS.fd \
+    /usr/share/edk2/ovmf/OVMF_VARS.fd \
+)"
+
+if [[ -z "${OVMF_CODE_PATH}" || -z "${OVMF_VARS_TEMPLATE}" ]]; then
+    echo "Unable to locate OVMF UEFI firmware. Install the ovmf package (or equivalent) before running the VM smoke test."
+    exit 1
+fi
+
+cp "${OVMF_VARS_TEMPLATE}" "${QEMU_OVMF_VARS}"
+{
+    echo "OVMF_CODE_PATH=${OVMF_CODE_PATH}"
+    echo "OVMF_VARS_TEMPLATE=${OVMF_VARS_TEMPLATE}"
+    echo "QEMU_OVMF_VARS=${QEMU_OVMF_VARS}"
+} >"${ARTIFACT_DIR}/qemu-firmware.txt"
 
 run_guest() {
     sshpass -p omarchy ssh "${SSH_OPTS[@]}" omarchy@127.0.0.1 "$@"
@@ -125,6 +166,7 @@ cleanup() {
         kill "$(cat "${QEMU_PIDFILE}")" >/dev/null 2>&1 || true
         rm -f "${QEMU_PIDFILE}"
     fi
+    rm -f "${QEMU_OVMF_VARS}"
 }
 trap cleanup EXIT
 
@@ -195,6 +237,8 @@ qemu-system-x86_64 \
     -cpu max \
     -smp 2 \
     -m 4096 \
+    -drive if=pflash,format=raw,readonly=on,file="${OVMF_CODE_PATH}" \
+    -drive if=pflash,format=raw,file="${QEMU_OVMF_VARS}" \
     -display none \
     -serial file:"${QEMU_LOG}" \
     -monitor none \
