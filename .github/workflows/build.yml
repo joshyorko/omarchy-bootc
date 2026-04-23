@@ -35,6 +35,8 @@ jobs:
   build_push:
     name: Build and push image
     runs-on: ubuntu-24.04
+    outputs:
+      image_tag: ${{ steps.build_config.outputs.image_tag }}
 
     permissions:
       contents: read
@@ -46,6 +48,11 @@ jobs:
         run: |
           echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> "${GITHUB_ENV}"
           echo "IMAGE_NAME=${IMAGE_NAME,,}"         >> "${GITHUB_ENV}"
+
+      - name: Record build config
+        id: build_config
+        run: |
+          echo "image_tag=${DEFAULT_TAG}" >> "${GITHUB_OUTPUT}"
 
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
@@ -233,7 +240,7 @@ jobs:
 
     uses: ./.github/workflows/reusable-build-iso.yml
     with:
-      image_tag: ${{ env.DEFAULT_TAG }}
+      image_tag: ${{ needs.build_push.outputs.image_tag }}
       checkout_ref: ${{ github.sha }}
       upload_artifacts: true
     secrets: inherit
