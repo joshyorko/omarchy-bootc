@@ -166,11 +166,15 @@ grep -Fq 'systemctl mask omarchy-adopt-existing-user.service' \
     || fail 'acceptance image does not isolate itself from adoption'
 grep -Fq 'transition-ctx' "${CONTAINERFILE}" \
     || fail 'state-aware transition helper is not included in the image context'
-grep -Fq 'ConditionPathExists=!/var/lib/omarchy-bootc/installer-origin' \
-    "${ADOPTION_SERVICE}" \
-    || fail 'adoption service does not bypass fresh ISO installs'
+grep -Fq '/var/lib/omarchy-bootc/installer-origin' "${ADOPTION_SCRIPT}" \
+    || fail 'adoption script does not bypass fresh ISO installs'
 grep -Fq 'Before=display-manager.service' "${ADOPTION_SERVICE}" \
     || fail 'adoption does not complete before the login manager'
+grep -Fq 'Requires=omarchy-adopt-existing-user.service' "${ROOT_DIR}/Containerfile" \
+    || fail 'display manager is not gated on adoption completion'
+if grep -Fq 'ConditionPathExists=' "${ADOPTION_SERVICE}"; then
+    fail 'adoption completion gate is weakened by a conditional service'
+fi
 for adoption_surface in \
     'find "$HOME_ROOT"' \
     'systemd-ask-password' \
