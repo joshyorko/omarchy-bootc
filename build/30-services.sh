@@ -22,8 +22,8 @@ echo "::endgroup::"
 
 echo "::group:: Enable first-boot service"
 
-if [[ -f /usr/lib/systemd/system/omarchy-firstboot.service ]]; then
-    systemctl enable omarchy-firstboot.service
+if [[ -f /usr/lib/systemd/system/omarchy-adopt-existing-user.service ]]; then
+    systemctl enable omarchy-adopt-existing-user.service
 fi
 
 echo "::endgroup::"

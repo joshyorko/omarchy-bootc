@@ -1,0 +1,17 @@
+[Unit]
+Description=Adopt an existing user after a cross-distro Omarchy bootc switch
+Documentation=https://github.com/joshyorko/omarchy-bootc
+After=local-fs.target
+Before=display-manager.service
+ConditionPathExists=!/var/lib/omarchy-bootc/installer-origin
+ConditionPathExists=!/var/lib/omarchy-bootc/adoption/state.env
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/omarchy/omarchy-adopt-existing-user.sh
+RemainAfterExit=yes
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

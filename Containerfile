@@ -151,6 +151,7 @@ COPY build/verify-quattro-payload.sh /build/verify-quattro-payload.sh
 FROM scratch AS boot-ownership-ctx
 COPY build/30-bootc-ownership.sh /build/30-bootc-ownership.sh
 COPY build/bootc-disabled-hooks.txt /build/bootc-disabled-hooks.txt
+COPY build/lib/bootc-initramfs.sh /build/lib/bootc-initramfs.sh
 
 FROM scratch AS acceptance-ctx
 COPY build/25-quattro-user.sh /build/25-quattro-user.sh
@@ -160,6 +161,14 @@ COPY build/stage-acceptance-node.sh /build/stage-acceptance-node.sh
 
 FROM scratch AS final-ctx
 COPY build/verify-publishable-image.sh /build/verify-publishable-image.sh
+
+FROM scratch AS adoption-ctx
+COPY custom/first-boot/omarchy-adopt-existing-user.sh /custom/first-boot/omarchy-adopt-existing-user.sh
+COPY custom/first-boot/omarchy-adoption-rollback.sh /custom/first-boot/omarchy-adoption-rollback.sh
+COPY systemd/system/omarchy-adopt-existing-user.service /systemd/system/omarchy-adopt-existing-user.service
+
+FROM scratch AS transition-ctx
+COPY transition/omarchy-transition.sh /transition/omarchy-transition.sh
 
 FROM bootcrew-system AS quattro-base
 
@@ -174,6 +183,28 @@ RUN --mount=type=bind,from=provenance-ctx,source=/,target=/ctx \
 
 RUN --mount=type=bind,from=boot-ownership-ctx,source=/,target=/ctx \
     bash /ctx/build/30-bootc-ownership.sh
+
+RUN --mount=type=bind,from=adoption-ctx,source=/,target=/ctx \
+    install -D -m 0755 \
+        /ctx/custom/first-boot/omarchy-adopt-existing-user.sh \
+        /usr/lib/omarchy/omarchy-adopt-existing-user.sh && \
+    install -D -m 0644 \
+        /ctx/systemd/system/omarchy-adopt-existing-user.service \
+        /usr/lib/systemd/system/omarchy-adopt-existing-user.service && \
+    install -D -m 0755 \
+        /ctx/custom/first-boot/omarchy-adoption-rollback.sh \
+        /usr/bin/omarchy-adoption-rollback && \
+    install -d -m 0755 /etc/systemd/system/display-manager.service.d && \
+    printf '%s\n' \
+        '[Unit]' \
+        'After=omarchy-adopt-existing-user.service' \
+        'Requires=omarchy-adopt-existing-user.service' \
+        > /etc/systemd/system/display-manager.service.d/10-omarchy-adoption.conf && \
+    systemctl enable omarchy-adopt-existing-user.service
+
+RUN --mount=type=bind,from=transition-ctx,source=/,target=/ctx \
+    install -D -m 0755 \
+        /ctx/transition/omarchy-transition.sh /usr/bin/omarchy-transition
 
 LABEL containers.bootc=1
 RUN bootc container lint --fatal-warnings

@@ -8,6 +8,7 @@ OMARCHY_VERSION="4.0.1-1"
 OMARCHY_BASE_MANIFEST="/usr/share/omarchy/install/omarchy-base.packages"
 OMARCHY_OTHER_MANIFEST="/usr/share/omarchy/install/omarchy-other.packages"
 REPOSITORY_CONFIG="/ctx/custom/pacman/quattro-repositories.conf"
+OPTIONAL_REPOSITORY_CONFIG="/ctx/custom/pacman/quattro-optional-resolver.conf"
 HOOK_INVENTORY="/ctx/build/bootc-disabled-hooks.txt"
 BOOTC_HOOK_DIR="/usr/share/omarchy-bootc/pacman-hooks"
 
@@ -70,16 +71,31 @@ pacman -S --noconfirm --needed "${base_packages[@]}"
 
 # The optional manifest contains mutually exclusive hardware packages. Resolve
 # each dependency graph and retain the result without installing it wholesale.
+# T2 packages use the supplemental repository shipped by the pinned official
+# ISO, but that repository is applied only to this resolver copy so the proven
+# Omarchy-stable foundation topology remains unchanged.
 install -d -m 0755 /usr/share/omarchy-bootc
 optional_report=/usr/share/omarchy-bootc/optional-package-resolvability.txt
+optional_pacman_config=/tmp/quattro-optional-resolver.conf
+cp /etc/pacman.conf "${optional_pacman_config}"
+printf '\n' >>"${optional_pacman_config}"
+cat "${OPTIONAL_REPOSITORY_CONFIG}" >>"${optional_pacman_config}"
+pacman --config "${optional_pacman_config}" -Sy --noconfirm
 : >"${optional_report}"
 for package in "${other_packages[@]}"; do
-    if resolution="$(pacman -Sp --print-format '%n %v' "${package}" 2>&1)"; then
+    if resolution="$(pacman --config "${optional_pacman_config}" \
+        -Sp --print-format '%n %v' "${package}" 2>&1)"; then
         printf 'resolvable %s\n%s\n' "${package}" "${resolution}" >>"${optional_report}"
     else
         printf 'unresolved %s\n%s\n' "${package}" "${resolution}" >>"${optional_report}"
     fi
 done
+verify_optional_resolution_report "${optional_report}"
+optional_database_path="$(pacman-conf \
+    --config "${optional_pacman_config}" DBPath)"
+remove_optional_repository_database \
+    "${optional_database_path}" \
+    arch-mact2
 
 for required in \
     /usr/bin/omarchy \

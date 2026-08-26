@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck disable=SC1091
+source /ctx/build/lib/bootc-initramfs.sh
+
 HOOK_INVENTORY=/ctx/build/bootc-disabled-hooks.txt
 BOOTC_CONFLICTING_UNITS=(
     limine-snapper-sync.service
@@ -25,10 +28,23 @@ while IFS= read -r hook_name; do
     grep -Fq 'Target = __omarchy_bootc_never_matches__' "${hook}"
 done <"${HOOK_INVENTORY}"
 
+install -D -m 0644 /dev/stdin \
+    /usr/lib/dracut/dracut.conf.d/40-bootc-required-modules.conf <<'EOF'
+# bootc v1.16.10 baseimage/dracut/usr/lib/dracut.conf.d/10-bootc-base.conf
+# requires both modules. This final-layer correction leaves the pinned
+# Bootcrew construction snapshot unmodified.
+add_dracutmodules+=" ostree bootc "
+EOF
+
 latest_kver="$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -n 1)"
 dracut --force "/usr/lib/modules/${latest_kver}/initramfs.img"
-lsinitrd "/usr/lib/modules/${latest_kver}/initramfs.img" > /usr/share/omarchy-bootc/initramfs-contents.txt
-grep -Fq 'bootc' /usr/share/omarchy-bootc/initramfs-contents.txt
+lsinitrd -m "/usr/lib/modules/${latest_kver}/initramfs.img" \
+    > /usr/share/omarchy-bootc/initramfs-modules.txt
+lsinitrd "/usr/lib/modules/${latest_kver}/initramfs.img" \
+    > /usr/share/omarchy-bootc/initramfs-contents.txt
+verify_bootc_initramfs_reports \
+    /usr/share/omarchy-bootc/initramfs-modules.txt \
+    /usr/share/omarchy-bootc/initramfs-contents.txt
 
 {
     pacman -Q kernel-modules-hook

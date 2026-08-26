@@ -31,10 +31,13 @@ build/20-quattro.sh                  official Quattro package closure
 build/25-quattro-user.sh             acceptance-only first-boot fixture
 build/30-bootc-ownership.sh          evidenced lifecycle collision handling
 build/verify-quattro-payload.sh      package ownership and projection proof
+transition/omarchy-transition.sh      source-aware switch preflight and recovery
+custom/first-boot/omarchy-adopt-existing-user.sh  bounded persistent-home adoption
 custom/pacman/                       official stable repository topology
 vendor/bootcrew/                     pinned construction snapshot and metadata
 tests/test-quattro-source-contract.sh executable architecture contract
-docs/installer-parity-contract.md    future upstream-Omarchy ISO adapter contract
+docs/installer-parity-contract.md    upstream-Omarchy ISO adapter contract
+docs/transition-contract.md          cross-distro switch and mutable-state contract
 ```
 
 ## Local checks
@@ -43,6 +46,7 @@ Run repository-native checks on the Bluefin host; the image build itself runs in
 
 ```bash
 just test-contract
+just test-transition
 just validate
 just lint
 just build
@@ -62,6 +66,27 @@ just run-vm
 The publishable `final` target contains no default user, known password, or passwordless sudo rule. Test credentials exist only in the non-publishable `acceptance` target. On the installed VM, its first-boot fixture creates the user after official `/etc/skel` exists and invokes package-owned `omarchy-provision-user --first-install`.
 
 No release claim is made until the OCI passes fatal `bootc container lint`, installs to disk, reaches official SDDM and the official Quattro Hyprland/Quickshell session, passes desktop behavior checks, and completes a two-image bootc upgrade and rollback cycle.
+
+## Cross-distro bootc switch
+
+Cross-distro switching is a separate state transition, not a raw image swap.
+The supported source profiles are Bluefin, Dakota, and existing Omarchy bootc.
+Run the source-side helper from this checkout before switching:
+
+```bash
+sudo ./transition/omarchy-transition.sh preflight <target-image>
+sudo ./transition/omarchy-transition.sh capture-state
+sudo ./transition/omarchy-transition.sh backup
+sudo ./transition/omarchy-transition.sh apply --confirm <target-image>
+```
+
+Reboot after the explicit `bootc switch`. On first Quattro boot, an existing
+`/var/home` user enters the bounded adoption service. Fresh ISO installs write
+an installer-origin marker and stay on the upstream Omarchy provisioning path.
+Use `sudo omarchy-adoption-rollback` only when intentionally recovering the
+mutable user-state transition; it preserves post-adoption files separately
+because bootc rollback does not roll back `/var/home`. Unknown source systems
+are refused. See [the transition contract](docs/transition-contract.md).
 
 ## Installer boundary
 

@@ -37,6 +37,8 @@ Bootc exclusively owns deployment state, `/boot`, initramfs generation, image up
 
 Observed Limine/mkinitcpio pacman hooks are shadowed by valid, never-triggering hooks in a higher-priority bootc hook directory under the same five filenames. Three observed snapshot units are masked: `limine-snapper-sync.service`, `snapper-cleanup.timer`, and `snapper-timeline.timer`. `kernel-modules-hook` remains enabled and is recorded for lifecycle observation.
 
+The pinned Bootcrew initramfs script explicitly adds `bootc`, while bootc v1.16.10's own base-image contract requires both `ostree` and `bootc`. The Quattro boot-ownership layer therefore adds a named final-layer dracut drop-in without modifying the vendored Bootcrew snapshot, then proves both modules, both root-setup services, and both setup binaries exist in the generated initramfs.
+
 Bootcrew deliberately owns `/usr/local -> ../var/usrlocal`, while official packages place `omarchy.desktop` and a Limine mkinitcpio shim beneath `/usr/local`. The build temporarily materializes the directory for pacman, proves the official session file is byte-identical to its package-owned canonical source, projects it to `/usr/share/wayland-sessions/omarchy.desktop`, discards only the conflicting mkinitcpio shim, and restores Bootcrew's symlink. Pacman drift reporting names the resulting `/usr/local` hierarchy explicitly and rejects any unrelated drift.
 
 ## Acceptance identity and user finalization

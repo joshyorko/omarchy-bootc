@@ -63,6 +63,14 @@ test-contract:
     #!/usr/bin/env bash
     set -euo pipefail
     bash tests/test-quattro-source-contract.sh
+    bash tests/test-transition-contract.sh
+
+# Validate the state-aware cross-distro switch boundary.
+[group('Utility')]
+test-transition:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bash tests/test-transition-contract.sh
 
 # Validate host prerequisites and required repository files.
 [group('Utility')]
@@ -90,6 +98,7 @@ validate:
         Containerfile
         image/disk.toml
         build/lib/quattro-packages.sh
+        build/lib/bootc-initramfs.sh
         build/configure-quattro-repositories.sh
         build/20-quattro.sh
         build/25-quattro-user.sh
@@ -100,8 +109,14 @@ validate:
         build/stage-acceptance-node.sh
         build/verify-publishable-image.sh
         build/verify-quattro-payload.sh
+        transition/omarchy-transition.sh
+        custom/first-boot/omarchy-adopt-existing-user.sh
+        custom/first-boot/omarchy-adoption-rollback.sh
+        systemd/system/omarchy-adopt-existing-user.service
         custom/pacman/quattro-repositories.conf
+        custom/pacman/quattro-optional-resolver.conf
         docs/installer-parity-contract.md
+        docs/transition-contract.md
         vendor/bootcrew/REVISION
         vendor/bootcrew/SOURCE
         vendor/bootcrew/BOOTC_REVISION

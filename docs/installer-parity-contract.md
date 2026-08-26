@@ -4,6 +4,10 @@
 
 This is the normative contract for a future Omarchy Quattro installer variant in `dudley-iso`. It does not implement that adapter in this image repository.
 
+This contract covers fresh ISO installs only. Cross-distro `bootc switch` is a
+separate state-aware entry path governed by [the transition contract](transition-contract.md);
+it must not be treated as an ISO install or silently replay `/etc/skel`.
+
 The Quattro path is an additive installer variant. It must not replace, mutate, or regress any existing Dudley, Dakota, or Bluefin installer variant. Each product keeps its prescribed installer, tests, image reference, storage policy, and release path.
 
 ## Pinned upstream reference

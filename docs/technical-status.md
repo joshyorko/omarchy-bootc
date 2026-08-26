@@ -15,11 +15,14 @@ Bootcrew's published Arch image is not the final base and is not package authori
 - Recorded Bootcrew and bootc source URLs, revisions, vendored checksums, OCI labels, and in-image revision files.
 - Official `omarchy-keyring`, `omarchy-settings=4.0.1-1`, `omarchy=4.0.1-1`, and upstream `omarchy-base.packages` closure.
 - Dependency-resolution report for `omarchy-other.packages` without installing mutually exclusive hardware stacks.
+- Complete optional dependency resolution using the pinned official ISO's `arch-mact2` repository only in a temporary resolver config; the four-repository foundation remains unchanged.
 - Package provenance checks for commands, Quickshell, themes, `/etc/skel`, SDDM, and the canonical session file.
 - One named `/usr/local` bootc projection exception for the package-owned session file, with byte-identity proof.
 - Five observed Limine/mkinitcpio hooks shadowed and three observed snapshot units masked; `kernel-modules-hook` remains enabled and audited.
+- Final dracut verification requires the bootc v1.16.10 `ostree` and `bootc` modules and both root-setup payloads; the correction is layered above the unmodified Bootcrew snapshot.
 - Separate publishable and acceptance targets. The publishable image has no baked test account or passwordless sudo rule.
 - Acceptance first boot invokes official `omarchy-provision-user --first-install`; local provisioning reimplementations remain forbidden.
+- Cross-distro switching now has an explicit source-aware preflight/capture/backup helper and a target adoption service with independent mutable-state rollback; fresh ISO installs bypass it through an installer-origin marker.
 
 ## Required publication evidence
 
@@ -48,4 +51,5 @@ See `docs/installer-parity-contract.md` for the normative installer and non-regr
 - No implementation of `omarchy update` integration yet.
 - No wrapper or replacement for any `omarchy-*` command.
 - No installer UI fork or local reimplementation of Omarchy user provisioning.
+- No arbitrary-source switch is accepted; Bluefin, Dakota, and existing Omarchy transitions still require clean VM evidence for adoption, independent recovery, and reverse rollback.
 - No publication, ISO replacement, or claim of desktop/lifecycle completion before the gates above pass.

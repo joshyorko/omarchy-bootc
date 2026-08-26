@@ -80,9 +80,9 @@
 - Consumes: the installed official Omarchy package graph.
 - Produces: a dracut-generated bootc initramfs with conflicting Limine/Snapper units masked.
 
-- [ ] Add a contract fixture that fails when `limine-snapper-sync.service`, `snapper-cleanup.timer`, or `snapper-timeline.timer` is active, or when the final initramfs lacks bootc/ostree modules.
+- [ ] Add contract fixtures that reject an unresolved optional-package report and an initramfs report missing either the `ostree` or `bootc` module and their root-setup payloads.
 - [ ] Run `just test-contract`; expect failure because the ownership script does not exist.
-- [ ] Disable and mask only those three units, preserve package payloads, enable upstream SDDM and ordinary services, regenerate the latest-kernel initramfs with dracut, and inspect it with `lsinitrd` for bootc and ostree.
+- [ ] Disable and mask only those three units, preserve package payloads, enable upstream SDDM and ordinary services, regenerate the latest-kernel initramfs with dracut, and inspect it for the bootc v1.16.10 `ostree` and `bootc` modules plus both root-setup services.
 - [ ] Run `just test-contract && just validate && just lint`; expect success.
 - [ ] Rebuild the OCI image and run `bootc container lint` inside it.
 
