@@ -18,6 +18,10 @@ for surface in \
 done
 grep -Fq 'refusing to switch before state capture' "${TRANSITION}" \
     || fail 'transition adapter does not gate switching on captured state'
+grep -Fq 'preflight.env' "${TRANSITION}" \
+    || fail 'transition adapter does not persist the preflight target'
+grep -Fq 'target does not match preflight' "${TRANSITION}" \
+    || fail 'transition adapter does not bind apply to the preflight target'
 grep -Fqi 'password hashes' "${TRANSITION}" \
     || fail 'transition capture does not declare credential exclusion'
 

@@ -9,6 +9,7 @@ set -euo pipefail
 ROOT="${OMARCHY_TRANSITION_ROOT:-/}"
 STATE_ROOT="${OMARCHY_TRANSITION_STATE_ROOT:-${ROOT}/var/lib/omarchy-bootc/transitions}"
 STATE_FILE="${STATE_ROOT}/state.env"
+PREFLIGHT_FILE="${STATE_ROOT}/preflight.env"
 BOOTC_BIN="${OMARCHY_TRANSITION_BOOTC_BIN:-bootc}"
 
 die() {
@@ -73,6 +74,18 @@ write_state() {
     mv -f -- "$tmp" "$STATE_FILE"
 }
 
+write_preflight() {
+    local profile="$1" target="$2" tmp="${PREFLIGHT_FILE}.tmp.$$"
+    install -d -m 0700 "$STATE_ROOT"
+    {
+        printf 'source_profile=%s\n' "$profile"
+        printf 'target_ref=%s\n' "$target"
+        printf 'status=ready\n'
+    } >"$tmp"
+    chmod 0600 "$tmp"
+    mv -f -- "$tmp" "$PREFLIGHT_FILE"
+}
+
 state_value() {
     local key="$1"
     [[ -f "$STATE_FILE" ]] || return 0
@@ -96,8 +109,11 @@ home_directories() {
 }
 
 capture_state() {
-    local profile transition_id transition_dir passwd_file group_file home_root
+    local profile target transition_id transition_dir passwd_file group_file home_root
     profile="$(require_bootc_source)"
+    [[ -f "$PREFLIGHT_FILE" ]] || die 'refusing capture before preflight'
+    target="$(sed -n 's/^target_ref=//p' "$PREFLIGHT_FILE" | head -n 1)"
+    [[ -n "$target" ]] || die 'preflight has no target image reference'
     transition_id="$(date +%Y%m%d-%H%M%S)-$$"
     transition_dir="${STATE_ROOT}/${transition_id}"
     mkdir -p "${transition_dir}/source" "${transition_dir}/homes"
@@ -126,9 +142,9 @@ capture_state() {
             >>"${transition_dir}/source/homes"
     done < <(home_directories)
 
-    write_state captured "$profile" "" "$transition_dir" ""
-    printf 'source_profile=%s\nstatus=captured\ntransition_dir=%s\n' \
-        "$profile" "$transition_dir"
+    write_state captured "$profile" "$target" "$transition_dir" ""
+    printf 'source_profile=%s\nstatus=captured\ntarget_ref=%s\ntransition_dir=%s\n' \
+        "$profile" "$target" "$transition_dir"
 }
 
 backup_state() {
@@ -193,6 +209,8 @@ apply_switch() {
     profile="$(state_value source_profile)"
     transition_dir="$(state_value transition_dir)"
     backup_dir="$(state_value backup_dir)"
+    [[ "$target" == "$(state_value target_ref)" ]] || \
+        die 'target does not match preflight target'
     # The transition operation itself remains the upstream bootc switch.
     "$BOOTC_BIN" switch "$target"
     write_state switched "$profile" "$target" "$transition_dir" "$backup_dir"
@@ -226,6 +244,7 @@ preflight() {
     [[ -n "$target" ]] || die 'preflight requires a target image reference'
     profile="$(require_bootc_source)"
     [[ -d "$(root_path /var/home)" ]] || die '/var/home is not available for state-aware transition'
+    write_preflight "$profile" "$target"
     printf 'source_profile=%s\ntarget_ref=%s\nstatus=ready\n' "$profile" "$target"
 }
 
