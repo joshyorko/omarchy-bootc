@@ -1,0 +1,14 @@
+[Unit]
+Description=Create and finalize the Omarchy Quattro acceptance user
+Wants=network-online.target
+After=NetworkManager.service network-online.target
+Before=display-manager.service
+ConditionPathExists=!/var/lib/omarchy-acceptance/ready
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/omarchy-acceptance-firstboot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

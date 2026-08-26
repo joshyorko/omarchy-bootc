@@ -1,0 +1,3 @@
+344d11c94b33122b78be4c79ce8fdd3aa1bf60cba0672089625fc13684261032  shared/build.sh
+f1b5883283f9e8886abe7d46ec2a323d553a0264da82735897b22a405f43f2ee  shared/initramfs.sh
+0cbe88046ead0a01becf8ba98b338e7db2c2078e1528f352d74a7aec0fb9dbee  shared/bootc-rootfs.sh

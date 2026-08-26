@@ -1,140 +1,74 @@
-# omarchy-bootc
+# Omarchy Quattro on bootc
 
-An **Arch Linux**-based [bootc](https://github.com/bootc-dev/bootc) technical proof-of-concept for an
-Omarchy-aligned immutable desktop image.
+This repository builds the official Omarchy Quattro userspace and desktop as an Arch bootc OCI image.
 
-## Current POC scope
+## Architecture
 
-Implemented in this repository:
+- Omarchy stable owns the complete Arch `core`, `extra`, `multilib`, and `omarchy` package universe.
+- The final root starts empty and is populated with pacman against the official Omarchy stable topology.
+- Bootcrew mono supplies the reviewed Arch-on-bootc construction and filesystem semantics, not a package payload or final base image.
+- Bootc owns deployments, the boot filesystem, initramfs, image upgrades, and rollback.
+- Official `omarchy`, `omarchy-settings`, package manifests, commands, themes, configs, shell, and desktop payloads are installed without local replacements.
 
-- OCI build on `archlinux:base` using layered scripts in `build/`.
-- qcow2 generation path via native `bootc install to-disk`, with `bootc-image-builder` kept as the fallback path.
-- Omarchy-style Arch VM session path (`greetd` + `agreety` + `Hyprland`) remains the active focus.
-- Explicit VM login path: `greetd + agreety + Hyprland`.
-- Explicit default POC user: `omarchy` / `omarchy` (documented insecure default for local VM testing).
-- One-shot root first-boot setup that seeds starter user config and marks completion.
-- Imported Omarchy-inspired desktop defaults for:
-  - Hyprland modular config (`~/.config/hypr/*`)
-  - Waybar defaults
-  - Wofi launcher defaults
-  - Mako notification defaults
-  - Lock/screenshot keybindings (`swaylock`, `grim`, `slurp`, `wl-clipboard`)
+The build never inherits Bootcrew's published rolling image and never downgrades an already-built Arch root with `pacman -Syyuu`.
 
-Still intentionally out of scope:
+## Pinned construction inputs
 
-- Full Omarchy parity.
-- BuildStream flow.
-- AUR-heavy theming stack and Omarchy helper-script ecosystem.
+- Disposable Arch bootstrap tool: `docker.io/archlinux/archlinux:latest@sha256:0de35fe2ee793494ccfc99b202f6b30215b078baf2b082e9ccb027840c534fc1`
+- Bootcrew mono: `5f048fa65a94daefc814d3cdd941d8d1e113c09e`
+- bootc v1.16.10 source: `3e76c16556c55e6d15d31bd47602b231e2131cb2`
+- Omarchy v4.0.1: `13f18b2cb7286fb54f87daf571a031aa6af3d8f0`
+- Omarchy packages: `f448847d1f6e664038636542502354a388cb0f94`
+- Official Omarchy ISO Quattro reference: `268bac16d351a21d867e37565738f458b11cb06c`
+
+The disposable Arch image is only the pacman execution environment. None of its installed package files enter the final root. The final OCI records the Bootcrew and bootc revisions in labels and under `/usr/share/omarchy-bootc/sources/`.
 
 ## Repository layout
 
 ```text
-omarchy-bootc/
-├── build/                              # image build-time scripts
-├── custom/packages/                    # package lists
-├── custom/greetd/config.toml           # greetd/agreety login command
-├── custom/first-boot/omarchy-setup.sh  # root first-boot logic
-├── custom/hypr/                        # staged Hyprland defaults
-├── iso_files/                          # installer hook templates/scripts
-├── systemd/system/omarchy-firstboot.service
-├── image/disk.toml                     # bootc-image-builder config
-├── Justfile
-└── docs/technical-status.md
+Containerfile                         empty-root and image-stage assembly
+build/20-quattro.sh                  official Quattro package closure
+build/25-quattro-user.sh             acceptance-only first-boot fixture
+build/30-bootc-ownership.sh          evidenced lifecycle collision handling
+build/verify-quattro-payload.sh      package ownership and projection proof
+custom/pacman/                       official stable repository topology
+vendor/bootcrew/                     pinned construction snapshot and metadata
+tests/test-quattro-source-contract.sh executable architecture contract
+docs/installer-parity-contract.md    future upstream-Omarchy ISO adapter contract
 ```
 
-## Prerequisites
+## Local checks
 
-- `podman`
-- `just`
-- `jq`
-- `machinectl` (required when the native disk-image recipes need to copy a rootless-built image into rootful podman)
-- `sudo` (for rootful bootc-image-builder)
-- `/dev/kvm` for practical VM boot testing
-
-Run `just validate` before build.
-
-## Local build + VM smoke test
+Run repository-native checks on the Bluefin host; the image build itself runs in Podman and does not layer development packages onto the host.
 
 ```bash
-# 1) Build local OCI image (tag/ref used by all recipes)
+just test-contract
+just validate
+just lint
 just build
+```
 
-# 2) Convert to qcow2
+For the legacy direct disk-image path:
+
+```bash
 just build-qcow2
-
-# 3) Boot VM
 just run-vm
 ```
 
-> Default qcow2 generation uses `bootc install --composefs-backend --via-loopback` and requires host `qemu-img` plus `--privileged` podman. Use `just build-qcow2-bib` if you need the legacy bootc-image-builder path.
-> The native disk-image recipes copy the locally-built image into rootful podman and export an OCI directory source before `bootc install to-disk`, which avoids the rootful `containers-storage:` reopen failure when the build itself ran rootless.
+`just validate` reports whether KVM is available. Software emulation is possible but is not equivalent evidence for final desktop acceptance.
 
-## CI installer ISO workflow
+## Publishable and acceptance images
 
-Installer media now follows the Dudley-style flow shape: build and publish the container image first, then build the ISO from the published tag only when you ask for it.
+The publishable `final` target contains no default user, known password, or passwordless sudo rule. Test credentials exist only in the non-publishable `acceptance` target. On the installed VM, its first-boot fixture creates the user after official `/etc/skel` exists and invokes package-owned `omarchy-provision-user --first-install`.
 
-- `build-iso.yml` is manual-only and defaults to `stable`
-- `build.yml` exposes a `build_iso` toggle on manual dispatch; it defaults to `false`
-- `build.yml` also exposes a manual-only `run_vm_smoke` toggle for the expensive qcow2 + headless QEMU smoke path
-- the ISO workflow uses `ublue-os/titanoboa`, but the live installer rootfs is a Fedora-based Bluefin image while the installed target is `ghcr.io/joshyorko/omarchy-bootc:<tag>`
+No release claim is made until the OCI passes fatal `bootc container lint`, installs to disk, reaches official SDDM and the official Quattro Hyprland/Quickshell session, passes desktop behavior checks, and completes a two-image bootc upgrade and rollback cycle.
 
-That split matters here because Titanoboa’s live rootfs still expects Fedora tooling, while the installed system remains the Arch-based omarchy bootc image.
+## Installer boundary
 
-For local installer testing, keep the disk-image and installer flows separate:
+Existing Dudley, Dakota, and Bluefin installer variants remain independent and keep their prescribed implementations. The future Quattro ISO path belongs in `dudley-iso` as an additive variant based on pinned `omacom-io/omarchy-iso`.
 
-```bash
-# Build the installer ISO by running the GitHub Actions ISO workflow locally.
-just build-iso-local
+That adapter preserves the official configurator, storage/encryption UX, dashboard, provisioning, SDDM setup, and upstream acceptance harness. It replaces only pacstrap/Limine/mutable-root deployment with `bootc install to-filesystem` and bootc finalization. See [the installer parity contract](docs/installer-parity-contract.md).
 
-# Boot the newest output/*.iso through the same browser VM UI as just run-vm.
-just run-installer-iso
-```
+## Explicit boundary
 
-`just run-vm` boots an already-installed qcow2 image. `just run-installer-iso` boots installer media and should land in the Anaconda-based installer session.
-By default the ISO installs `ghcr.io/joshyorko/omarchy-bootc:stable`; pass a full image ref to test another registry/tag:
-
-```bash
-just build-iso-local stable ghcr.io/joshyorko/omarchy-bootc:some-test-tag
-```
-
-### Login/session path in VM
-
-1. At the `agreety` prompt, log in as:
-   - user: `omarchy`
-   - password: `omarchy`
-2. Session command is preconfigured to start `Hyprland`.
-3. Verify first boot completed:
-   ```bash
-   test -f /var/lib/omarchy/.firstboot-done && echo OK
-   ```
-4. Verify starter config seeded:
-   ```bash
-   ls ~/.config/hypr ~/.config/waybar ~/.config/wofi ~/.config/mako
-   ```
-
-> ⚠️ The default `omarchy/omarchy` credential is for first local VM bring-up only.
-> Change it immediately in any persistent environment.
-
-## Boot assumptions / known blockers
-
-The image now includes explicit boot-critical packages (`linux`, `dracut`, `kmod`, `btrfs-progs`) and a minimal VM graphics stack (`mesa`, `vulkan-virtio`, `libinput`). `bootc` is built from source during the image build with dracut drop-ins, and the sysroot is prepared for composefs/ostree (`HOME=/var/home`).
-
-Remaining assumptions to validate in real VM boots:
-
-- `bootc install to-disk` (used by `just build-qcow2` / CI smoke) remains reliable across host environments once the rootful image handoff is in place; qcow2 conversion requires `qemu-img`.
-- `bootc` lifecycle operations (upgrade/rebase/rollback) on this Arch-based image still need broader validation.
-- `bootc-image-builder` remains available as a fallback path via `just build-qcow2-bib`.
-- Hyprland compositor behavior in a virtualized GPU environment is host/hypervisor dependent.
-
-See `docs/bootc-delivery-options.md` for current Arch bootc delivery options and the recommended path forward (now implemented via source build).
-See `docs/bootcrew-comparison.md` for how bootcrew’s Arch bootc images differ and what remains to align.
-
-## Notes
-
-- This remains a technical POC for an Omarchy-style Arch image.
-- bootc is shipped from source inside the image; keep validating the bootc/composefs flow over time.
-- Immediate objective is to keep the image building while preserving the first VM login/session path and the bootc install-to-disk smoke path.
-- Desktop defaults are now intentionally Omarchy-inspired but trimmed to the current package set and no-AUR policy.
-- See `docs/technical-status.md` for what is working, what is assumed, and what is deferred.
-- Current CI focus: keep image builds green by default while preserving VM smoke validation as an explicit manual dispatch option.
-- Next milestone remains: validate the first installer ISO end to end, then decide whether the manual VM smoke path is still worth maintaining.
+`omarchy update` integration is not implemented. Read-only design work identifies `omarchy-update-system-pkgs` as a possible upstream backend seam, but desktop, installer, and bootc lifecycle acceptance come first.

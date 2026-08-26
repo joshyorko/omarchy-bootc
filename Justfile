@@ -57,6 +57,13 @@ fix:
 
 # ── Utility ───────────────────────────────────────────────────────────────────
 
+# Validate the pinned Bootcrew and official Quattro assembly contract.
+[group('Utility')]
+test-contract:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bash tests/test-quattro-source-contract.sh
+
 # Validate host prerequisites and required repository files.
 [group('Utility')]
 validate:
@@ -81,12 +88,29 @@ validate:
 
     REQUIRED_FILES=(
         Containerfile
-        custom/packages/base.packages
-        custom/packages/omarchy.packages
         image/disk.toml
-        build/10-base.sh
-        build/20-omarchy.sh
-        build/30-services.sh
+        build/lib/quattro-packages.sh
+        build/configure-quattro-repositories.sh
+        build/20-quattro.sh
+        build/25-quattro-user.sh
+        build/30-bootc-ownership.sh
+        build/acceptance-firstboot.sh
+        build/acceptance-firstboot.service
+        build/bootc-disabled-hooks.txt
+        build/stage-acceptance-node.sh
+        build/verify-publishable-image.sh
+        build/verify-quattro-payload.sh
+        custom/pacman/quattro-repositories.conf
+        docs/installer-parity-contract.md
+        vendor/bootcrew/REVISION
+        vendor/bootcrew/SOURCE
+        vendor/bootcrew/BOOTC_REVISION
+        vendor/bootcrew/BOOTC_SOURCE
+        vendor/bootcrew/SHA256SUMS
+        vendor/bootcrew/shared/build.sh
+        vendor/bootcrew/shared/initramfs.sh
+        vendor/bootcrew/shared/bootc-rootfs.sh
+        tests/test-quattro-source-contract.sh
     )
 
     for f in "${REQUIRED_FILES[@]}"; do
@@ -121,7 +145,7 @@ lint:
         echo "shellcheck not found — please install it."
         exit 1
     fi
-    find . -iname "*.sh" -not -path './.git/*' -exec shellcheck "{}" ';'
+    find . -iname "*.sh" -not -path './.git/*' -not -path './vendor/*' -exec shellcheck "{}" ';'
 
 # Format all shell scripts with shfmt
 [group('Utility')]
