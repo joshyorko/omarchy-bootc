@@ -17,6 +17,12 @@ die() {
     exit 1
 }
 
+require_digest_ref() {
+    local target="$1"
+    [[ "$target" =~ @sha256:[[:xdigit:]]{64}$ ]] ||
+        die 'target image must use an immutable @sha256:<64-hex> digest reference'
+}
+
 root_path() {
     local path="$1"
     if [[ "$ROOT" == "/" ]]; then
@@ -242,6 +248,7 @@ recover_transition() {
 preflight() {
     local target="$1" profile
     [[ -n "$target" ]] || die 'preflight requires a target image reference'
+    require_digest_ref "$target"
     profile="$(require_bootc_source)"
     [[ -d "$(root_path /var/home)" ]] || die '/var/home is not available for state-aware transition'
     write_preflight "$profile" "$target"
@@ -251,10 +258,10 @@ preflight() {
 usage() {
     cat <<'EOF'
 Usage:
-  omarchy-transition preflight <target-image>
+  omarchy-transition preflight <target-image@sha256:digest>
   omarchy-transition capture-state
   omarchy-transition backup
-  omarchy-transition apply --confirm <target-image>
+  omarchy-transition apply --confirm <target-image@sha256:digest>
   omarchy-transition recover --confirm
 
 Supported source profiles are Bluefin, Dakota, and existing Omarchy bootc.

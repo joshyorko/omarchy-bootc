@@ -4,31 +4,14 @@ _Last updated: 2026-08-26_
 
 ## Architecture of record
 
-<<<<<<< HEAD
 The final image is an Omarchy-stable empty-root build. A digest-pinned current Arch container runs pacman against Omarchy's stable repositories and populates `/stable-root`; no package from the bootstrap container crosses into that root.
-=======
-- Build scripts are layered and wired from `Containerfile` with explicit boot-critical package lists in `custom/packages/base.packages` (including `dracut` for bootc initramfs rebuilds and BIB fallback if needed).
-- bootc is built from source during image build (default `BOOTC_REF=v1.13.0`), dracut is rebuilt with the `bootc` module, and bootc container metadata/lint are applied.
-- Sysroot is prepared for bootc/composefs (`HOME=/var/home`, `/usr/lib/sysimage` pacman paths, tmpfiles for mutable dirs, `prepare-root.conf` enabling composefs/readonly sysroot).
-- Local build/qcow2/run flow is defined in `Justfile` with consistent local image reference defaults.
-- Native `bootc install to-disk` path emits raw/qcow2 images via `just build-qcow2`; legacy bootc-image-builder targets remain available as `build-qcow2-bib` / `build-raw-bib`.
-- Manual/opt-in installer ISO workflows now exist in GitHub Actions: `build-iso.yml` can build an ISO from a published tag, and `build.yml` has a manual `build_iso` toggle.
-- The expensive qcow2 + headless QEMU smoke path is manual-only in `build.yml` behind the `run_vm_smoke` dispatch toggle.
-- Installer ISO generation is Dagger-owned: `just build-iso-local` and the reusable GitHub workflow both call the same Dagger `build-iso` function and export artifacts under `output/iso`.
-- The initial installer path uses a Fedora-based Bluefin live rootfs with Titanoboa, but installs the published `ghcr.io/joshyorko/omarchy-bootc:<tag>` container onto the target system.
-- The Dagger module source is present under `.dagger/`; Go SDK support files are regenerated with `just dagger-develop` on a host that can start the Dagger engine.
-- Rootful/rootless image handoff is now explicit for the native disk-image path: `Justfile` and `scripts/ci/vm-smoke.sh` copy the already-built image into rootful podman, export an OCI install source, and pass `--source-imgref` to `bootc install to-disk`.
-- Manual VM smoke runs install `systemd-container` so `machinectl` is available for the `podman image scp` handoff used by the smoke path.
-- A concrete VM login path is configured: `greetd` + `agreety` launching `Hyprland`, with minimal VM graphics/runtime packages (`mesa`, `vulkan-virtio`, `libinput`).
-- A default POC user is explicitly created at image build time: `omarchy`.
-- Root first-boot script seeds starter config and writes `/var/lib/omarchy/.firstboot-done`.
-- Omarchy-style desktop defaults are imported in a constrained slice:
-  - modular Hyprland config files (autostart, bindings, input, look/feel, monitors, window rules)
-  - Waybar config/style defaults
-  - Wofi launcher config/style defaults
-  - Mako notification defaults
-  - lock/screenshot UX bindings wired to shipped tools (`swaylock`, `grim`, `slurp`, `wl-clipboard`)
->>>>>>> origin/main
+- Build scripts are layered and wired from `Containerfile` with explicit boot-critical package lists.
+- bootc is built from the pinned v1.16.10 source revision and dracut is rebuilt with the bootc module.
+- Sysroot is prepared for bootc/composefs with pacman state under `/usr/lib/sysimage`.
+- Local build and qcow2/run flows are defined in `Justfile`; legacy bootc-image-builder fallbacks remain available.
+- Installer ISO generation is Dagger-owned and remains an explicit/manual path.
+- Rootful/rootless image handoff is explicit for the native disk-image and VM smoke paths.
+- A concrete VM login path is configured with `greetd` + `agreety` launching Hyprland.
 
 Bootcrew's published Arch image is not the final base and is not package authority. Bootcrew mono commit `5f048fa65a94daefc814d3cdd941d8d1e113c09e` is the source reference for pacman relocation, dracut, composefs, `/usr`/`/var`, tmpfiles, and bootc filesystem construction. Bootc is built from exact commit `3e76c16556c55e6d15d31bd47602b231e2131cb2`; an unpinned clone is forbidden.
 
@@ -48,18 +31,16 @@ Bootcrew's published Arch image is not the final base and is not package authori
 - Acceptance first boot invokes official `omarchy-provision-user --first-install`; local provisioning reimplementations remain forbidden.
 - Cross-distro switching now has an explicit source-aware preflight/capture/backup helper and a target adoption service with independent mutable-state rollback; fresh ISO installs bypass it through an installer-origin marker.
 
-<<<<<<< HEAD
 ## Required publication evidence
-=======
+
 - bootc lifecycle checks (upgrade/rebase/rollback) on this Arch-based image.
 - End-to-end confirmation of the rootful-image handoff fix in GitHub Actions when `run_vm_smoke` is manually enabled.
 - Reliability of `bootc install --composefs-backend --via-loopback` across host/container runtimes; qcow2 conversion relies on host `qemu-img`.
 - End-to-end VM reliability across host environments.
-- End-to-end validation of the new ISO installer flow, especially the Bluefin live rootfs -> omarchy target handoff.
+- End-to-end validation of the existing ISO installer flow, especially the Bluefin live rootfs -> omarchy target handoff.
 - Dagger Go SDK regeneration and full `just build-iso-local` execution on a host with Docker/Dagger engine access.
 - Desktop session quality/stability beyond first login.
 - Long-term assumptions around pacman DB relocation and bootc source build behavior over time.
->>>>>>> origin/main
 
 The following are gates, not inferred results:
 

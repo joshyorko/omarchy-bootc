@@ -17,6 +17,10 @@ Before switching, the source-side helper must run:
 preflight -> capture-state -> backup -> bootc switch -> reboot
 ```
 
+`preflight` accepts only an immutable target reference ending in
+`@sha256:<64-hex>`. Mutable tags are refused so the captured transition
+record and the later `bootc switch` cannot silently resolve different images.
+
 `capture-state` records source identity, user/group IDs, home-directory
 ownership, and non-secret configuration metadata. It deliberately excludes
 password hashes, keys, tokens, and the contents of user data. `backup` copies

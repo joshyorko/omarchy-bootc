@@ -22,6 +22,8 @@ grep -Fq 'preflight.env' "${TRANSITION}" \
     || fail 'transition adapter does not persist the preflight target'
 grep -Fq 'target does not match preflight' "${TRANSITION}" \
     || fail 'transition adapter does not bind apply to the preflight target'
+grep -Fq 'require_digest_ref' "${TRANSITION}" \
+    || fail 'transition adapter does not require immutable target digests'
 grep -Fqi 'password hashes' "${TRANSITION}" \
     || fail 'transition capture does not declare credential exclusion'
 
@@ -51,6 +53,13 @@ grep -Fq 'source_profile=dakota' <<<"${preflight_output}" \
 grep -Fq 'status=ready' <<<"${preflight_output}" \
     || fail 'preflight did not report ready'
 
+if OMARCHY_TRANSITION_ROOT="${fixture_dir}" \
+    OMARCHY_TRANSITION_STATE_ROOT="${fixture_dir}/var/lib/omarchy-bootc/transitions" \
+    bash "${TRANSITION}" preflight \
+    ghcr.io/joshyorko/omarchy-bootc:quattro; then
+    fail 'mutable target tag was accepted without a digest'
+fi
+
 sed -i -e 's/^ID=.*/ID=unknown/' -e 's/^NAME=.*/NAME="Unknown"/' \
     "${fixture_dir}/usr/lib/os-release"
 if OMARCHY_TRANSITION_ROOT="${fixture_dir}" \
@@ -69,7 +78,7 @@ capture_output="$(
 )"
 grep -Fq 'captured' <<<"${capture_output}" \
     || fail 'capture-state did not report captured state'
-if rg -q '\$6\$secret' "${fixture_dir}/var/lib/omarchy-bootc/transitions"; then
+if grep -R -q '\$6\$secret' "${fixture_dir}/var/lib/omarchy-bootc/transitions"; then
     fail 'transition capture copied a password hash'
 fi
 
