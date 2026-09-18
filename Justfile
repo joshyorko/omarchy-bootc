@@ -26,7 +26,9 @@ help:
     echo "Notes:"
     echo "  - build-qcow2 / rebuild-qcow2 use rootful podman and bootc install-to-disk (composefs)."
     echo "  - bootc-image-builder fallback remains as build-qcow2-bib / build-raw-bib."
-    echo "  - build-iso-local runs the installer ISO workflow locally with act."
+    echo "  - dagger-develop regenerates the Go SDK files for the Dagger module."
+    echo "  - validate-dagger runs repo syntax checks inside the Dagger pipeline."
+    echo "  - build-iso-local builds installer media through the Dagger pipeline."
     echo "  - run-installer-iso boots output/*.iso through the same browser VM UI as run-vm."
     echo "  - run-vm-* requires /dev/kvm and a local container runtime capable of --privileged."
     echo "  - validate checks tool availability and required repo files before long builds."
@@ -172,6 +174,32 @@ format:
         exit 1
     fi
     find . -iname "*.sh" -not -path './.git/*' -exec shfmt --write "{}" ';'
+
+# Run repo syntax checks through Dagger.
+[group('Dagger')]
+validate-dagger:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v dagger >/dev/null 2>&1; then
+        echo "ERROR: dagger is required for Dagger validation."
+        exit 1
+    fi
+
+    dagger call validate
+
+# Regenerate Dagger's Go SDK support files for local development.
+[group('Dagger')]
+dagger-develop:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v dagger >/dev/null 2>&1; then
+        echo "ERROR: dagger is required to regenerate the Dagger Go SDK files."
+        exit 1
+    fi
+
+    dagger develop --sdk=go --compat=skip
 
 # sudoif helper — runs a command as root when not already root
 [private]
@@ -382,26 +410,23 @@ rebuild-qcow2-bib $target_image=local_image $tag=default_tag: validate && (_rebu
 
 # ── Installer ISO ────────────────────────────────────────────────────────────
 
-# Build the installer ISO locally by running the same workflow used in GitHub Actions.
+# Build the installer ISO locally through Dagger.
 [group('Installer ISO')]
 build-iso-local $tag=default_tag $install_image_ref="":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if ! command -v act >/dev/null 2>&1; then
-        echo "ERROR: act is required for local ISO workflow runs."
+    if ! command -v dagger >/dev/null 2>&1; then
+        echo "ERROR: dagger is required for local ISO builds."
         echo "Install it, then retry: just build-iso-local {{ tag }}"
         exit 1
     fi
 
-    mkdir -p output/act-artifacts
-    act workflow_dispatch \
-        -W .github/workflows/build-iso.yml \
-        -P ubuntu-24.04=ghcr.io/catthehacker/ubuntu:act-24.04 \
-        --container-options "--privileged" \
-        --input "image_tag={{ tag }}" \
-        --input "install_image_ref={{ install_image_ref }}" \
-        --artifact-server-path output/act-artifacts
+    rm -rf output/iso
+    dagger call build-iso \
+        --image-tag "{{ tag }}" \
+        --install-image-ref "{{ install_image_ref }}" \
+        export --path=output/iso
 
 # Run an installer ISO locally through the qemux/qemu browser VM UI.
 [group('Installer ISO')]

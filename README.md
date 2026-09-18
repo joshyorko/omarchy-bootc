@@ -26,6 +26,7 @@ The disposable Arch image is only the pacman execution environment. None of its 
 ## Repository layout
 
 ```text
+<<<<<<< HEAD
 Containerfile                         empty-root and image-stage assembly
 build/20-quattro.sh                  official Quattro package closure
 build/25-quattro-user.sh             acceptance-only first-boot fixture
@@ -38,11 +39,41 @@ vendor/bootcrew/                     pinned construction snapshot and metadata
 tests/test-quattro-source-contract.sh executable architecture contract
 docs/installer-parity-contract.md    upstream-Omarchy ISO adapter contract
 docs/transition-contract.md          cross-distro switch and mutable-state contract
+=======
+omarchy-bootc/
+├── build/                              # image build-time scripts
+├── custom/packages/                    # package lists
+├── custom/greetd/config.toml           # greetd/agreety login command
+├── custom/first-boot/omarchy-setup.sh  # root first-boot logic
+├── custom/hypr/                        # staged Hyprland defaults
+├── iso_files/                          # installer hook templates/scripts
+├── .dagger/                            # Dagger pipeline code for validation and ISO builds
+├── systemd/system/omarchy-firstboot.service
+├── image/disk.toml                     # bootc-image-builder config
+├── Justfile
+└── docs/technical-status.md
+>>>>>>> origin/main
 ```
 
 ## Local checks
 
+<<<<<<< HEAD
 Run repository-native checks on the Bluefin host; the image build itself runs in Podman and does not layer development packages onto the host.
+=======
+- `podman`
+- `just`
+- `jq`
+- `machinectl` (required when the native disk-image recipes need to copy a rootless-built image into rootful podman)
+- `dagger` (required for local installer ISO builds)
+- `sudo` (for rootful bootc-image-builder)
+- `/dev/kvm` for practical VM boot testing
+
+Run `just validate` before build.
+Run `just validate-dagger` when you want the repo syntax checks executed inside the Dagger pipeline.
+After editing `.dagger/main.go` or after a fresh Dagger scaffold, run `just dagger-develop` once from a host that can start the Dagger engine. That regenerates the Go SDK support files (`.dagger/internal/**`, `.dagger/dagger.gen.go`, `go.sum`) expected by Dagger's Go module layout.
+
+## Local build + VM smoke test
+>>>>>>> origin/main
 
 ```bash
 just test-contract
@@ -69,6 +100,7 @@ No release claim is made until the OCI passes fatal `bootc container lint`, inst
 
 ## Cross-distro bootc switch
 
+<<<<<<< HEAD
 Cross-distro switching is a separate state transition, not a raw image swap.
 The supported source profiles are Bluefin, Dakota, and existing Omarchy bootc.
 Run the source-side helper from this checkout before switching:
@@ -78,6 +110,19 @@ sudo ./transition/omarchy-transition.sh preflight <target-image>
 sudo ./transition/omarchy-transition.sh capture-state
 sudo ./transition/omarchy-transition.sh backup
 sudo ./transition/omarchy-transition.sh apply --confirm <target-image>
+=======
+For local installer testing, keep the disk-image and installer flows separate. The ISO build is Dagger-owned locally and in CI:
+
+```bash
+# One-time after Dagger module edits or fresh checkout if generated SDK files are missing.
+just dagger-develop
+
+# Build the installer ISO into output/iso/.
+just build-iso-local
+
+# Boot the newest output/*.iso through the same browser VM UI as just run-vm.
+just run-installer-iso
+>>>>>>> origin/main
 ```
 
 Reboot after the explicit `bootc switch`. On first Quattro boot, an existing
