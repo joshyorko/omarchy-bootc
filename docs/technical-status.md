@@ -11,7 +11,9 @@ _Last updated: 2026-04-19_
 - Native `bootc install to-disk` path emits raw/qcow2 images via `just build-qcow2`; legacy bootc-image-builder targets remain available as `build-qcow2-bib` / `build-raw-bib`.
 - Manual/opt-in installer ISO workflows now exist in GitHub Actions: `build-iso.yml` can build an ISO from a published tag, and `build.yml` has a manual `build_iso` toggle.
 - The expensive qcow2 + headless QEMU smoke path is manual-only in `build.yml` behind the `run_vm_smoke` dispatch toggle.
+- Installer ISO generation is Dagger-owned: `just build-iso-local` and the reusable GitHub workflow both call the same Dagger `build-iso` function and export artifacts under `output/iso`.
 - The initial installer path uses a Fedora-based Bluefin live rootfs with Titanoboa, but installs the published `ghcr.io/joshyorko/omarchy-bootc:<tag>` container onto the target system.
+- The Dagger module source is present under `.dagger/`; Go SDK support files are regenerated with `just dagger-develop` on a host that can start the Dagger engine.
 - Rootful/rootless image handoff is now explicit for the native disk-image path: `Justfile` and `scripts/ci/vm-smoke.sh` copy the already-built image into rootful podman, export an OCI install source, and pass `--source-imgref` to `bootc install to-disk`.
 - Manual VM smoke runs install `systemd-container` so `machinectl` is available for the `podman image scp` handoff used by the smoke path.
 - A concrete VM login path is configured: `greetd` + `agreety` launching `Hyprland`, with minimal VM graphics/runtime packages (`mesa`, `vulkan-virtio`, `libinput`).
@@ -37,6 +39,7 @@ _Last updated: 2026-04-19_
 - Reliability of `bootc install --composefs-backend --via-loopback` across host/container runtimes; qcow2 conversion relies on host `qemu-img`.
 - End-to-end VM reliability across host environments.
 - End-to-end validation of the new ISO installer flow, especially the Bluefin live rootfs -> omarchy target handoff.
+- Dagger Go SDK regeneration and full `just build-iso-local` execution on a host with Docker/Dagger engine access.
 - Desktop session quality/stability beyond first login.
 - Long-term assumptions around pacman DB relocation and bootc source build behavior over time.
 

@@ -36,6 +36,7 @@ omarchy-bootc/
 ├── custom/first-boot/omarchy-setup.sh  # root first-boot logic
 ├── custom/hypr/                        # staged Hyprland defaults
 ├── iso_files/                          # installer hook templates/scripts
+├── .dagger/                            # Dagger pipeline code for validation and ISO builds
 ├── systemd/system/omarchy-firstboot.service
 ├── image/disk.toml                     # bootc-image-builder config
 ├── Justfile
@@ -48,10 +49,13 @@ omarchy-bootc/
 - `just`
 - `jq`
 - `machinectl` (required when the native disk-image recipes need to copy a rootless-built image into rootful podman)
+- `dagger` (required for local installer ISO builds)
 - `sudo` (for rootful bootc-image-builder)
 - `/dev/kvm` for practical VM boot testing
 
 Run `just validate` before build.
+Run `just validate-dagger` when you want the repo syntax checks executed inside the Dagger pipeline.
+After editing `.dagger/main.go` or after a fresh Dagger scaffold, run `just dagger-develop` once from a host that can start the Dagger engine. That regenerates the Go SDK support files (`.dagger/internal/**`, `.dagger/dagger.gen.go`, `go.sum`) expected by Dagger's Go module layout.
 
 ## Local build + VM smoke test
 
@@ -80,10 +84,13 @@ Installer media now follows the Dudley-style flow shape: build and publish the c
 
 That split matters here because Titanoboa’s live rootfs still expects Fedora tooling, while the installed system remains the Arch-based omarchy bootc image.
 
-For local installer testing, keep the disk-image and installer flows separate:
+For local installer testing, keep the disk-image and installer flows separate. The ISO build is Dagger-owned locally and in CI:
 
 ```bash
-# Build the installer ISO by running the GitHub Actions ISO workflow locally.
+# One-time after Dagger module edits or fresh checkout if generated SDK files are missing.
+just dagger-develop
+
+# Build the installer ISO into output/iso/.
 just build-iso-local
 
 # Boot the newest output/*.iso through the same browser VM UI as just run-vm.
