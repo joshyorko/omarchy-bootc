@@ -1,6 +1,6 @@
 # Technical status: Omarchy Quattro bootc
 
-_Last updated: 2026-08-26_
+_Last updated: 2026-09-20_
 
 ## Architecture of record
 
@@ -20,7 +20,7 @@ Bootcrew's published Arch image is not the final base and is not package authori
 - Official stable repository topology for `core`, `extra`, `multilib`, and `omarchy`.
 - Empty-root base package resolution; no inherited rolling Bootcrew package state and no bulk downgrade.
 - Recorded Bootcrew and bootc source URLs, revisions, vendored checksums, OCI labels, and in-image revision files.
-- Official `omarchy-keyring`, `omarchy-settings=4.0.1-1`, `omarchy=4.0.1-1`, and upstream `omarchy-base.packages` closure.
+- Official `omarchy-keyring`, `omarchy-settings=4.0.4-1`, `omarchy=4.0.4-1`, and the current Quattro `omarchy-base.packages` closure at revision `45748a2812f42e32f915b053caf4074e150e2048`.
 - Dependency-resolution report for `omarchy-other.packages` without installing mutually exclusive hardware stacks.
 - Complete optional dependency resolution using the pinned official ISO's `arch-mact2` repository only in a temporary resolver config; the four-repository foundation remains unchanged.
 - Package provenance checks for commands, Quickshell, themes, `/etc/skel`, SDDM, and the canonical session file.
@@ -29,7 +29,9 @@ Bootcrew's published Arch image is not the final base and is not package authori
 - Final dracut verification requires the bootc v1.16.10 `ostree` and `bootc` modules and both root-setup payloads; the correction is layered above the unmodified Bootcrew snapshot.
 - Separate publishable and acceptance targets. The publishable image has no baked test account or passwordless sudo rule.
 - Acceptance first boot invokes official `omarchy-provision-user --first-install`; local provisioning reimplementations remain forbidden.
-- Cross-distro switching now has an explicit source-aware preflight/capture/backup helper and a target adoption service with independent mutable-state rollback; fresh ISO installs bypass it through an installer-origin marker.
+- Cross-distro switching now uses structured strongest-to-weakest source evidence, persists the tracking ref and resolved digest, re-resolves immediately before `bootc switch`, and provides exact post-boot verification; the target adoption service retains independent mutable-state rollback.
+- `omarchy update` and the update indicator now use the bootc-native `upgrade --check`/`upgrade` bridge; migrations are deferred to the first login after exact-digest verification.
+- A scheduled/manual upstream Quattro tracker records drift as one advisory issue without repinning or publishing.
 
 ## Required publication evidence
 
@@ -56,16 +58,15 @@ Focused shell and source-contract checks do not substitute for assembled-image, 
 
 ## Installer status
 
-The existing installer workflows are preserved. They are not silently converted into a shared Omarchy installer.
+The future Quattro path is a separate `dudley-iso` variant pinned to `omacom/omarchy-iso` Quattro commit `7cfb7111a06873d61c45d37034577d4ba08d3f4f`. Its contract is upstream Omarchy UX plus a narrow `bootc install to-filesystem` backend; Gate 6 remains out of scope for this repository.
 
-The future Quattro path is a separate `dudley-iso` variant pinned to `omacom-io/omarchy-iso` Quattro commit `268bac16d351a21d867e37565738f458b11cb06c`. Its contract is upstream Omarchy UX plus a narrow `bootc install to-filesystem` backend seam. The same pinned upstream QEMU/OCR and in-guest acceptance harness must pass for the official baseline and the Quattro bootc ISO. Branding waits until that parity proof succeeds.
 
 See `docs/installer-parity-contract.md` for the normative installer and non-regression requirements.
 
 ## Deferred
 
-- No implementation of `omarchy update` integration yet.
-- No wrapper or replacement for any `omarchy-*` command.
+- Hosted Podman/KVM assembled-image, plugin/OMP, A/B rollback, and Dakota round-trip evidence remain runtime gates; they are blocked when the required image registry, VM, or hypervisor capability is unavailable, never inferred from shell contracts.
+- Gate 6 installer execution remains in `dudley-iso` and is not claimed by this repository.
 - No installer UI fork or local reimplementation of Omarchy user provisioning.
 - No arbitrary-source switch is accepted; Bluefin, Dakota, and existing Omarchy transitions still require clean VM evidence for adoption, independent recovery, and reverse rollback.
 - No publication, ISO replacement, or claim of desktop/lifecycle completion before the gates above pass.

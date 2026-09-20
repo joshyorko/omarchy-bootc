@@ -5,6 +5,9 @@
 ARG ARCH_BOOTSTRAP_REF="docker.io/archlinux/archlinux:latest@sha256:0de35fe2ee793494ccfc99b202f6b30215b078baf2b082e9ccb027840c534fc1"
 ARG BOOTCREW_MONO_REVISION="5f048fa65a94daefc814d3cdd941d8d1e113c09e"
 ARG BOOTC_REVISION="3e76c16556c55e6d15d31bd47602b231e2131cb2"
+ARG OMARCHY_QUATTRO_REVISION="45748a2812f42e32f915b053caf4074e150e2048"
+ARG OMARCHY_VERSION="4.0.4-1"
+
 
 # Current Arch is only a disposable pacstrap tool. No package from this image
 # is copied into the final root.
@@ -74,6 +77,11 @@ RUN --mount=type=bind,from=bootcrew-ctx,source=/,target=/ctx \
     bash /ctx/shared/build.sh
 
 FROM stable-base AS bootcrew-system
+ARG OMARCHY_QUATTRO_REVISION
+ARG OMARCHY_VERSION
+ENV OMARCHY_QUATTRO_REVISION="${OMARCHY_QUATTRO_REVISION}" \
+    OMARCHY_VERSION="${OMARCHY_VERSION}"
+
 ARG BOOTCREW_MONO_REVISION
 ARG BOOTC_REVISION
 COPY --from=bootc-builder /output /
@@ -140,6 +148,8 @@ RUN bootc container lint --fatal-warnings
 
 FROM scratch AS install-ctx
 COPY build/20-quattro.sh /build/20-quattro.sh
+COPY sources /sources
+
 COPY build/configure-quattro-repositories.sh /build/configure-quattro-repositories.sh
 COPY build/lib /build/lib
 COPY build/bootc-disabled-hooks.txt /build/bootc-disabled-hooks.txt
@@ -152,6 +162,10 @@ FROM scratch AS boot-ownership-ctx
 COPY build/30-bootc-ownership.sh /build/30-bootc-ownership.sh
 COPY build/bootc-disabled-hooks.txt /build/bootc-disabled-hooks.txt
 COPY build/lib/bootc-initramfs.sh /build/lib/bootc-initramfs.sh
+
+FROM scratch AS update-ctx
+COPY build/install-bootc-update.sh /build/install-bootc-update.sh
+COPY custom/bootc /custom/bootc
 
 FROM scratch AS acceptance-ctx
 COPY build/25-quattro-user.sh /build/25-quattro-user.sh
@@ -201,6 +215,9 @@ RUN --mount=type=bind,from=adoption-ctx,source=/,target=/ctx \
         'Requires=omarchy-adopt-existing-user.service' \
         > /etc/systemd/system/display-manager.service.d/10-omarchy-adoption.conf && \
     systemctl enable omarchy-adopt-existing-user.service
+
+RUN --mount=type=bind,from=update-ctx,source=/,target=/ctx \
+    bash /ctx/build/install-bootc-update.sh
 
 RUN --mount=type=bind,from=transition-ctx,source=/,target=/ctx \
     install -D -m 0755 \

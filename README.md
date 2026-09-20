@@ -16,12 +16,11 @@ The build never inherits Bootcrew's published rolling image and never downgrades
 
 - Disposable Arch bootstrap tool: `docker.io/archlinux/archlinux:latest@sha256:0de35fe2ee793494ccfc99b202f6b30215b078baf2b082e9ccb027840c534fc1`
 - Bootcrew mono: `5f048fa65a94daefc814d3cdd941d8d1e113c09e`
-- bootc v1.16.10 source: `3e76c16556c55e6d15d31bd47602b231e2131cb2`
-- Omarchy v4.0.1: `13f18b2cb7286fb54f87daf571a031aa6af3d8f0`
-- Omarchy packages: `f448847d1f6e664038636542502354a388cb0f94`
-- Official Omarchy ISO Quattro reference: `268bac16d351a21d867e37565738f458b11cb06c`
+- bootc source: `3e76c16556c55e6d15d31bd47602b231e2131cb2`
+- Omarchy Quattro `4.0.4-1`: `45748a2812f42e32f915b053caf4074e150e2048`
+- Omarchy ISO Quattro reference: `7cfb7111a06873d61c45d37034577d4ba08d3f4f`
 
-The disposable Arch image is only the pacman execution environment. None of its installed package files enter the final root. The final OCI records the Bootcrew and bootc revisions in labels and under `/usr/share/omarchy-bootc/sources/`.
+The source files under `sources/` are copied into the image provenance. A scheduled/manual tracker compares the pinned Omarchy Quattro revision with the live canonical `quattro` ref and opens one advisory issue; it never repins or publishes an image automatically.
 
 ## Repository layout
 
@@ -81,13 +80,14 @@ No release claim is made until the OCI passes fatal `bootc container lint`, inst
 
 ## Cross-distro bootc switch
 
-Cross-distro switching is a separate state transition, not a raw image swap. The supported source profiles are Bluefin, Dakota, and existing Omarchy bootc. Run the source-side helper from this checkout before switching:
+Cross-distro switching is a separate state transition, not a raw image swap. The supported source profiles are current Project Bluefin Dakota, Dudley Dakota, Bluefin, and existing Omarchy bootc. Inspect the source before preflight:
 
 ```bash
-sudo ./transition/omarchy-transition.sh preflight <target-image@sha256:digest>
+sudo ./transition/omarchy-transition.sh inspect-source
+sudo ./transition/omarchy-transition.sh preflight ghcr.io/joshyorko/omarchy-bootc:testing
 sudo ./transition/omarchy-transition.sh capture-state
 sudo ./transition/omarchy-transition.sh backup
-sudo ./transition/omarchy-transition.sh apply --confirm <target-image@sha256:digest>
+sudo ./transition/omarchy-transition.sh apply --confirm ghcr.io/joshyorko/omarchy-bootc:testing
 ```
 
 Reboot after the explicit `bootc switch`. On first Quattro boot, an existing `/var/home` user enters the bounded adoption service. Fresh ISO installs write an installer-origin marker and stay on the upstream Omarchy provisioning path. Use `sudo omarchy-adoption-rollback` only when intentionally recovering the mutable user-state transition; it preserves post-adoption files separately because bootc rollback does not roll back `/var/home`. Unknown source systems are refused. See [the transition contract](docs/transition-contract.md).
@@ -97,7 +97,6 @@ Reboot after the explicit `bootc switch`. On first Quattro boot, an existing `/v
 Existing Dudley, Dakota, and Bluefin installer variants remain independent and keep their prescribed implementations. The future Quattro ISO path belongs in `dudley-iso` as an additive variant based on pinned `omacom-io/omarchy-iso`.
 
 That adapter preserves the official configurator, storage/encryption UX, dashboard, provisioning, SDDM setup, and upstream acceptance harness. It replaces only pacstrap/Limine/mutable-root deployment with `bootc install to-filesystem` and bootc finalization. See [the installer parity contract](docs/installer-parity-contract.md).
+## Update boundary
 
-## Explicit boundary
-
-`omarchy update` integration is not implemented. Read-only design work identifies `omarchy-update-system-pkgs` as a possible upstream backend seam, but desktop, installer, and bootc lifecycle acceptance come first.
+`omarchy update` and `omarchy-update-available` use `bootc upgrade --check` and `bootc upgrade` against `ghcr.io/joshyorko/omarchy-bootc:testing`; they never run live `pacman -Syu`. The update is staged, then the rebooted deployment verifies its exact digest before running `omarchy-migrate` and the post-update hook. No `:stable` stream is published by this repository.

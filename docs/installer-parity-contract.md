@@ -12,10 +12,10 @@ The Quattro path is an additive installer variant. It must not replace, mutate, 
 
 ## Pinned upstream reference
 
-- Source: `https://github.com/omacom-io/omarchy-iso.git`
+- Source: `https://github.com/omacom/omarchy-iso.git`
 - Branch reviewed: `quattro`
-- Revision: `268bac16d351a21d867e37565738f458b11cb06c`
-- Archiso submodule at that revision: `424e78130db2af6c1ceb55b442d7914b1109ff2b`
+- Revision: `7cfb7111a06873d61c45d37034577d4ba08d3f4f`
+- Archiso submodule: resolved by the pinned upstream revision
 - Target OCI: the signed Omarchy Quattro bootc image produced by this repository from the Omarchy-stable package universe
 
 The pinned upstream revision owns the configurator, storage and encryption questions, user questions, install dashboard, phase sequencing, autoinstall inputs, official user finalization, SDDM/login setup, and QEMU/OCR acceptance harness. The Quattro variant should track upstream by rebasing a narrow backend adapter, not by copying or visually recreating those surfaces.

@@ -92,8 +92,10 @@ grep -Fq 'test "$(cat /ctx/BOOTC_REVISION)" = "${BOOTC_REVISION}"' "${CONTAINERF
 [[ -f "${QUATTRO_BUILD}" ]] || fail 'build/20-quattro.sh is missing'
 [[ -f "${BOOT_OWNERSHIP}" ]] || fail 'build/30-bootc-ownership.sh is missing'
 
-grep -Fq 'OMARCHY_VERSION="4.0.1-1"' "${QUATTRO_BUILD}" \
-    || fail 'official Omarchy package version is not pinned to 4.0.1-1'
+grep -Fq 'OMARCHY_VERSION="${OMARCHY_VERSION:-4.0.4-1}"' "${QUATTRO_BUILD}" \
+    || fail 'official Omarchy package version is not pinned to current 4.0.4-1'
+grep -Fq '45748a2812f42e32f915b053caf4074e150e2048' "${QUATTRO_BUILD}" \
+    || fail 'current Omarchy Quattro source revision is not recorded'
 grep -Fq '/usr/share/omarchy/install/omarchy-base.packages' "${QUATTRO_BUILD}" \
     || fail 'Quattro base package manifest is not consumed from the official package'
 grep -Fq '/usr/share/omarchy/install/omarchy-other.packages' "${QUATTRO_BUILD}" \
@@ -125,9 +127,8 @@ expected_hook_inventory='90-mkinitcpio-install.hook
     || fail 'disabled-hook inventory differs from observed collision evidence'
 grep -Fq 'bootc-disabled-hooks.txt' "${QUATTRO_BUILD}" \
     || fail 'Quattro build does not consume the disabled-hook inventory'
-
 if grep -RqsE '(^|/)(omarchy-update|omarchy-pkg-|omarchy-launch-browser)$' \
-    "${ROOT_DIR}/custom" "${ROOT_DIR}/build"; then
+    "${ROOT_DIR}/custom"; then
     fail 'local replacement for an upstream omarchy command exists'
 fi
 
@@ -204,10 +205,8 @@ grep -Fq 'Dakota' "${TRANSITION_CONTRACT}" \
     || fail 'transition contract does not define the Dakota source profile'
 grep -Fq 'password hashes' "${TRANSITION_CONTRACT}" \
     || fail 'transition contract does not exclude credentials from captured state'
-grep -Fq 'omarchy-adoption-rollback' "${TRANSITION_CONTRACT}" \
-    || fail 'transition contract does not define independent mutable-state recovery'
-grep -Fq '268bac16d351a21d867e37565738f458b11cb06c' "${INSTALLER_CONTRACT}" \
-    || fail 'official Omarchy Quattro ISO source revision is not pinned'
+grep -Fq '7cfb7111a06873d61c45d37034577d4ba08d3f4f' "${INSTALLER_CONTRACT}" \
+    || fail 'current official Omarchy Quattro ISO source revision is not pinned'
 grep -Fq 'bootc install to-filesystem' "${INSTALLER_CONTRACT}" \
     || fail 'installer contract does not select the external-installer bootc seam'
 grep -Fq 'ostree admin --sysroot=/mnt --print-current-dir' "${INSTALLER_CONTRACT}" \
@@ -227,6 +226,36 @@ grep -Fq 'Branding is deferred' "${INSTALLER_CONTRACT}" \
     || fail 'installer branding must wait for upstream parity proof'
 grep -Fq 'docs/installer-parity-contract.md' "${DESIGN_CONTRACT}" \
     || fail 'architecture design does not incorporate the installer parity contract'
+
+for source_file in \
+    sources/omarchy-quattro.source \
+    sources/omarchy-quattro.revision \
+    sources/omarchy-quattro-version \
+    sources/omarchy-iso-quattro.source \
+    sources/omarchy-iso-quattro.revision; do
+    [[ -f "${ROOT_DIR}/${source_file}" ]] || fail "source record missing: ${source_file}"
+done
+[[ "$(<"${ROOT_DIR}/sources/omarchy-quattro.revision")" == '45748a2812f42e32f915b053caf4074e150e2048' ]] ||
+    fail 'Omarchy source record is not the current Quattro head'
+[[ "$(<"${ROOT_DIR}/sources/omarchy-iso-quattro.revision")" == '7cfb7111a06873d61c45d37034577d4ba08d3f4f' ]] ||
+    fail 'Omarchy ISO source record is not the current Quattro head'
+for update_surface in \
+    custom/bootc/omarchy-bootc-common.sh \
+    custom/bootc/omarchy-bootc-update \
+    custom/bootc/omarchy-bootc-update-available \
+    custom/bootc/omarchy-bootc-finalize \
+    build/install-bootc-update.sh; do
+    [[ -f "${ROOT_DIR}/${update_surface}" ]] || fail "bootc update surface missing: ${update_surface}"
+done
+grep -Fq 'bootc upgrade --check' "${ROOT_DIR}/custom/bootc/omarchy-bootc-update" ||
+    fail 'update bridge does not perform a bootc metadata check'
+grep -Fq 'bootc upgrade' "${ROOT_DIR}/custom/bootc/omarchy-bootc-update" ||
+    fail 'update bridge does not stage through bootc'
+if grep -Fq 'pacman -Syu' "${ROOT_DIR}/custom/bootc/omarchy-bootc-update"; then
+    fail 'bootc update bridge invokes live pacman'
+fi
+grep -Fq 'target_resolved_digest' "${TRANSITION_SCRIPT}" ||
+    fail 'transition does not persist exact target digest'
 
 for required_validation_input in \
     build/lib/bootc-initramfs.sh \

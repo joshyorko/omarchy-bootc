@@ -1,5 +1,5 @@
 export image_name := env("IMAGE_NAME", "omarchy-bootc")
-export default_tag := env("DEFAULT_TAG", "stable")
+export default_tag := env("DEFAULT_TAG", "testing")
 export bib_image := env("BIB_IMAGE", "quay.io/centos-bootc/bootc-image-builder:latest")
 export local_image := env("LOCAL_IMAGE", "localhost/" + image_name)
 
@@ -111,6 +111,16 @@ validate:
         build/stage-acceptance-node.sh
         build/verify-publishable-image.sh
         build/verify-quattro-payload.sh
+        build/install-bootc-update.sh
+        custom/bootc/omarchy-bootc-common.sh
+        custom/bootc/omarchy-bootc-update
+        custom/bootc/omarchy-bootc-update-available
+        custom/bootc/omarchy-bootc-finalize
+        sources/omarchy-quattro.source
+        sources/omarchy-quattro.revision
+        sources/omarchy-quattro-version
+        sources/omarchy-iso-quattro.source
+        sources/omarchy-iso-quattro.revision
         transition/omarchy-transition.sh
         custom/first-boot/omarchy-adopt-existing-user.sh
         custom/first-boot/omarchy-adoption-rollback.sh

@@ -4,7 +4,13 @@ set -euo pipefail
 # shellcheck disable=SC1091
 source /ctx/build/lib/quattro-packages.sh
 
-OMARCHY_VERSION="4.0.1-1"
+OMARCHY_VERSION="${OMARCHY_VERSION:-4.0.4-1}"
+OMARCHY_QUATTRO_REVISION="${OMARCHY_QUATTRO_REVISION:-45748a2812f42e32f915b053caf4074e150e2048}"
+OMARCHY_SOURCE="/ctx/sources/omarchy-quattro.source"
+OMARCHY_REVISION_FILE="/ctx/sources/omarchy-quattro.revision"
+OMARCHY_VERSION_FILE="/ctx/sources/omarchy-quattro-version"
+[[ "$(cat "${OMARCHY_REVISION_FILE}")" == "${OMARCHY_QUATTRO_REVISION}" ]]
+[[ "$(cat "${OMARCHY_VERSION_FILE}")" == "${OMARCHY_VERSION}" ]]
 OMARCHY_BASE_MANIFEST="/usr/share/omarchy/install/omarchy-base.packages"
 OMARCHY_OTHER_MANIFEST="/usr/share/omarchy/install/omarchy-other.packages"
 REPOSITORY_CONFIG="/ctx/custom/pacman/quattro-repositories.conf"
@@ -75,6 +81,11 @@ pacman -S --noconfirm --needed "${base_packages[@]}"
 # ISO, but that repository is applied only to this resolver copy so the proven
 # Omarchy-stable foundation topology remains unchanged.
 install -d -m 0755 /usr/share/omarchy-bootc
+install -D -m 0644 "${OMARCHY_SOURCE}" /usr/share/omarchy-bootc/sources/omarchy-quattro.source
+install -D -m 0644 "${OMARCHY_REVISION_FILE}" /usr/share/omarchy-bootc/sources/omarchy-quattro.revision
+install -D -m 0644 "${OMARCHY_VERSION_FILE}" /usr/share/omarchy-bootc/sources/omarchy-quattro-version
+printf '%s\n' "${OMARCHY_QUATTRO_REVISION}" > /usr/share/omarchy-bootc/sources/omarchy-quattro-resolved-revision
+
 optional_report=/usr/share/omarchy-bootc/optional-package-resolvability.txt
 optional_pacman_config=/tmp/quattro-optional-resolver.conf
 cp /etc/pacman.conf "${optional_pacman_config}"

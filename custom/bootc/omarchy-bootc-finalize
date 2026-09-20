@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /usr/lib/omarchy-bootc/update-common.sh
+
+pending="${XDG_STATE_HOME:-${HOME}/.local/state}/omarchy-bootc/pending-update"
+[[ -f "$pending" ]] || exit 0
+expected="$(sed -n 's/^expected_digest=//p' "$pending" | sed -n '1p')"
+[[ "$expected" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+    echo 'bootc update marker has no exact expected digest; refusing migration' >&2
+    exit 1
+}
+actual="$(status_booted_digest)"
+[[ "$actual" == "$expected" ]] || {
+    echo "booted digest ${actual:-none} does not match staged digest ${expected}; migrations remain pending" >&2
+    exit 1
+}
+
+# The current deployment is now the one whose files migrations were authored
+# against. The old Omarchy package pipeline must never run before this check.
+omarchy-migrate
+omarchy-hook post-update
+rm -f -- "$pending"
+printf 'status=finalized\nbooted_digest=%s\n' "$actual"

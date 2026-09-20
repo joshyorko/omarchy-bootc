@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OMARCHY_VERSION="${OMARCHY_VERSION:-4.0.1-1}"
+OMARCHY_VERSION="${OMARCHY_VERSION:-4.0.4-1}"
 PROVENANCE_DIR="/usr/share/omarchy-bootc"
 PROVENANCE_REPORT="${PROVENANCE_DIR}/package-provenance.txt"
 

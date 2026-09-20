@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Matches omacom-io/omarchy-iso builder/build-iso.sh for the input consumed by
-# v4.0.1 install/user/mise-work.sh during iso-chroot finalization.
+# Matches the current omacom/omarchy-iso Quattro builder input consumed by
+# the user mise finalization path.
 node_dist_url="https://nodejs.org/dist/latest"
 shasums="$(curl -fsSL "${node_dist_url}/SHASUMS256.txt")"
 node_filename="$(awk '$2 ~ /^node-v.*-linux-x64\.tar\.gz$/ { print $2 }' <<<"${shasums}")"

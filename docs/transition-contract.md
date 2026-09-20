@@ -7,19 +7,20 @@ need an explicit transition boundary.
 
 ## Supported sources
 
-The transition helper recognizes Bluefin, Dakota, and an existing Omarchy
-bootc deployment. It refuses an unknown source instead of guessing what its
-persistent state means.
+The transition helper recognizes current Project Bluefin Dakota (`ID=bluefin-dakota`), Dudley Dakota (`ID=dakota`), Bluefin, and an existing Omarchy bootc deployment. It uses bootc status JSON first, then `/usr/share/ublue-os/image-info.json`, then os-release; a familiar `NAME` without a structured identity is refused.
 
 Before switching, the source-side helper must run:
 
 ```text
-preflight -> capture-state -> backup -> bootc switch -> reboot
+inspect-source -> preflight :testing + digest -> capture-state -> backup
+  -> re-resolve :testing -> bootc switch :testing -> reboot -> verify-boot
 ```
 
-`preflight` accepts only an immutable target reference ending in
-`@sha256:<64-hex>`. Mutable tags are refused so the captured transition
-record and the later `bootc switch` cannot silently resolve different images.
+`preflight` accepts the mutable `ghcr.io/joshyorko/omarchy-bootc:testing`
+tracking ref, resolves it to an exact digest, and persists both values plus
+the source evidence. `apply` resolves the ref again immediately before the
+switch and refuses if it moved; it switches using the tracking ref so future
+updates remain discoverable.
 
 `capture-state` records source identity, user/group IDs, home-directory
 ownership, and non-secret configuration metadata. It deliberately excludes
