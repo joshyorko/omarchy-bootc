@@ -8,6 +8,8 @@ if [[ -z "${IMAGE_REF}" ]]; then
 fi
 
 SSH_PORT="${SSH_PORT:-2222}"
+DISK_SIZE="${DISK_SIZE:-32G}"
+SSH_WAIT_SECONDS="${SSH_WAIT_SECONDS:-360}"
 QCOW_PATH="output/qcow2/disk.qcow2"
 RAW_PATH="output/raw/disk.raw"
 SOURCE_OCI_DIR="output/source-oci"
@@ -19,6 +21,7 @@ SSH_OPTS=(
     -o StrictHostKeyChecking=no
     -o UserKnownHostsFile=/dev/null
     -o ConnectTimeout=3
+    -o LogLevel=ERROR
     -p "${SSH_PORT}"
 )
 OVMF_CODE_PATH=""
@@ -42,6 +45,11 @@ rootful_copy_image() {
     local rootless_id=""
     local rootful_id=""
     local copy_tmp=""
+
+    if [[ "$(id -u)" == 0 ]]; then
+        echo "Already running as uid 0; rootful image handoff is unnecessary."
+        return
+    fi
 
     if ! command -v machinectl >/dev/null 2>&1; then
         echo "machinectl is required for podman image scp when copying into rootful podman"
@@ -117,10 +125,14 @@ capture_guest_diagnostics() {
     write_artifact guest-uname.txt run_guest 'uname -a'
     write_artifact guest-id.txt run_guest 'id'
     write_artifact guest-systemd-failed.txt run_guest 'systemctl --failed --no-pager --full'
-    write_artifact guest-greetd-status.txt run_guest 'systemctl status greetd --no-pager --full'
+    write_artifact guest-sddm-status.txt run_guest 'systemctl status sddm --no-pager --full'
     write_artifact guest-sshd-status.txt run_guest 'systemctl status sshd --no-pager --full'
     write_artifact guest-journal.txt run_guest 'journalctl -b --no-pager'
-    write_artifact guest-firstboot.txt run_guest 'ls -l /var/lib/omarchy /var/lib/omarchy/.firstboot-done'
+    run_guest 'sudo -n bootc status --format=json' \
+        >"${ARTIFACT_DIR}/guest-bootc-status.json" 2>"${ARTIFACT_DIR}/guest-bootc-status.stderr" || true
+    run_guest 'test ! -d "$HOME/acceptance-receipts" || tar -C "$HOME" -czf - acceptance-receipts' \
+        >"${ARTIFACT_DIR}/guest-acceptance-receipts.tar.gz" 2>"${ARTIFACT_DIR}/guest-acceptance-receipts.stderr" || true
+    write_artifact guest-firstboot.txt run_guest 'systemctl status omarchy-acceptance-firstboot --no-pager --full; ls -l /var/lib/omarchy-acceptance /home/omarchy/.local/state/omarchy/done'
     write_artifact guest-home-config.txt run_guest 'find /home/omarchy/.config -maxdepth 2 -mindepth 1 -type d | sort'
 }
 
@@ -162,6 +174,7 @@ fail() {
 
 cleanup() {
     capture_host_diagnostics
+    capture_guest_diagnostics
     if [[ -f "${QEMU_PIDFILE}" ]]; then
         kill "$(cat "${QEMU_PIDFILE}")" >/dev/null 2>&1 || true
         rm -f "${QEMU_PIDFILE}"
@@ -174,13 +187,14 @@ mkdir -p output
 rm -rf output/qcow2 output/raw "${SOURCE_OCI_DIR}"
 
 echo "::group::Preflight bootc image state"
-IMAGE_REF="$(podman inspect -t image "${IMAGE_REF}" --format '{{index .RepoTags 0}}')"
+IMAGE_ID="$(podman inspect image "${IMAGE_REF}" --format '{{.Id}}')"
 echo "Resolved image ref: ${IMAGE_REF}" | tee "${ARTIFACT_DIR}/image-ref.txt"
+echo "Resolved image ID: ${IMAGE_ID}" | tee "${ARTIFACT_DIR}/image-id.txt"
 
-podman run --rm "${IMAGE_REF}" bash -lc '
+podman run --rm --pull=never "${IMAGE_REF}" bash -lc '
 set -euo pipefail
 echo "bootc=$(bootc --version | head -n1)"
-bootc container lint
+bootc container lint --fatal-warnings
 find /usr/lib/modules -mindepth 1 -maxdepth 2 \( -name initramfs.img -o -name vmlinuz \) | sort
 ' 2>&1 | tee "${ARTIFACT_DIR}/image-preflight.log"
 echo "::endgroup::"
@@ -193,19 +207,18 @@ echo "::endgroup::"
 echo "::group::Export explicit install source image"
 podman save --format oci-dir --output "${SOURCE_OCI_DIR}" "${IMAGE_REF}" \
     2>&1 | tee "${ARTIFACT_DIR}/source-oci-export.log"
+cp "${SOURCE_OCI_DIR}/index.json" "${ARTIFACT_DIR}/acceptance-oci-index.json"
+expected_digest="$(jq -er '.manifests[0].digest' "${SOURCE_OCI_DIR}/index.json")"
 SOURCE_IMGREF="oci:/data/${SOURCE_OCI_DIR}"
 echo "Using source imgref: ${SOURCE_IMGREF}" | tee "${ARTIFACT_DIR}/source-imgref.txt"
 echo "::endgroup::"
 
 echo "::group::Generate qcow2 via bootc install-to-disk"
 mkdir -p "$(dirname "${RAW_PATH}")" "$(dirname "${QCOW_PATH}")"
-if command -v fallocate >/dev/null 2>&1; then
-    fallocate -l 20G "${RAW_PATH}"
-else
-    truncate -s 20G "${RAW_PATH}"
-fi
+truncate -s "${DISK_SIZE}" "${RAW_PATH}"
+echo "Sparse disk size: ${DISK_SIZE}" | tee "${ARTIFACT_DIR}/disk-size.txt"
 
-sudo podman run --rm --privileged --pid=host --pull=newer \
+sudo podman run --rm --privileged --pid=host --pull=never \
     -v /dev:/dev \
     -v /var/lib/containers:/var/lib/containers \
     -v /etc/containers:/etc/containers \
@@ -225,9 +238,13 @@ echo "::group::Boot qcow2 in headless QEMU"
 QEMU_ACCEL="tcg"
 if [[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then
     QEMU_ACCEL="kvm"
+    echo "KVM is available and accessible." | tee "${ARTIFACT_DIR}/kvm-capability.txt"
 elif [[ -e /dev/kvm ]]; then
     echo "KVM device exists but is not accessible; falling back to software emulation." \
         | tee -a "${ARTIFACT_DIR}/qemu-accel.txt"
+    echo "KVM exists but is inaccessible." | tee "${ARTIFACT_DIR}/kvm-capability.txt"
+else
+    echo "KVM device is absent; using software emulation." | tee "${ARTIFACT_DIR}/kvm-capability.txt"
 fi
 echo "Using QEMU accelerator: ${QEMU_ACCEL}" | tee -a "${ARTIFACT_DIR}/qemu-accel.txt"
 
@@ -250,7 +267,7 @@ qemu-system-x86_64 \
 echo "::endgroup::"
 
 echo "::group::Wait for SSH availability"
-for _ in $(seq 1 180); do
+for _ in $(seq 1 "$((SSH_WAIT_SECONDS / 2))"); do
     if run_guest 'echo ssh-up' >/dev/null 2>&1; then
         break
     fi
@@ -262,18 +279,93 @@ if ! run_guest 'echo ssh-up' >/dev/null 2>&1; then
 fi
 echo "::endgroup::"
 
+echo "::group::Wait for acceptance provisioning"
+for _ in $(seq 1 "$((SSH_WAIT_SECONDS / 2))"); do
+    if run_guest 'test -f /var/lib/omarchy-acceptance/ready && test -f /home/omarchy/.local/state/omarchy/done/finalize-user'; then
+        break
+    fi
+    sleep 2
+done
+
+if ! run_guest 'test -f /var/lib/omarchy-acceptance/ready && test -f /home/omarchy/.local/state/omarchy/done/finalize-user'; then
+    fail "Acceptance first-boot provisioning did not complete in time."
+fi
+echo "::endgroup::"
+
 echo "::group::Run in-VM smoke checks"
 run_guest 'set -euo pipefail
 id omarchy
-[[ -f /var/lib/omarchy/.firstboot-done ]]
-systemctl is-active greetd
+[[ -f /var/lib/omarchy-acceptance/ready ]]
+[[ -f /home/omarchy/.local/state/omarchy/done/finalize-user ]]
+systemctl is-active sddm
 systemctl is-active sshd
 [[ -d /home/omarchy/.config/hypr ]]
-[[ -d /home/omarchy/.config/waybar ]]
-[[ -d /home/omarchy/.config/wofi ]]
-[[ -d /home/omarchy/.config/mako ]]' || fail "In-VM smoke checks failed."
+[[ -f /usr/share/sddm/themes/omarchy/Main.qml ]]
+[[ -f /usr/share/omarchy/default/wayland-sessions/omarchy.desktop ]]
+[[ -f /usr/share/wayland-sessions/omarchy.desktop ]]
+cmp --silent /usr/share/omarchy/default/wayland-sessions/omarchy.desktop /usr/share/wayland-sessions/omarchy.desktop
+[[ "$(pacman -Qoq /usr/bin/omarchy)" == omarchy ]]
+[[ "$(pacman -Qoq /usr/bin/omarchy-menu)" == omarchy ]]
+[[ "$(pacman -Qoq /usr/bin/omarchy-theme-list)" == omarchy ]]
+[[ -d /usr/share/omarchy/shell ]]
+[[ -d /usr/share/omarchy/themes ]]' || fail "In-VM runtime checks failed."
 echo "::endgroup::"
+
+run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/first-boot-status.json"
+jq -e 'type == "object"' "${ARTIFACT_DIR}/first-boot-status.json" >/dev/null
+jq -e --arg digest "${expected_digest}" '.status.booted.image.imageDigest == $digest' \
+    "${ARTIFACT_DIR}/first-boot-status.json" >/dev/null \
+    || fail "Booted acceptance digest differs from the installed OCI manifest."
+
+acceptance_status=0
+if [[ -n "${UPSTREAM_ACCEPTANCE_DIR:-}" ]]; then
+    # scp uses -P rather than ssh's -p. Transfer only tests, never the source .git.
+    sshpass -p omarchy scp -r -P "${SSH_PORT}" \
+        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "${UPSTREAM_ACCEPTANCE_DIR}/test" omarchy@127.0.0.1:upstream-acceptance-test
+    run_guest 'mkdir -p "$HOME/upstream-acceptance/test"; cp -a "$HOME/upstream-acceptance-test/." "$HOME/upstream-acceptance/test/"'
+    if ! run_guest 'env OMARCHY_ACCEPTANCE_DIR="$HOME/acceptance-receipts/upstream" OMARCHY_ACCEPTANCE_TEST_TIMEOUT=120 timeout 20m bash "$HOME/upstream-acceptance/test/acceptance"' \
+        2>&1 | tee "${ARTIFACT_DIR}/upstream-acceptance.log"; then
+        acceptance_status=1
+    fi
+fi
+
+if [[ -n "${NATIVE_ACCEPTANCE_SCRIPT:-}" ]]; then
+    sshpass -p omarchy scp -P "${SSH_PORT}" \
+        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "${NATIVE_ACCEPTANCE_SCRIPT}" omarchy@127.0.0.1:guest-native-acceptance.sh
+    if run_guest 'env OMARCHY_ACCEPTANCE_DIR="$HOME/acceptance-receipts/native" timeout 5m bash "$HOME/guest-native-acceptance.sh" prepare' \
+        2>&1 | tee "${ARTIFACT_DIR}/native-prepare.log"; then
+        before_boot="$(run_guest 'cat /proc/sys/kernel/random/boot_id')"
+        printf '%s\n' "${before_boot}" >"${ARTIFACT_DIR}/before-reboot-id.txt"
+        run_guest 'sudo -n systemctl reboot' || true
+        rebooted=false
+        for _ in $(seq 1 180); do
+            sleep 2
+            after_boot="$(run_guest 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null || true)"
+            if [[ -n "${after_boot}" && "${after_boot}" != "${before_boot}" ]]; then
+                printf '%s\n' "${after_boot}" >"${ARTIFACT_DIR}/after-reboot-id.txt"
+                rebooted=true
+                break
+            fi
+        done
+        if [[ "${rebooted}" != true ]]; then
+            fail "A changed kernel boot ID was not observed after reboot."
+        fi
+        run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/after-reboot-status.json"
+        jq -e --arg digest "${expected_digest}" '.status.booted.image.imageDigest == $digest' \
+            "${ARTIFACT_DIR}/after-reboot-status.json" >/dev/null \
+            || fail "Acceptance digest changed during the persistence reboot."
+        if ! run_guest 'env OMARCHY_ACCEPTANCE_DIR="$HOME/acceptance-receipts/native" timeout 5m bash "$HOME/guest-native-acceptance.sh" verify' \
+            2>&1 | tee "${ARTIFACT_DIR}/native-after-reboot.log"; then
+            acceptance_status=1
+        fi
+    else
+        acceptance_status=1
+    fi
+fi
 
 capture_host_diagnostics
 capture_guest_diagnostics
-echo "VM smoke test passed."
+((acceptance_status == 0)) || fail "One or more graphical/native acceptance checks failed; inspect individual receipts."
+echo "Requested first-boot/runtime checks passed. A/B rollback and Dakota round-trip still require separate evidence."

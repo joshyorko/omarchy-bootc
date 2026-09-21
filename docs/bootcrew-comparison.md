@@ -1,31 +1,35 @@
-# bootcrew reference comparison (Arch bootc)
+# Bootcrew mono construction reference
 
-Summary of how bootcrew ships real `bootc` on Arch and how this repository differs.
+## Decision
 
-## How bootcrew delivers bootc on Arch
+Bootcrew mono is the source reference for Arch-on-bootc construction. Its published rolling image is neither the final base nor package authority for Omarchy Quattro.
 
-- Builds `bootc` from source inside the image build: installs `make git rust go-md2man`, clones `bootc-dev/bootc`, and `make -C ... bin install-all` (bootcrew/arch-bootc `Containerfile`; same flow split into builder stage in `bootcrew/mono/arch/Containerfile` + `shared/build.sh`).
-- Configures initramfs for bootc: writes dracut drop-ins to add the `bootc` module and rebuilds initramfs during the image build (`bootcrew/arch-bootc: dracut.conf.d/30-bootcrew-*.conf` + `dracut --force`; `bootcrew/mono/shared/initramfs.sh`).
-- Prepares the sysroot for bootc/composefs: relocates `/var` content under `/usr/lib/sysimage`, rewrites pacman DB paths, sets HOME to `/var/home`, adds tmpfiles entries, enables composefs/readonly sysroot via `prepare-root.conf`, and prunes legacy mutable dirs (`bootcrew/arch-bootc Containerfile`; `bootcrew/mono/shared/bootc-rootfs.sh`).
-- Ships boot-critical tooling directly in the image: `base`, `dracut`, kernel, `ostree`, `skopeo`, `podman`, filesystems, etc.; then runs `bootc container lint` and sets `LABEL containers.bootc 1` (arch-bootc Containerfile; mono arch Containerfile).
-- Bootable image generation uses bootc itself: `just generate-bootable-image` runs `bootc install ... --composefs-backend --via-loopback` on the built image (bootcrew/arch-bootc `Justfile`).
+The build starts from an empty root resolved entirely against Omarchy stable, then applies the construction reviewed at `bootcrew/mono` commit `5f048fa65a94daefc814d3cdd941d8d1e113c09e`.
 
-## How omarchy-bootc differs today
+## Construction retained
 
-- bootc is built from source in-image (default `BOOTC_REF=v1.13.0`), dracut drop-ins add the `bootc` module, and initramfs is rebuilt during the image build.
-- Sysroot/pacman layout matches bootcrew: `/usr/lib/sysimage` pacman paths, `/var` as mutable prefix, `HOME=/var/home`, composefs enabled via `prepare-root.conf`, tmpfiles for mutable dirs.
-- `bootc container lint` and `containers.bootc=1` label are now applied.
-- Primary qcow2 path uses `bootc install --composefs-backend --via-loopback` (raw then qcow2 via `qemu-img`); legacy bootc-image-builder remains as `build-qcow2-bib`.
-- Omarchy desktop/session customizations remain on top of the bootcrew-aligned bootc base.
+- Relocate pacman-managed mutable state beneath `/usr/lib/sysimage`.
+- Install the bootc runtime, kernel, dracut, OSTree, filesystem tooling, and boot-critical services from the same Omarchy-stable package universe.
+- Generate a reproducible non-host-only dracut initramfs with the bootc module.
+- Establish Bootcrew's `/usr` and `/var` filesystem model, including `/usr/local -> ../var/usrlocal`.
+- Enable composefs and a read-only sysroot.
+- Create the mutable-directory tmpfiles contract.
+- Run fatal `bootc container lint` before layering Quattro.
 
-## What blocks real bootc integration here
+The reviewed source files, origin metadata, upstream checksums, and exact consumed checksums live under `vendor/bootcrew/`.
 
-- Coverage for bootc lifecycle (upgrade/rebase/rollback) on Arch remains missing.
-- Host dependency on `qemu-img` for qcow2 conversion after `bootc install` (raw output is first-class).
-- Validation across host/container runtimes for the new bootc install-to-disk path still needs to be broadened.
+## Deliberate source delta
 
-## Smallest next step to align safely
+Upstream Bootcrew's `shared/build.sh` clones the default bootc branch. This repository replaces only that source acquisition with a shallow fetch of bootc commit `3e76c16556c55e6d15d31bd47602b231e2131cb2` from `https://github.com/bootc-dev/bootc.git`, detaches at the fetched commit, and verifies `HEAD` exactly before building.
 
-- Add automated bootc lifecycle tests (rebase/rollback) against the composefs/ostree sysroot.
-- Track and periodically refresh the pinned `BOOTC_REF` while keeping lint/install runs green.
-- Decide when to retire the bootc-image-builder fallback once the native bootc install path is stable in CI.
+The delta is recorded in `vendor/bootcrew/README.md`. It is required by the source-pin contract and is not an Omarchy adaptation.
+
+## Package-authority difference
+
+Bootcrew's rolling image resolves against its current Arch repositories. The Quattro image cannot inherit that package state because Omarchy stable may intentionally lag current Arch as one internally consistent repository snapshot.
+
+This repository therefore uses a digest-pinned current Arch image only as a disposable pacman executable. Pacman populates `/stable-root` from Omarchy stable before any Bootcrew construction step runs. No package file from the disposable image enters the final root, and no downgrade transaction repairs a mixed root afterward.
+
+## Refresh rule
+
+A Bootcrew refresh must update the source revision, vendored files, upstream and consumed checksums, Containerfile argument, executable contract, OCI source records, and full foundation build together. A bootc refresh must likewise update its exact commit, version evidence, source record, contract, and assembled-image verification together.

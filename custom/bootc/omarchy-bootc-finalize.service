@@ -1,0 +1,9 @@
+[Unit]
+Description=Finalize an Omarchy bootc update after login
+After=graphical-session.target
+Wants=graphical-session.target
+ConditionPathExists=%h/.local/state/omarchy-bootc/pending-update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/omarchy-bootc-finalize

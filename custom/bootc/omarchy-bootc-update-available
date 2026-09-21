@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bootc --check is the only availability probe. The status JSON is used for
+# the result; human bootc output is never scraped.
+# shellcheck disable=SC1091
+source /usr/lib/omarchy-bootc/update-common.sh
+
+if ! run_as_root "$OMARCHY_BOOTC_BIN" upgrade --check >/dev/null 2>&1; then
+    echo 'Omarchy image is up to date'
+    exit 1
+fi
+
+if status_update_available; then
+    booted="$(status_booted_digest)"
+    staged="$(status_staged_digest)"
+    printf 'bootc image update available (current=%s candidate=%s)\n' "${booted:-unknown}" "${staged:-unknown}"
+    exit 0
+fi
+
+echo 'Omarchy image is up to date'
+exit 1

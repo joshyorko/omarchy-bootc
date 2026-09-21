@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This is the bootc replacement for upstream's pacman-backed omarchy update
+# entry point. It stages an image only; migrations are intentionally deferred
+# The concrete commands are `bootc upgrade --check` and `bootc upgrade`.
+# until the first login on the deployment that booted the staged digest.
+# shellcheck disable=SC1091
+source /usr/lib/omarchy-bootc/update-common.sh
+
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then
+    cat <<'EOF'
+Usage: omarchy update [-y]
+
+Stage the next image from the configured bootc stream and reboot to apply it.
+Per-user Omarchy migrations run after login on the new deployment.
+EOF
+    exit 0
+fi
+
+for arg in "$@"; do
+    [[ "$arg" == -y ]] || {
+        echo "omarchy update: unsupported option ${arg}; only -y is accepted" >&2
+        exit 2
+    }
+done
+
+lock_root="${XDG_RUNTIME_DIR:-/tmp}"
+install -d -m 0700 "$lock_root"
+exec 9>"${lock_root}/omarchy-update.lock"
+flock -n 9 || {
+    echo 'Another Omarchy update is already running.' >&2
+    exit 1
+}
+
+if ! run_as_root "$OMARCHY_BOOTC_BIN" upgrade --check >/dev/null 2>&1; then
+    echo 'Omarchy image is already up to date.'
+    exit 0
+fi
+
+# Never call pacman or snapshot tools here: bootc owns the deployment and
+# rollback boundary on this image.
+run_as_root "$OMARCHY_BOOTC_BIN" upgrade
+status="$(bootc_status_json)"
+expected="$(status_staged_digest <<<"$status")"
+[[ "$expected" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+    echo 'bootc staged an update but did not expose an exact candidate digest' >&2
+    exit 1
+}
+
+user_home="${HOME:-/root}"
+if [[ -n "${SUDO_USER:-}" ]]; then
+    user_home="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+fi
+[[ -n "$user_home" && -d "$user_home" ]] || user_home=/root
+pending_dir="${user_home}/.local/state/omarchy-bootc"
+install -d -m 0700 "$pending_dir"
+printf 'tracking_ref=%s\nexpected_digest=%s\n' \
+    "${OMARCHY_BOOTC_TRACKING_REF:-ghcr.io/joshyorko/omarchy-bootc:testing}" \
+    "$expected" >"${pending_dir}/pending-update"
+chmod 0600 "${pending_dir}/pending-update"
+
+printf 'status=staged\ntracking_ref=%s\nexpected_digest=%s\nreboot_required=yes\n' \
+    "${OMARCHY_BOOTC_TRACKING_REF:-ghcr.io/joshyorko/omarchy-bootc:testing}" "$expected"
+echo 'Reboot to apply the staged deployment; migrations will run after login.'

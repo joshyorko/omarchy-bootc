@@ -104,18 +104,11 @@ EOT
 
 echo "::endgroup::"
 
-echo "::group:: Create default POC user"
+echo "::group:: Configure wheel policy"
 
-# Explicit VM login user for POC smoke tests.
-# Credentials are intentionally simple for local VM bring-up only.
-# Username: omarchy
-# Password: omarchy
-# Note: avoid optional groups that may not exist in minimal images (e.g. podman).
-if ! id -u omarchy >/dev/null 2>&1; then
-    useradd -m -G wheel,video,audio,input,network -s /bin/bash omarchy
-    echo 'omarchy:omarchy' | chpasswd
-fi
-
+# Human accounts are created by the upstream ISO installer or by the bounded
+# cross-distro adoption service.  No default account or password belongs in
+# the publishable image.
 mkdir -p /etc/sudoers.d
 cat > /etc/sudoers.d/10-omarchy-wheel <<'EOT'
 %wheel ALL=(ALL:ALL) ALL

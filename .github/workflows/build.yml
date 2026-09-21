@@ -5,8 +5,6 @@ on:
   pull_request:
     branches:
       - main
-  schedule:
-    - cron: '05 10 * * *'   # 10:05 UTC daily
   push:
     branches:
       - main
@@ -31,11 +29,11 @@ on:
         type: string
 
 env:
-  IMAGE_DESC: "Unofficial Arch-based bootc Omarchy POC image"
+  IMAGE_DESC: "Omarchy Quattro bootc candidate image"
   IMAGE_KEYWORDS: "bootc,arch,hyprland,omarchy,immutable"
   IMAGE_NAME: "${{ github.event.repository.name }}"
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
-  DEFAULT_TAG: "stable"
+  DEFAULT_TAG: "testing"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -66,6 +64,10 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Validate contracts
+        run: |
+          bash tests/test-quattro-source-contract.sh
+          bash tests/test-transition-contract.sh
 
       # Free up space on the runner — Arch images can be large.
       # Uncomment if builds exceed runner disk limits.
@@ -124,6 +126,8 @@ jobs:
           tags: ${{ env.DEFAULT_TAG }}
           labels: ${{ steps.metadata.outputs.labels }}
           oci: false
+      - name: Fatal bootc container lint
+        run: podman run --rm --privileged "${IMAGE_NAME}:${DEFAULT_TAG}" bootc container lint --fatal-warnings
 
 
       - name: Install VM smoke test dependencies

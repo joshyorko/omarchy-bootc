@@ -1,147 +1,102 @@
-# omarchy-bootc
+# Omarchy Quattro on bootc
 
-An **Arch Linux**-based [bootc](https://github.com/bootc-dev/bootc) technical proof-of-concept for an
-Omarchy-aligned immutable desktop image.
+This repository builds the official Omarchy Quattro userspace and desktop as an Arch bootc OCI image.
 
-## Current POC scope
+## Architecture
 
-Implemented in this repository:
+- Omarchy stable owns the complete Arch `core`, `extra`, `multilib`, and `omarchy` package universe.
+- The final root starts empty and is populated with pacman against the official Omarchy stable topology.
+- Bootcrew mono supplies the reviewed Arch-on-bootc construction and filesystem semantics, not a package payload or final base image.
+- Bootc owns deployments, the boot filesystem, initramfs, image upgrades, and rollback.
+- Official `omarchy`, `omarchy-settings`, package manifests, commands, themes, configs, shell, and desktop payloads are installed without local replacements.
 
-- OCI build on `archlinux:base` using layered scripts in `build/`.
-- qcow2 generation path via native `bootc install to-disk`, with `bootc-image-builder` kept as the fallback path.
-- Omarchy-style Arch VM session path (`greetd` + `agreety` + `Hyprland`) remains the active focus.
-- Explicit VM login path: `greetd + agreety + Hyprland`.
-- Explicit default POC user: `omarchy` / `omarchy` (documented insecure default for local VM testing).
-- One-shot root first-boot setup that seeds starter user config and marks completion.
-- Imported Omarchy-inspired desktop defaults for:
-  - Hyprland modular config (`~/.config/hypr/*`)
-  - Waybar defaults
-  - Wofi launcher defaults
-  - Mako notification defaults
-  - Lock/screenshot keybindings (`swaylock`, `grim`, `slurp`, `wl-clipboard`)
+The build never inherits Bootcrew's published rolling image and never downgrades an already-built Arch root with `pacman -Syyuu`.
 
-Still intentionally out of scope:
+## Pinned construction inputs
 
-- Full Omarchy parity.
-- BuildStream flow.
-- AUR-heavy theming stack and Omarchy helper-script ecosystem.
+- Disposable Arch bootstrap tool: `docker.io/archlinux/archlinux:latest@sha256:0de35fe2ee793494ccfc99b202f6b30215b078baf2b082e9ccb027840c534fc1`
+- Bootcrew mono: `5f048fa65a94daefc814d3cdd941d8d1e113c09e`
+- bootc source: `3e76c16556c55e6d15d31bd47602b231e2131cb2`
+- Omarchy Quattro `4.0.4-1`: `45748a2812f42e32f915b053caf4074e150e2048`
+- Omarchy ISO Quattro reference: `7cfb7111a06873d61c45d37034577d4ba08d3f4f`
+
+The source files under `sources/` are copied into the image provenance. A scheduled/manual tracker compares the pinned Omarchy Quattro revision with the live canonical `quattro` ref and opens one advisory issue; it never repins or publishes an image automatically.
 
 ## Repository layout
 
 ```text
-omarchy-bootc/
-├── build/                              # image build-time scripts
-├── custom/packages/                    # package lists
-├── custom/greetd/config.toml           # greetd/agreety login command
-├── custom/first-boot/omarchy-setup.sh  # root first-boot logic
-├── custom/hypr/                        # staged Hyprland defaults
-├── iso_files/                          # installer hook templates/scripts
-├── .dagger/                            # Dagger pipeline code for validation and ISO builds
-├── systemd/system/omarchy-firstboot.service
-├── image/disk.toml                     # bootc-image-builder config
-├── Justfile
-└── docs/technical-status.md
+Containerfile                         empty-root and image-stage assembly
+build/20-quattro.sh                  official Quattro package closure
+build/25-quattro-user.sh             acceptance-only first-boot fixture
+build/30-bootc-ownership.sh          evidenced lifecycle collision handling
+build/verify-quattro-payload.sh      package ownership and projection proof
+transition/omarchy-transition.sh     source-aware switch preflight and recovery
+custom/first-boot/omarchy-adopt-existing-user.sh  bounded persistent-home adoption
+custom/pacman/                       official stable repository topology
+vendor/bootcrew/                     pinned construction snapshot and metadata
+tests/test-quattro-source-contract.sh executable architecture contract
+docs/installer-parity-contract.md    upstream-Omarchy ISO adapter contract
+docs/transition-contract.md          cross-distro switch and mutable-state contract
 ```
 
-## Prerequisites
+## Local checks
 
-- `podman`
-- `just`
-- `jq`
-- `machinectl` (required when the native disk-image recipes need to copy a rootless-built image into rootful podman)
-- `dagger` (required for local installer ISO builds)
-- `sudo` (for rootful bootc-image-builder)
-- `/dev/kvm` for practical VM boot testing
+Run repository-native checks on the Bluefin host; the image build itself runs in Podman and does not layer development packages onto the host.
 
-Run `just validate` before build.
-Run `just validate-dagger` when you want the repo syntax checks executed inside the Dagger pipeline.
-After editing `.dagger/main.go` or after a fresh Dagger scaffold, run `just dagger-develop` once from a host that can start the Dagger engine. That regenerates the Go SDK support files (`.dagger/internal/**`, `.dagger/dagger.gen.go`, `go.sum`) expected by Dagger's Go module layout.
+Required tools for the local paths include `podman`, `just`, and `jq`; `machinectl`, `dagger`, `sudo`, `qemu-img`, and `/dev/kvm` are needed only for their respective disk-image, installer, or VM paths.
 
-## Local build + VM smoke test
+Run `just validate` before a build. Run `just test-contract` and `just test-transition` for the source and transition contracts. Run `just validate-dagger` when Dagger validation is requested.
+
+For local installer testing, keep the disk-image and installer flows separate. After Dagger SDK setup, run:
 
 ```bash
-# 1) Build local OCI image (tag/ref used by all recipes)
-just build
-
-# 2) Convert to qcow2
-just build-qcow2
-
-# 3) Boot VM
-just run-vm
-```
-
-> Default qcow2 generation uses `bootc install --composefs-backend --via-loopback` and requires host `qemu-img` plus `--privileged` podman. Use `just build-qcow2-bib` if you need the legacy bootc-image-builder path.
-> The native disk-image recipes copy the locally-built image into rootful podman and export an OCI directory source before `bootc install to-disk`, which avoids the rootful `containers-storage:` reopen failure when the build itself ran rootless.
-
-## CI installer ISO workflow
-
-Installer media now follows the Dudley-style flow shape: build and publish the container image first, then build the ISO from the published tag only when you ask for it.
-
-- `build-iso.yml` is manual-only and defaults to `stable`
-- `build.yml` exposes a `build_iso` toggle on manual dispatch; it defaults to `false`
-- `build.yml` also exposes a manual-only `run_vm_smoke` toggle for the expensive qcow2 + headless QEMU smoke path
-- the ISO workflow uses `ublue-os/titanoboa`, but the live installer rootfs is a Fedora-based Bluefin image while the installed target is `ghcr.io/joshyorko/omarchy-bootc:<tag>`
-
-That split matters here because Titanoboa’s live rootfs still expects Fedora tooling, while the installed system remains the Arch-based omarchy bootc image.
-
-For local installer testing, keep the disk-image and installer flows separate. The ISO build is Dagger-owned locally and in CI:
-
-```bash
-# One-time after Dagger module edits or fresh checkout if generated SDK files are missing.
 just dagger-develop
-
-# Build the installer ISO into output/iso/.
 just build-iso-local
-
-# Boot the newest output/*.iso through the same browser VM UI as just run-vm.
 just run-installer-iso
 ```
 
-`just run-vm` boots an already-installed qcow2 image. `just run-installer-iso` boots installer media and should land in the Anaconda-based installer session.
-By default the ISO installs `ghcr.io/joshyorko/omarchy-bootc:stable`; pass a full image ref to test another registry/tag:
-
 ```bash
-just build-iso-local stable ghcr.io/joshyorko/omarchy-bootc:some-test-tag
+just test-contract
+just test-transition
+just validate
+just lint
+just build
 ```
 
-### Login/session path in VM
+For the legacy direct disk-image path:
 
-1. At the `agreety` prompt, log in as:
-   - user: `omarchy`
-   - password: `omarchy`
-2. Session command is preconfigured to start `Hyprland`.
-3. Verify first boot completed:
-   ```bash
-   test -f /var/lib/omarchy/.firstboot-done && echo OK
-   ```
-4. Verify starter config seeded:
-   ```bash
-   ls ~/.config/hypr ~/.config/waybar ~/.config/wofi ~/.config/mako
-   ```
+```bash
+just build-qcow2
+just run-vm
+```
 
-> ⚠️ The default `omarchy/omarchy` credential is for first local VM bring-up only.
-> Change it immediately in any persistent environment.
+`just validate` reports whether KVM is available. Software emulation is possible but is not equivalent evidence for final desktop acceptance.
 
-## Boot assumptions / known blockers
+## Publishable and acceptance images
 
-The image now includes explicit boot-critical packages (`linux`, `dracut`, `kmod`, `btrfs-progs`) and a minimal VM graphics stack (`mesa`, `vulkan-virtio`, `libinput`). `bootc` is built from source during the image build with dracut drop-ins, and the sysroot is prepared for composefs/ostree (`HOME=/var/home`).
+The publishable `final` target contains no default user, known password, or passwordless sudo rule. Test credentials exist only in the non-publishable `acceptance` target. On the installed VM, its first-boot fixture creates the user after official `/etc/skel` exists and invokes package-owned `omarchy-provision-user --first-install`.
 
-Remaining assumptions to validate in real VM boots:
+No release claim is made until the OCI passes fatal `bootc container lint`, installs to disk, reaches official SDDM and the official Quattro Hyprland/Quickshell session, passes desktop behavior checks, and completes a two-image bootc upgrade and rollback cycle.
 
-- `bootc install to-disk` (used by `just build-qcow2` / CI smoke) remains reliable across host environments once the rootful image handoff is in place; qcow2 conversion requires `qemu-img`.
-- `bootc` lifecycle operations (upgrade/rebase/rollback) on this Arch-based image still need broader validation.
-- `bootc-image-builder` remains available as a fallback path via `just build-qcow2-bib`.
-- Hyprland compositor behavior in a virtualized GPU environment is host/hypervisor dependent.
+## Cross-distro bootc switch
 
-See `docs/bootc-delivery-options.md` for current Arch bootc delivery options and the recommended path forward (now implemented via source build).
-See `docs/bootcrew-comparison.md` for how bootcrew’s Arch bootc images differ and what remains to align.
+Cross-distro switching is a separate state transition, not a raw image swap. The supported source profiles are current Project Bluefin Dakota, Dudley Dakota, Bluefin, and existing Omarchy bootc. Inspect the source before preflight:
 
-## Notes
+```bash
+sudo ./transition/omarchy-transition.sh inspect-source
+sudo ./transition/omarchy-transition.sh preflight ghcr.io/joshyorko/omarchy-bootc:testing
+sudo ./transition/omarchy-transition.sh capture-state
+sudo ./transition/omarchy-transition.sh backup
+sudo ./transition/omarchy-transition.sh apply --confirm ghcr.io/joshyorko/omarchy-bootc:testing
+```
 
-- This remains a technical POC for an Omarchy-style Arch image.
-- bootc is shipped from source inside the image; keep validating the bootc/composefs flow over time.
-- Immediate objective is to keep the image building while preserving the first VM login/session path and the bootc install-to-disk smoke path.
-- Desktop defaults are now intentionally Omarchy-inspired but trimmed to the current package set and no-AUR policy.
-- See `docs/technical-status.md` for what is working, what is assumed, and what is deferred.
-- Current CI focus: keep image builds green by default while preserving VM smoke validation as an explicit manual dispatch option.
-- Next milestone remains: validate the first installer ISO end to end, then decide whether the manual VM smoke path is still worth maintaining.
+Reboot after the explicit `bootc switch`. On first Quattro boot, an existing `/var/home` user enters the bounded adoption service. Fresh ISO installs write an installer-origin marker and stay on the upstream Omarchy provisioning path. Use `sudo omarchy-adoption-rollback` only when intentionally recovering the mutable user-state transition; it preserves post-adoption files separately because bootc rollback does not roll back `/var/home`. Unknown source systems are refused. See [the transition contract](docs/transition-contract.md).
+
+## Installer boundary
+
+Existing Dudley, Dakota, and Bluefin installer variants remain independent and keep their prescribed implementations. The future Quattro ISO path belongs in `dudley-iso` as an additive variant based on pinned `omacom-io/omarchy-iso`.
+
+That adapter preserves the official configurator, storage/encryption UX, dashboard, provisioning, SDDM setup, and upstream acceptance harness. It replaces only pacstrap/Limine/mutable-root deployment with `bootc install to-filesystem` and bootc finalization. See [the installer parity contract](docs/installer-parity-contract.md).
+## Update boundary
+
+`omarchy update` and `omarchy-update-available` use `bootc upgrade --check` and `bootc upgrade` against `ghcr.io/joshyorko/omarchy-bootc:testing`; they never run live `pacman -Syu`. The update is staged, then the rebooted deployment verifies its exact digest before running `omarchy-migrate` and the post-update hook. No `:stable` stream is published by this repository.

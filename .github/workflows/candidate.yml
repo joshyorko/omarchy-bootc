@@ -1,0 +1,115 @@
+name: Build Quattro candidate OCI archive
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  candidate:
+    name: Build exact-head candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout exact pull request head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Validate source contracts
+        run: |
+          bash tests/test-quattro-source-contract.sh
+          bash tests/test-transition-contract.sh
+
+      # The final image is large; use the runner's expanded container store when available.
+      - name: Mount container storage
+        uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140 # main
+        continue-on-error: true
+        with:
+          target-dir: /var/lib/containers
+          mount-opts: compress-force=zstd:2
+
+      - name: Probe runner and rootful Podman
+        env:
+          CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
+          CANDIDATE_IMAGE_REF: localhost/omarchy-bootc:candidate
+        run: ./scripts/ci/candidate-build.sh preflight
+
+      - name: Check the published optional package graph before compiling bootc
+        run: timeout --signal=TERM --kill-after=30s 5m ./scripts/ci/candidate-build.sh packages
+
+      - name: Build, lint, and export candidate
+        env:
+          CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
+          CANDIDATE_IMAGE_REF: localhost/omarchy-bootc:candidate
+        run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh build
+
+      - name: Upload bounded candidate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-bootc-candidate-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/omarchy-bootc-candidate/logs
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload candidate OCI archive and receipt
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-bootc-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/omarchy-bootc-candidate/*.oci.tar
+            ${{ runner.temp }}/omarchy-bootc-candidate/*.receipt.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  runtime:
+    name: Boot the accepted candidate with a disposable acceptance overlay
+    needs: candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact pull request head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Prepare storage for the archive, imported image, and VM disk
+        uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140 # main
+        continue-on-error: true
+        with:
+          target-dir: /var/lib/containers
+          mount-opts: compress-force=zstd:2
+      - name: Download the one built candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: omarchy-bootc-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/candidate
+      - name: Install hosted VM dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ovmf qemu-system-x86 qemu-utils sshpass
+      - name: Verify artifact identity and boot
+        env:
+          CI_ARTIFACT_DIR: ${{ runner.temp }}/runtime-receipts
+        run: bash scripts/ci/candidate-runtime.sh "$RUNNER_TEMP/candidate"
+      - name: Upload runtime receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-bootc-runtime-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/runtime-receipts
+          retention-days: 7
+          if-no-files-found: warn

@@ -1,55 +1,30 @@
-# bootc delivery on Arch (research note)
+# bootc delivery on Omarchy-stable Arch
 
-_Last updated: 2026-03-23_
+_Last updated: 2026-08-26_
 
-## Current state
+## Architecture of record
 
-- bootc is built from upstream source during the image build (pinned via `BOOTC_REF`, default `v1.13.0`), and `bootc container lint` now runs in the image build.
-- Pacman/sysroot layout is shifted under `/usr/lib/sysimage`, composefs/ostree is enabled, and dracut is rebuilt with the bootc module.
-- qcow2/raw output is produced via `bootc install --composefs-backend --via-loopback`; bootc-image-builder remains available as a fallback (`build-qcow2-bib`).
+Bootc v1.16.10 is built inside the Omarchy-stable root from exact upstream commit `3e76c16556c55e6d15d31bd47602b231e2131cb2`.
 
-## Candidate delivery options
+The source URL, revision, exact fetch, commit-identity check, OCI label, and in-image source record are executable parts of the build contract. An unpinned clone or moving tag is not accepted.
 
-1) **Official Arch package (none today)**
-   - Maintainability: best once available; no custom packaging.
-   - CI complexity: low; normal pacman install.
-   - Reproducibility: good if pinned to repo snapshot/mirror.
-   - Fit: ideal, but blocked until Arch ships bootc.
+## Why source build remains correct
 
-2) **Build from AUR PKGBUILD (bootc / bootc-git / bootc-git-composefs)**【3:0†source】【3:3†source】【3:5†source】
-   - Maintainability: medium; need to track PKGBUILD updates and upstream deps.
-   - CI complexity: medium/high; add base-devel, build-time deps, and caching to keep builds tolerable.
-   - Reproducibility: moderate; PKGBUILD churn and VCS sources mean we must pin versions/digests.
-   - Fit: plausible for this repo if we control the PKGBUILD revision and build artifacts.
+- Omarchy stable does not currently provide the required bootc binary as part of its authoritative package universe.
+- Building inside the stable root links against the same stable runtime dependency set shipped in the final OCI.
+- The exact commit is independently reviewable and reproducible without importing a third-party Arch package universe.
+- Fatal `bootc container lint`, install-to-disk proof, and lifecycle acceptance validate the resulting binary in the assembled image.
 
-3) **Consume third-party binary repo (e.g., Chaotic-AUR bootc)**【3:2†source】
-   - Maintainability: low effort but external trust/supply-chain risk.
-   - CI complexity: low; add repo entry + key.
-   - Reproducibility: weaker; repo content may roll without notice.
-   - Fit: acceptable only for quick experiments; not great for long-lived images.
+## Rejected delivery paths
 
-4) **Vendored upstream binary (ship tarball in tree or fetch in build)**
-   - Maintainability: low/medium; manual updates and dependency drift to manage.
-   - CI complexity: medium; need checksum pinning and dependency installs.
-   - Reproducibility: good if checksums are pinned, but packaging hygiene must be enforced.
-   - Fit: workable stopgap; bypasses pacman ownership and update flow unless wrapped as a package.
+- A rolling Bootcrew image would import a different Arch package universe before Quattro is installed.
+- An unpinned upstream clone would make identical Containerfile inputs resolve to different bootc code.
+- A bulk pacman downgrade would leave a difficult-to-audit mixed construction history.
+- A third-party binary repository would add another package authority to the image.
+- A locally published bootc package repository is unnecessary until repeated source builds demonstrate a concrete operational problem.
 
-5) **Self-maintained pacman repo for bootc (recommended)**
-   - Maintainability: medium; we own a PKGBUILD (possibly derived from AUR) and bump it when upstream releases.
-   - CI complexity: medium; add a dedicated CI job to build bootc, sign artifacts, and publish to a small repo (GitHub Releases/pages/S3).
-   - Reproducibility: strong; pin upstream source/version and publish signed packages with checksums.
-   - Fit: best balance for this repo—keeps the main image build stable while providing a controlled bootc package once validated.
+## Future refresh
 
-## Recommendation
+Update bootc only as a source-pinned change with the revision metadata and contract in the same patch. The release gate remains: stable-root package closure, zero pending stable updates, exact source labels, fatal lint, bootc disk installation, and upgrade/rollback acceptance.
 
-- Continue pinning upstream bootc via `BOOTC_REF`, keep `bootc container lint` green, and consider moving to a self-maintained pacman repo once the source build is stable in CI.
-
-## Do not do yet
-
-- Do not switch the image build to a third-party binary repo by default.
-- Do not add installer/BuildStream work in this spike.
-- Do not assume Arch will ship a bootc package soon; keep the pinned source build path maintained.
-
-## Smallest next step (safe experiment)
-
-- Add automated coverage for `bootc` upgrade/rebase/rollback on the composefs sysroot and evaluate whether a self-maintained pacman package would simplify long-term maintenance.
+The future Omarchy ISO adapter uses `bootc install to-filesystem` because the upstream installer already owns storage and encryption UX. That installer contract is separate from how the bootc binary is delivered inside the OCI; see `docs/installer-parity-contract.md`.

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+    update|up)
+        shift
+        exec /usr/lib/omarchy-bootc/omarchy-bootc-update "$@"
+        ;;
+    *)
+        exec /usr/bin/omarchy "$@"
+        ;;
+esac
