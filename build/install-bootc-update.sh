@@ -3,7 +3,7 @@ set -euo pipefail
 
 ctx=/ctx/custom/bootc
 lib=/usr/lib/omarchy-bootc
-install -d -m 0755 "$lib" /usr/libexec /usr/local/bin /usr/lib/systemd/user /etc/systemd/user/graphical-session.target.wants
+install -d -m 0755 "$lib" /usr/libexec /var/usrlocal/bin /usr/lib/systemd/user /etc/systemd/user/graphical-session.target.wants
 
 for file in omarchy-bootc-common.sh omarchy-bootc-update omarchy-bootc-update-available; do
     install -m 0755 "$ctx/$file" "$lib/${file/omarchy-bootc-common.sh/update-common.sh}"
