@@ -16,8 +16,16 @@ verify_optional_resolution_report() {
     local report="${1:?optional resolution report path is required}"
     local resolved_count
 
-    [[ -s "${report}" ]] || return 1
+    [[ -s "${report}" ]] || {
+        printf 'Missing or empty optional package resolution report: %s\n' "${report}" >&2
+        return 1
+    }
     if grep -q '^unresolved ' "${report}"; then
+        printf 'Authoritative optional packages could not be resolved:\n' >&2
+        awk '
+            /^(resolvable|unresolved) / { failed = ($1 == "unresolved") }
+            failed && lines++ < 80 { print }
+        ' "${report}" >&2
         return 1
     fi
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'printf "Quattro assembly failed at line %s: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 # shellcheck disable=SC1091
 source /ctx/build/lib/quattro-packages.sh

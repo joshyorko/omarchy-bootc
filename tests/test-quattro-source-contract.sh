@@ -347,9 +347,11 @@ printf '%s\n' \
     'unresolved linux-t2' \
     'error: target not found: linux-t2' \
     >"${fixture_dir}/optional-resolution"
-if verify_optional_resolution_report "${fixture_dir}/optional-resolution"; then
+if verify_optional_resolution_report "${fixture_dir}/optional-resolution" 2>"${fixture_dir}/optional-error"; then
     fail 'optional resolver accepted an unresolved authoritative package'
 fi
+grep -Fq 'unresolved linux-t2' "${fixture_dir}/optional-error" \
+    || fail 'optional resolver hid the failed package from build logs'
 
 printf '%s\n' \
     'resolvable hyprland' \

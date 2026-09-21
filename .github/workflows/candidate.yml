@@ -44,6 +44,9 @@ jobs:
           CANDIDATE_IMAGE_REF: localhost/omarchy-bootc:candidate
         run: ./scripts/ci/candidate-build.sh preflight
 
+      - name: Check the published optional package graph before compiling bootc
+        run: timeout --signal=TERM --kill-after=30s 5m ./scripts/ci/candidate-build.sh packages
+
       - name: Build, lint, and export candidate
         env:
           CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
@@ -104,4 +107,3 @@ jobs:
           path: ${{ runner.temp }}/runtime-receipts
           retention-days: 7
           if-no-files-found: warn
-

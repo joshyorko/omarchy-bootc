@@ -234,11 +234,21 @@ case "${1:-}" in
     preflight)
         preflight
         ;;
+    packages)
+        printf 'source_head=%s\n' "$(git -C "${ROOT_DIR}" rev-parse HEAD)" \
+            >"${LOG_DIR}/package-subject.txt"
+        run_logged package-preflight sudo -n podman run --rm --pull=missing \
+            -v "${ROOT_DIR}/build:/ctx/build:ro" \
+            -v "${ROOT_DIR}/custom/pacman:/ctx/custom/pacman:ro" \
+            -v "${ROOT_DIR}/sources:/ctx/sources:ro" \
+            -v "${ROOT_DIR}/scripts/ci/check-published-packages.sh:/ctx/check.sh:ro" \
+            "$(read_arg ARCH_BOOTSTRAP_REF)" bash /ctx/check.sh
+        ;;
     build)
         build_candidate
         ;;
     *)
-        echo "Usage: $0 {preflight|build}" >&2
+        echo "Usage: $0 {preflight|packages|build}" >&2
         exit 2
         ;;
 esac
