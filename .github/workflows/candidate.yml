@@ -78,7 +78,7 @@ jobs:
     name: Boot the accepted candidate with a disposable acceptance overlay
     needs: candidate
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -86,6 +86,12 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Prepare storage for the archive, imported image, and VM disk
+        uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140 # main
+        continue-on-error: true
+        with:
+          target-dir: /var/lib/containers
+          mount-opts: compress-force=zstd:2
       - name: Download the one built candidate
         uses: actions/download-artifact@v4
         with:

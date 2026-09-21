@@ -21,6 +21,7 @@ SSH_OPTS=(
     -o StrictHostKeyChecking=no
     -o UserKnownHostsFile=/dev/null
     -o ConnectTimeout=3
+    -o LogLevel=ERROR
     -p "${SSH_PORT}"
 )
 OVMF_CODE_PATH=""
@@ -127,7 +128,10 @@ capture_guest_diagnostics() {
     write_artifact guest-sddm-status.txt run_guest 'systemctl status sddm --no-pager --full'
     write_artifact guest-sshd-status.txt run_guest 'systemctl status sshd --no-pager --full'
     write_artifact guest-journal.txt run_guest 'journalctl -b --no-pager'
-    write_artifact guest-bootc-status.json run_guest 'sudo -n bootc status --format=json'
+    run_guest 'sudo -n bootc status --format=json' \
+        >"${ARTIFACT_DIR}/guest-bootc-status.json" 2>"${ARTIFACT_DIR}/guest-bootc-status.stderr" || true
+    run_guest 'test ! -d "$HOME/acceptance-receipts" || tar -C "$HOME" -czf - acceptance-receipts' \
+        >"${ARTIFACT_DIR}/guest-acceptance-receipts.tar.gz" 2>"${ARTIFACT_DIR}/guest-acceptance-receipts.stderr" || true
     write_artifact guest-firstboot.txt run_guest 'systemctl status omarchy-acceptance-firstboot --no-pager --full; ls -l /var/lib/omarchy-acceptance /home/omarchy/.local/state/omarchy/done'
     write_artifact guest-home-config.txt run_guest 'find /home/omarchy/.config -maxdepth 2 -mindepth 1 -type d | sort'
 }
@@ -170,6 +174,7 @@ fail() {
 
 cleanup() {
     capture_host_diagnostics
+    capture_guest_diagnostics
     if [[ -f "${QEMU_PIDFILE}" ]]; then
         kill "$(cat "${QEMU_PIDFILE}")" >/dev/null 2>&1 || true
         rm -f "${QEMU_PIDFILE}"
@@ -202,6 +207,8 @@ echo "::endgroup::"
 echo "::group::Export explicit install source image"
 podman save --format oci-dir --output "${SOURCE_OCI_DIR}" "${IMAGE_REF}" \
     2>&1 | tee "${ARTIFACT_DIR}/source-oci-export.log"
+cp "${SOURCE_OCI_DIR}/index.json" "${ARTIFACT_DIR}/acceptance-oci-index.json"
+expected_digest="$(jq -er '.manifests[0].digest' "${SOURCE_OCI_DIR}/index.json")"
 SOURCE_IMGREF="oci:/data/${SOURCE_OCI_DIR}"
 echo "Using source imgref: ${SOURCE_IMGREF}" | tee "${ARTIFACT_DIR}/source-imgref.txt"
 echo "::endgroup::"
@@ -304,6 +311,61 @@ cmp --silent /usr/share/omarchy/default/wayland-sessions/omarchy.desktop /usr/sh
 [[ -d /usr/share/omarchy/themes ]]' || fail "In-VM runtime checks failed."
 echo "::endgroup::"
 
+run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/first-boot-status.json"
+jq -e 'type == "object"' "${ARTIFACT_DIR}/first-boot-status.json" >/dev/null
+jq -e --arg digest "${expected_digest}" '.status.booted.image.imageDigest == $digest' \
+    "${ARTIFACT_DIR}/first-boot-status.json" >/dev/null \
+    || fail "Booted acceptance digest differs from the installed OCI manifest."
+
+acceptance_status=0
+if [[ -n "${UPSTREAM_ACCEPTANCE_DIR:-}" ]]; then
+    # scp uses -P rather than ssh's -p. Transfer only tests, never the source .git.
+    sshpass -p omarchy scp -r -P "${SSH_PORT}" \
+        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "${UPSTREAM_ACCEPTANCE_DIR}/test" omarchy@127.0.0.1:upstream-acceptance-test
+    run_guest 'mkdir -p "$HOME/upstream-acceptance/test"; cp -a "$HOME/upstream-acceptance-test/." "$HOME/upstream-acceptance/test/"'
+    if ! run_guest 'env OMARCHY_ACCEPTANCE_DIR="$HOME/acceptance-receipts/upstream" OMARCHY_ACCEPTANCE_TEST_TIMEOUT=120 timeout 20m bash "$HOME/upstream-acceptance/test/acceptance"' \
+        2>&1 | tee "${ARTIFACT_DIR}/upstream-acceptance.log"; then
+        acceptance_status=1
+    fi
+fi
+
+if [[ -n "${NATIVE_ACCEPTANCE_SCRIPT:-}" ]]; then
+    sshpass -p omarchy scp -P "${SSH_PORT}" \
+        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "${NATIVE_ACCEPTANCE_SCRIPT}" omarchy@127.0.0.1:guest-native-acceptance.sh
+    if run_guest 'env OMARCHY_ACCEPTANCE_DIR="$HOME/acceptance-receipts/native" timeout 5m bash "$HOME/guest-native-acceptance.sh" prepare' \
+        2>&1 | tee "${ARTIFACT_DIR}/native-prepare.log"; then
+        before_boot="$(run_guest 'cat /proc/sys/kernel/random/boot_id')"
+        printf '%s\n' "${before_boot}" >"${ARTIFACT_DIR}/before-reboot-id.txt"
+        run_guest 'sudo -n systemctl reboot' || true
+        rebooted=false
+        for _ in $(seq 1 180); do
+            sleep 2
+            after_boot="$(run_guest 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null || true)"
+            if [[ -n "${after_boot}" && "${after_boot}" != "${before_boot}" ]]; then
+                printf '%s\n' "${after_boot}" >"${ARTIFACT_DIR}/after-reboot-id.txt"
+                rebooted=true
+                break
+            fi
+        done
+        if [[ "${rebooted}" != true ]]; then
+            fail "A changed kernel boot ID was not observed after reboot."
+        fi
+        run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/after-reboot-status.json"
+        jq -e --arg digest "${expected_digest}" '.status.booted.image.imageDigest == $digest' \
+            "${ARTIFACT_DIR}/after-reboot-status.json" >/dev/null \
+            || fail "Acceptance digest changed during the persistence reboot."
+        if ! run_guest 'env OMARCHY_ACCEPTANCE_DIR="$HOME/acceptance-receipts/native" timeout 5m bash "$HOME/guest-native-acceptance.sh" verify' \
+            2>&1 | tee "${ARTIFACT_DIR}/native-after-reboot.log"; then
+            acceptance_status=1
+        fi
+    else
+        acceptance_status=1
+    fi
+fi
+
 capture_host_diagnostics
 capture_guest_diagnostics
-echo "First-boot smoke passed. Graphical/product, plugin, and lifecycle gates require separate acceptance."
+((acceptance_status == 0)) || fail "One or more graphical/native acceptance checks failed; inspect individual receipts."
+echo "Requested first-boot/runtime checks passed. A/B rollback and Dakota round-trip still require separate evidence."

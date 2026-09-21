@@ -40,7 +40,20 @@ jq -n --arg head "${head}" --arg parent "${manifest}" \
       scope:"Disposable acceptance child; not the publishable final digest"}' \
     >"${artifact_dir}/runtime-subject.json"
 
+# Fetch only the official acceptance machinery at the accepted source pin.
+upstream_tests="$(mktemp -d)"
+git -C "${upstream_tests}" init -q
+git -C "${upstream_tests}" remote add origin "$(cat sources/omarchy-quattro.source)"
+quattro_revision="$(cat sources/omarchy-quattro.revision)"
+git -C "${upstream_tests}" fetch --depth=1 --filter=blob:none origin "${quattro_revision}"
+[[ "$(git -C "${upstream_tests}" rev-parse FETCH_HEAD)" == "${quattro_revision}" ]]
+git -C "${upstream_tests}" archive FETCH_HEAD test/acceptance test/acceptance.d \
+    | tar -x -C "${upstream_tests}"
+printf '%s\n' "${quattro_revision}" >"${artifact_dir}/upstream-acceptance-revision.txt"
+
 sudo -n env CI_ARTIFACT_DIR="${artifact_dir}" \
-    timeout --signal=TERM --kill-after=30s 30m \
+    UPSTREAM_ACCEPTANCE_DIR="${upstream_tests}" \
+    NATIVE_ACCEPTANCE_SCRIPT="${PWD}/scripts/ci/guest-native-acceptance.sh" \
+    timeout --signal=TERM --kill-after=30s 45m \
     bash scripts/ci/vm-smoke.sh "${overlay}" \
     2>&1 | tee "${artifact_dir}/vm-smoke.log"
