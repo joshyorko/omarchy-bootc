@@ -213,6 +213,8 @@ build_candidate() {
         --arg iso_revision "${iso_revision}" \
         --arg omarchy_version "${omarchy_version}" \
         --arg tracking_ref "${tracking_ref}" \
+        --arg firmware_source "$(cat sources/apple-bcm-firmware.source)" \
+        --arg firmware_sha256 "$(awk 'NR == 1 {print $1}' sources/apple-bcm-firmware.sha256)" \
         --arg lint_result 'passed:bootc container lint --fatal-warnings' \
         '{schema:$schema, repository:$repository, event:$event, source_head:$head,
           image:$image, archive:$archive, archive_sha256:$archive_sha256,
@@ -224,7 +226,8 @@ build_candidate() {
             bootc_source:$bootc_source, bootc_revision:$bootc_revision,
             omarchy_quattro_revision:$quattro_revision,
             omarchy_iso_quattro_revision:$iso_revision,
-            omarchy_version:$omarchy_version, tracking_ref:$tracking_ref}}' \
+            omarchy_version:$omarchy_version, tracking_ref:$tracking_ref,
+            apple_bcm_firmware:{source:$firmware_source, sha256:$firmware_sha256}}}' \
         >"${receipt_path}"
 
     printf 'Candidate archive: %s\nReceipt: %s\n' "${archive_path}" "${receipt_path}"

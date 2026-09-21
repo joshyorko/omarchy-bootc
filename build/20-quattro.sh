@@ -95,12 +95,8 @@ cat "${OPTIONAL_REPOSITORY_CONFIG}" >>"${optional_pacman_config}"
 pacman --config "${optional_pacman_config}" -Sy --noconfirm
 : >"${optional_report}"
 for package in "${other_packages[@]}"; do
-    if resolution="$(pacman --config "${optional_pacman_config}" \
-        -Sp --print-format '%n %v' "${package}" 2>&1)"; then
-        printf 'resolvable %s\n%s\n' "${package}" "${resolution}" >>"${optional_report}"
-    else
-        printf 'unresolved %s\n%s\n' "${package}" "${resolution}" >>"${optional_report}"
-    fi
+    resolve_quattro_optional_package "${optional_pacman_config}" "${package}" \
+        "${optional_report}" /ctx/sources /tmp/optional-archives
 done
 verify_optional_resolution_report "${optional_report}"
 optional_database_path="$(pacman-conf \

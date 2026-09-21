@@ -23,6 +23,7 @@ Bootcrew's published Arch image is not the final base and is not package authori
 - Official `omarchy-keyring`, `omarchy-settings=4.0.4-1`, `omarchy=4.0.4-1`, and the current Quattro `omarchy-base.packages` closure at revision `45748a2812f42e32f915b053caf4074e150e2048`.
 - Dependency-resolution report for `omarchy-other.packages` without installing mutually exclusive hardware stacks.
 - Complete optional dependency resolution using the pinned official ISO's `arch-mact2` repository only in a temporary resolver config; the four-repository foundation remains unchanged.
+- The current `arch-mact2` index omits `apple-bcm-firmware` still required by Omarchy. Resolve the checksum-pinned native `14.0-1` archive from that same configured mirror with `pacman -Up`, recording `resolvable-archive`, URL and checksum distinctly from indexed resolution. No extra repository is added, no hardware package is installed into the base, and the incompatible macOS-volume firmware fetcher is not substituted.
 - Package provenance checks for commands, Quickshell, themes, `/etc/skel`, SDDM, and the canonical session file.
 - One named `/usr/local` bootc projection exception for the package-owned session file, with byte-identity proof.
 - Five observed Limine/mkinitcpio hooks shadowed and three observed snapshot units masked; `kernel-modules-hook` remains enabled and audited.

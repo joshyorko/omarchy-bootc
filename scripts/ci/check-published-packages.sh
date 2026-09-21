@@ -27,11 +27,8 @@ sha256sum /tmp/omarchy-other.packages
 report=/tmp/optional-package-resolvability.txt
 : >"${report}"
 while IFS= read -r package; do
-    if resolution="$(pacman -Sp --print-format '%n %v' "${package}" 2>&1)"; then
-        printf 'resolvable %s\n%s\n' "${package}" "${resolution}" >>"${report}"
-    else
-        printf 'unresolved %s\n%s\n' "${package}" "${resolution}" >>"${report}"
-    fi
+    resolve_quattro_optional_package /etc/pacman.conf "${package}" "${report}" \
+        /ctx/sources /tmp/optional-archives
 done < <(read_quattro_package_manifest /tmp/omarchy-other.packages)
-grep -E '^(resolvable|unresolved) ' "${report}"
+grep -E '^(resolvable|resolvable-archive|unresolved|archive) ' "${report}"
 verify_optional_resolution_report "${report}"

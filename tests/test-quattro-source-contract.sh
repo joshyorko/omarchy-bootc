@@ -362,6 +362,20 @@ printf '%s\n' \
 verify_optional_resolution_report "${fixture_dir}/optional-resolution" \
     || fail 'optional resolver rejected a fully resolved authoritative report'
 
+# A corrupt archived payload must never reach the native package resolver.
+(
+    curl() { printf 'corrupt archive\n' >"${@: -1}"; }
+    pacman() { touch "${fixture_dir}/unexpected-archive-resolution"; }
+    if resolve_archived_apple_firmware "${OPTIONAL_REPOSITORY_CONFIG}" \
+        "${ROOT_DIR}/sources" "${fixture_dir}/archives" 2>"${fixture_dir}/archive-error"; then
+        fail 'archived firmware accepted a checksum mismatch'
+    fi
+    [[ ! -e "${fixture_dir}/unexpected-archive-resolution" ]] \
+        || fail 'unchecked firmware archive reached pacman'
+    grep -Fq 'did NOT match' "${fixture_dir}/archive-error" \
+        || fail 'archive corruption test did not reach the checksum guard'
+)
+
 install -d "${fixture_dir}/pacman/sync"
 touch \
     "${fixture_dir}/pacman/sync/arch-mact2.db" \
