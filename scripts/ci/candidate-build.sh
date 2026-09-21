@@ -178,7 +178,7 @@ build_candidate() {
     run_logged fatal-lint sudo -n podman run --rm --pull=never --privileged "${IMAGE_REF}" bootc container lint --fatal-warnings
 
     image_id="$(sudo -n podman image inspect "${IMAGE_REF}" --format '{{.Id}}')"
-    [[ "${image_id}" =~ ^sha256:[[:xdigit:]]{64}$ ]] || die "image ID is not immutable: ${image_id}"
+    [[ "${image_id}" =~ ^(sha256:)?[[:xdigit:]]{64}$ ]] || die "image ID is not immutable: ${image_id}"
 
     candidate_stem="omarchy-bootc-candidate-head-${head_sha}-quattro-${quattro_revision:0:12}-iso-${iso_revision:0:12}-bootcrew-${bootcrew_revision:0:12}-bootc-${bootc_revision:0:12}"
     archive_path="${ARTIFACT_DIR}/${candidate_stem}.oci.tar"
