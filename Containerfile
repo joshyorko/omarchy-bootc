@@ -9,6 +9,8 @@ ARG BOOTC_VERSION="v1.16.13"
 ARG SELINUX_USERSPACE_VERSION="3.11"
 ARG SELINUX_LIBSEPOL_SHA256="79f3d2c88f44b7eb5cf54d9792e03232297e17f97a179163f2750099a00f164d"
 ARG SELINUX_LIBSELINUX_SHA256="73d419c6e20e874adaa4019372cbd097eecf4d276e13f27ec5e67d35c0bd203c"
+ARG COREUTILS_VERSION="9.12"
+ARG COREUTILS_SHA256="a480198559733e9b3da999e90543ac6f888a2caa544d8d664c5a1f17e528e210"
 ARG OMARCHY_QUATTRO_REVISION="c668141e9c42b13c80c9ca4ea108e11708c5e8a5"
 ARG OMARCHY_VERSION="4.0.4-1"
 
@@ -76,7 +78,9 @@ ARG BOOTC_VERSION
 ARG SELINUX_USERSPACE_VERSION
 ARG SELINUX_LIBSEPOL_SHA256
 ARG SELINUX_LIBSELINUX_SHA256
-RUN pacman -Syu --noconfirm curl flex clang make git rust go-md2man ostree glibc pkgconf pcre2 && \
+ARG COREUTILS_VERSION
+ARG COREUTILS_SHA256
+RUN pacman -Syu --noconfirm curl flex clang gperf python make git rust go-md2man ostree glibc pkgconf pcre2 && \
     workdir="$(mktemp -d)" && \
     curl --fail --location --retry 3 --retry-delay 2 \
         "https://github.com/SELinuxProject/selinux/releases/download/${SELINUX_USERSPACE_VERSION}/libsepol-${SELINUX_USERSPACE_VERSION}.tar.gz" \
@@ -93,6 +97,15 @@ RUN pacman -Syu --noconfirm curl flex clang make git rust go-md2man ostree glibc
     make -C "${workdir}/libselinux-${SELINUX_USERSPACE_VERSION}" DISABLE_RPM=y USE_PCRE2=y -j"$(nproc)" && \
     make -C "${workdir}/libselinux-${SELINUX_USERSPACE_VERSION}" DISABLE_RPM=y USE_PCRE2=y DESTDIR=/ SBINDIR=/usr/bin SHLIBDIR=/usr/lib install && \
     ldconfig && \
+    curl --fail --location --retry 3 --retry-delay 2 \
+        "https://ftp.gnu.org/gnu/coreutils/coreutils-${COREUTILS_VERSION}.tar.xz" \
+        --output "${workdir}/coreutils.tar.xz" && \
+    printf '%s  %s\n' "${COREUTILS_SHA256}" "${workdir}/coreutils.tar.xz" | sha256sum -c - && \
+    tar -xJf "${workdir}/coreutils.tar.xz" -C "${workdir}" && \
+    cd "${workdir}/coreutils-${COREUTILS_VERSION}" && \
+    FORCE_UNSAFE_CONFIGURE=1 ./configure --prefix=/usr --libexecdir=/usr/lib --with-selinux --disable-nls && \
+    make -j"$(nproc)" src/chcon && \
+    install -D -m 0755 src/chcon /output/usr/bin/chcon && \
     rm -rf "${workdir}"
 WORKDIR /home/build
 RUN --mount=type=bind,from=bootcrew-ctx,source=/,target=/ctx \
@@ -114,6 +127,7 @@ ARG BOOTCREW_MONO_REVISION
 ARG BOOTC_REVISION
 ARG BOOTC_VERSION
 ARG SELINUX_USERSPACE_VERSION
+ARG COREUTILS_VERSION
 COPY --from=bootc-builder /output /
 
 # Bootcrew mono arch/Containerfile at BOOTCREW_MONO_REVISION, applied to the
@@ -126,7 +140,7 @@ RUN pacman -Syu --noconfirm
 RUN pacman -Sy --noconfirm \
         base bubblewrap dracut linux linux-firmware ostree btrfs-progs \
         e2fsprogs xfsprogs dosfstools skopeo dbus dbus-glib glib2 \
-        shadow openssh pcre2 && \
+        shadow openssh pcre2 podman && \
     pacman -S --clean --noconfirm
 
 RUN systemctl enable systemd-networkd systemd-resolved systemd-timesyncd sshd && \
@@ -180,6 +194,7 @@ LABEL org.opencontainers.image.bootcrew.revision="${BOOTCREW_MONO_REVISION}"
 LABEL org.opencontainers.image.bootc.revision="${BOOTC_REVISION}"
 LABEL org.opencontainers.image.bootc.version="${BOOTC_VERSION}"
 LABEL org.opencontainers.image.selinux.userspace.version="${SELINUX_USERSPACE_VERSION}"
+LABEL org.opencontainers.image.coreutils.version="${COREUTILS_VERSION}"
 LABEL containers.bootc=1
 RUN bootc container lint --fatal-warnings
 
