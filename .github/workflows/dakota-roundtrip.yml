@@ -1,0 +1,85 @@
+name: Gate 4 Dakota to Quattro round trip
+
+on:
+  workflow_dispatch:
+    inputs:
+      quattro_image_ref:
+        description: Full accepted Quattro image ref, including its immutable @sha256 digest.
+        required: true
+        type: string
+      quattro_source_sha:
+        description: Exact 40 character source SHA recorded by the published image receipt.
+        required: true
+        type: string
+      quattro_tracking_ref:
+        description: Mutable Quattro stream used by bootc switch during the transition.
+        required: true
+        default: ghcr.io/joshyorko/omarchy-bootc:testing
+        type: string
+      dakota_tracking_ref:
+        description: Mutable Dakota stream used for the reverse transition.
+        required: true
+        default: ghcr.io/projectbluefin/dakota:stable
+        type: string
+
+concurrency:
+  group: gate4-dakota-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dakota-roundtrip:
+    name: Dakota -> Quattro -> Dakota
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+
+    steps:
+      - name: Checkout the exact gate source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Validate Gate 4 contract
+        run: bash tests/test-dakota-roundtrip-contract.sh
+
+      - name: Install hosted VM dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            jq ovmf podman qemu-system-x86 qemu-utils sshpass skopeo
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+
+      - name: Verify the accepted Quattro signature and receipt
+        env:
+          QUATTRO_IMAGE_REF: ${{ inputs.quattro_image_ref }}
+          QUATTRO_SOURCE_SHA: ${{ inputs.quattro_source_sha }}
+        run: |
+          set -euo pipefail
+          bash scripts/ci/verify-published-image-trust.sh \
+            "${QUATTRO_IMAGE_REF}" "${QUATTRO_SOURCE_SHA}"
+
+      - name: Run the exact Dakota round trip
+        env:
+          CI_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-dakota-roundtrip
+          DAKOTA_TRACKING_REF: ${{ inputs.dakota_tracking_ref }}
+          QUATTRO_IMAGE_REF: ${{ inputs.quattro_image_ref }}
+          QUATTRO_SOURCE_SHA: ${{ inputs.quattro_source_sha }}
+          QUATTRO_TRACKING_REF: ${{ inputs.quattro_tracking_ref }}
+        run: bash scripts/ci/dakota-roundtrip.sh
+
+      - name: Upload Gate 4 receipts and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate4-dakota-roundtrip-${{ github.sha }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/omarchy-bootc-dakota-roundtrip
+            output/gate4-dakota
+          if-no-files-found: warn
+          retention-days: 90
