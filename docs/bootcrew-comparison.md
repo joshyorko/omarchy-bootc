@@ -12,6 +12,7 @@ The build starts from an empty root resolved entirely against Omarchy stable, th
 - Install the bootc runtime, kernel, dracut, OSTree, filesystem tooling, and boot-critical services from the same Omarchy-stable package universe.
 - Generate a reproducible non-host-only dracut initramfs with the bootc module.
 - Establish Bootcrew's `/usr` and `/var` filesystem model, including `/usr/local -> ../var/usrlocal`.
+- The Quattro layer materializes `/usr/local` as an immutable image directory before package installation and retains it as image-owned dispatch after assembly.
 - Enable composefs and a read-only sysroot.
 - Create the mutable-directory tmpfiles contract.
 - Run fatal `bootc container lint` before layering Quattro.
@@ -20,7 +21,7 @@ The reviewed source files, origin metadata, upstream checksums, and exact consum
 
 ## Deliberate source delta
 
-Upstream Bootcrew's `shared/build.sh` clones the default bootc branch. This repository replaces only that source acquisition with a shallow fetch of bootc commit `3e76c16556c55e6d15d31bd47602b231e2131cb2` from `https://github.com/bootc-dev/bootc.git`, detaches at the fetched commit, and verifies `HEAD` exactly before building.
+Upstream Bootcrew's `shared/build.sh` clones the default bootc branch. This repository replaces only that source acquisition with a shallow fetch of bootc commit `fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60` from `https://github.com/bootc-dev/bootc.git`, detaches at the fetched commit, and verifies `HEAD` exactly before building.
 
 The delta is recorded in `vendor/bootcrew/README.md`. It is required by the source-pin contract and is not an Omarchy adaptation.
 

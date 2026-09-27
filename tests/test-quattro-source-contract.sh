@@ -22,6 +22,7 @@ SERVICES_BUILD="${ROOT_DIR}/build/30-services.sh"
 TRANSITION_SCRIPT="${ROOT_DIR}/transition/omarchy-transition.sh"
 BOOTCREW_REVISION_FILE="${ROOT_DIR}/vendor/bootcrew/REVISION"
 BOOTC_REVISION_FILE="${ROOT_DIR}/vendor/bootcrew/BOOTC_REVISION"
+BOOTC_VERSION_FILE="${ROOT_DIR}/vendor/bootcrew/BOOTC_VERSION"
 BOOTCREW_SOURCE_FILE="${ROOT_DIR}/vendor/bootcrew/SOURCE"
 BOOTC_SOURCE_FILE="${ROOT_DIR}/vendor/bootcrew/BOOTC_SOURCE"
 BOOTCREW_CHECKSUMS="${ROOT_DIR}/vendor/bootcrew/SHA256SUMS"
@@ -40,8 +41,10 @@ if grep -Eqi '^[[:space:]]*FROM[[:space:]].*(ghcr\.io/)?bootcrew/' "${CONTAINERF
 fi
 grep -Fq 'ARG BOOTCREW_MONO_REVISION="5f048fa65a94daefc814d3cdd941d8d1e113c09e"' \
     "${CONTAINERFILE}" || fail 'Containerfile does not pin the reviewed Bootcrew mono revision'
-grep -Fq 'ARG BOOTC_REVISION="3e76c16556c55e6d15d31bd47602b231e2131cb2"' \
+grep -Fq 'ARG BOOTC_REVISION="fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60"' \
     "${CONTAINERFILE}" || fail 'Containerfile does not pin the reviewed bootc revision'
+grep -Fq 'ARG BOOTC_VERSION="v1.16.13"' "${CONTAINERFILE}" \
+    || fail 'Containerfile does not pin bootc v1.16.13'
 grep -Fq 'docker.io/archlinux/archlinux:latest@sha256:0de35fe2ee793494ccfc99b202f6b30215b078baf2b082e9ccb027840c534fc1' \
     "${CONTAINERFILE}" || fail 'disposable Arch bootstrap image is not pinned'
 grep -Fq 'FROM scratch AS stable-base' "${CONTAINERFILE}" \
@@ -57,9 +60,11 @@ fi
 [[ -f "${BOOTCREW_SOURCE_FILE}" ]] || fail 'Bootcrew mono source URL is missing'
 [[ "$(<"${BOOTCREW_SOURCE_FILE}")" == 'https://github.com/bootcrew/mono.git' ]] \
     || fail 'Bootcrew mono source URL differs from the reviewed construction'
+[[ -f "${BOOTC_VERSION_FILE}" && "$(<"${BOOTC_VERSION_FILE}")" == 'v1.16.13' ]] \
+    || fail 'bootc version record differs from v1.16.13'
 [[ -f "${BOOTC_REVISION_FILE}" ]] || fail 'pinned bootc source revision is missing'
-[[ "$(<"${BOOTC_REVISION_FILE}")" == '3e76c16556c55e6d15d31bd47602b231e2131cb2' ]] \
-    || fail 'bootc source revision differs from v1.16.10'
+[[ "$(<"${BOOTC_REVISION_FILE}")" == 'fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60' ]] \
+    || fail 'bootc source revision differs from v1.16.13'
 [[ -f "${BOOTC_SOURCE_FILE}" ]] || fail 'bootc source URL is missing'
 [[ "$(<"${BOOTC_SOURCE_FILE}")" == 'https://github.com/bootc-dev/bootc.git' ]] \
     || fail 'bootc source URL differs from upstream bootc-dev/bootc'
@@ -88,16 +93,29 @@ grep -Fq 'test "$(cat /ctx/REVISION)" = "${BOOTCREW_MONO_REVISION}"' "${CONTAINE
 grep -Fq 'test "$(cat /ctx/BOOTC_REVISION)" = "${BOOTC_REVISION}"' "${CONTAINERFILE}" \
     || fail 'build does not bind the bootc revision record to the construction argument'
 [[ -f "${REPOSITORY_CONFIGURATOR}" ]] || fail 'repository topology configurator is missing'
+if grep -Eiq 'SigLevel[[:space:]]*=[[:space:]]*(Optional|Never)|TrustAll|Include[[:space:]]*=[[:space:]]*/etc/pacman.d/mirrorlist' "${REPOSITORY_CONFIG}"; then
+    fail 'Quattro repository configuration permits unsigned packages or arbitrary Arch fallback'
+fi
+grep -Fq 'SigLevel = Required DatabaseOptional' "${REPOSITORY_CONFIG}" \
+    || fail 'Omarchy packages are not signature-required'
+grep -Fq 'stable-mirror.omarchy.org/$repo/os/$arch' "${REPOSITORY_CONFIG}" \
+    || fail 'Quattro repositories do not use the stable Omarchy mirror'
 
 [[ -f "${QUATTRO_BUILD}" ]] || fail 'build/20-quattro.sh is missing'
 [[ -f "${BOOT_OWNERSHIP}" ]] || fail 'build/30-bootc-ownership.sh is missing'
 
 grep -Fq 'OMARCHY_VERSION="${OMARCHY_VERSION:-4.0.4-1}"' "${QUATTRO_BUILD}" \
     || fail 'official Omarchy package version is not pinned to current 4.0.4-1'
-grep -Fq '45748a2812f42e32f915b053caf4074e150e2048' "${QUATTRO_BUILD}" \
+grep -Fq 'c668141e9c42b13c80c9ca4ea108e11708c5e8a5' "${QUATTRO_BUILD}" \
     || fail 'current Omarchy Quattro source revision is not recorded'
 grep -Fq '/usr/share/omarchy/install/omarchy-base.packages' "${QUATTRO_BUILD}" \
     || fail 'Quattro base package manifest is not consumed from the official package'
+grep -Fq '/usr/lib/sysusers.d/cups-browsed.conf' "${QUATTRO_BUILD}" \
+    || fail 'cups-browsed does not have an image-owned sysusers declaration'
+grep -Fq 'getent passwd cups-browsed' "${QUATTRO_BUILD}" \
+    || fail 'cups-browsed system user is not verified after sysusers'
+grep -Fq 'getent group cups-browsed' "${QUATTRO_BUILD}" \
+    || fail 'cups-browsed system group is not verified after sysusers'
 grep -Fq '/usr/share/omarchy/install/omarchy-other.packages' "${QUATTRO_BUILD}" \
     || fail 'Quattro optional package manifest is not consumed from the official package'
 grep -Fq '/usr/share/omarchy-bootc/optional-package-resolvability.txt' "${QUATTRO_BUILD}" \
@@ -205,7 +223,7 @@ grep -Fq 'Dakota' "${TRANSITION_CONTRACT}" \
     || fail 'transition contract does not define the Dakota source profile'
 grep -Fq 'password hashes' "${TRANSITION_CONTRACT}" \
     || fail 'transition contract does not exclude credentials from captured state'
-grep -Fq '7cfb7111a06873d61c45d37034577d4ba08d3f4f' "${INSTALLER_CONTRACT}" \
+grep -Fq '86c07785cb0f63be78edb1349843d5817b5c0e66' "${INSTALLER_CONTRACT}" \
     || fail 'current official Omarchy Quattro ISO source revision is not pinned'
 grep -Fq 'bootc install to-filesystem' "${INSTALLER_CONTRACT}" \
     || fail 'installer contract does not select the external-installer bootc seam'
@@ -231,14 +249,24 @@ for source_file in \
     sources/omarchy-quattro.source \
     sources/omarchy-quattro.revision \
     sources/omarchy-quattro-version \
+    sources/omarchy-package-signing-key.asc \
+    sources/omarchy-package-signing-key.fingerprint \
+    sources/omarchy-package-signing-key.sha256 \
+    sources/omarchy-package-signing-key.source \
     sources/omarchy-iso-quattro.source \
     sources/omarchy-iso-quattro.revision; do
     [[ -f "${ROOT_DIR}/${source_file}" ]] || fail "source record missing: ${source_file}"
 done
-[[ "$(<"${ROOT_DIR}/sources/omarchy-quattro.revision")" == '45748a2812f42e32f915b053caf4074e150e2048' ]] ||
-    fail 'Omarchy source record is not the current Quattro head'
-[[ "$(<"${ROOT_DIR}/sources/omarchy-iso-quattro.revision")" == '7cfb7111a06873d61c45d37034577d4ba08d3f4f' ]] ||
-    fail 'Omarchy ISO source record is not the current Quattro head'
+[[ "$(<"${ROOT_DIR}/sources/omarchy-quattro.revision")" == 'c668141e9c42b13c80c9ca4ea108e11708c5e8a5' ]] ||
+    fail 'Omarchy source record is not the v4.0.4 release commit'
+[[ "$(<"${ROOT_DIR}/sources/omarchy-iso-quattro.revision")" == '86c07785cb0f63be78edb1349843d5817b5c0e66' ]] ||
+    fail 'Omarchy ISO Quattro reference does not match the live upstream pin'
+[[ "$(<"${ROOT_DIR}/sources/omarchy-quattro-version")" == '4.0.4-1' ]] \
+    || fail 'frozen Omarchy package version does not match the published stable release'
+[[ "$(<"${ROOT_DIR}/sources/omarchy-package-signing-key.fingerprint")" == '40DFB630FF42BCFFB047046CF0134EE680CAC571' ]] \
+    || fail 'Omarchy signing key fingerprint changed'
+(cd "${ROOT_DIR}/sources" && sha256sum --check --status omarchy-package-signing-key.sha256) \
+    || fail 'Omarchy signing key bytes differ from the pinned checksum'
 for update_surface in \
     custom/bootc/omarchy-bootc-common.sh \
     custom/bootc/omarchy-bootc-update \
@@ -281,22 +309,21 @@ fi
 
 # shellcheck disable=SC2016
 expected_repository_config='[core]
+# Do not add Arch mirrorlist entries as fallback: missing Quattro packages must
+# fail resolution instead of silently mixing arbitrary rolling Arch packages.
 Server = https://stable-mirror.omarchy.org/$repo/os/$arch
-Include = /etc/pacman.d/mirrorlist
 
 [extra]
 Server = https://stable-mirror.omarchy.org/$repo/os/$arch
-Include = /etc/pacman.d/mirrorlist
 
 [multilib]
 Server = https://stable-mirror.omarchy.org/$repo/os/$arch
-Include = /etc/pacman.d/mirrorlist
 
 [omarchy]
-SigLevel = Optional TrustAll
+SigLevel = Required DatabaseOptional
 Server = https://pkgs.omarchy.org/stable/$arch'
 [[ "$(<"${REPOSITORY_CONFIG}")" == "${expected_repository_config}" ]] \
-    || fail 'Quattro repository topology differs from pacman-online-stable.conf'
+    || fail 'Quattro repository topology does not match the fail-closed trusted source set'
 
 expected_optional_repository_config='[arch-mact2]
 Server = https://mirror.funami.tech/arch-mact2/os/x86_64
@@ -410,7 +437,7 @@ printf '%s\n' \
 verify_bootc_initramfs_reports \
     "${fixture_dir}/initramfs-modules" \
     "${fixture_dir}/initramfs-contents" \
-    || fail 'initramfs verifier rejected the required bootc v1.16.10 payload'
+    || fail 'initramfs verifier rejected the required bootc v1.16.13 payload'
 
 adoption_fixture="${fixture_dir}/adoption-empty"
 mkdir -p "${adoption_fixture}/var/home"

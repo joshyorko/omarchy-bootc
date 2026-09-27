@@ -4,7 +4,7 @@ _Last updated: 2026-08-26_
 
 ## Architecture of record
 
-Bootc v1.16.10 is built inside the Omarchy-stable root from exact upstream commit `3e76c16556c55e6d15d31bd47602b231e2131cb2`.
+Bootc v1.16.13 is built inside the Omarchy-stable root from exact upstream commit `fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60`.
 
 The source URL, revision, exact fetch, commit-identity check, OCI label, and in-image source record are executable parts of the build contract. An unpinned clone or moving tag is not accepted.
 

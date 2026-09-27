@@ -3,7 +3,7 @@ set -euo pipefail
 
 ctx=/ctx/custom/bootc
 lib=/usr/lib/omarchy-bootc
-install -d -m 0755 "$lib" /usr/libexec /var/usrlocal/bin /usr/lib/systemd/user /etc/systemd/user/graphical-session.target.wants
+install -d -m 0755 "$lib" /usr/libexec /usr/local/bin /usr/lib/systemd/user /etc/systemd/user/graphical-session.target.wants
 
 for file in omarchy-bootc-common.sh omarchy-bootc-update omarchy-bootc-update-available; do
     install -m 0755 "$ctx/$file" "$lib/${file/omarchy-bootc-common.sh/update-common.sh}"
@@ -14,10 +14,20 @@ install -m 0755 "$ctx/omarchy-wrapper" "$lib/omarchy-wrapper"
 install -m 0755 "$ctx/omarchy-update-wrapper" "$lib/omarchy-update-wrapper"
 install -m 0755 "$ctx/omarchy-update-available-wrapper" "$lib/omarchy-update-available-wrapper"
 
-ln -sfn "$lib/omarchy-wrapper" /usr/local/bin/omarchy
+install -m 0755 "$lib/omarchy-wrapper" /usr/local/bin/omarchy
 ln -sfn "$lib/omarchy-update-wrapper" /usr/local/bin/omarchy-update
 ln -sfn "$lib/omarchy-update-available-wrapper" /usr/local/bin/omarchy-update-available
 ln -sfn /usr/libexec/omarchy-bootc-finalize \
     /usr/local/bin/omarchy-bootc-finalize
+if [[ -d /var/usrlocal/bin ]]; then
+    rm -f /var/usrlocal/bin/omarchy /var/usrlocal/bin/omarchy-update \
+        /var/usrlocal/bin/omarchy-update-available \
+        /var/usrlocal/bin/omarchy-bootc-finalize
+fi
 ln -sfn /usr/lib/systemd/user/omarchy-bootc-finalize.service \
     /etc/systemd/user/graphical-session.target.wants/omarchy-bootc-finalize.service
+
+test -d /usr/local && ! test -L /usr/local
+test "$(command -v omarchy)" = /usr/local/bin/omarchy
+test "$(readlink -f /usr/local/bin/omarchy)" = "$lib/omarchy-wrapper"
+test "$(readlink -f /usr/local/bin/omarchy-update)" = "$lib/omarchy-update-wrapper"

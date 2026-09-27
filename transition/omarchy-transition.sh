@@ -13,6 +13,13 @@ PREFLIGHT_FILE="${STATE_ROOT}/preflight.env"
 BOOTC_BIN="${OMARCHY_TRANSITION_BOOTC_BIN:-bootc}"
 RESOLVER="${OMARCHY_TRANSITION_RESOLVER:-}"
 STATUS_FILE="${OMARCHY_TRANSITION_STATUS_FILE:-}"
+COMMON_LIB="${OMARCHY_TRANSITION_COMMON_LIB:-/usr/lib/omarchy-bootc/update-common.sh}"
+if [[ ! -r "$COMMON_LIB" ]]; then
+    COMMON_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../custom/bootc" && pwd)/omarchy-bootc-common.sh"
+fi
+# shellcheck disable=SC1090
+source "$COMMON_LIB"
+if [[ -n "$STATUS_FILE" ]]; then OMARCHY_BOOTC_STATUS_FILE="$STATUS_FILE"; fi
 
 DIE() {
     echo "ERROR: $*" >&2
@@ -62,13 +69,12 @@ status_json() {
 # Set SOURCE_PROFILE/SOURCE_SIGNAL/SOURCE_VALUE from strongest available
 # structured evidence. A familiar NAME alone is intentionally never enough.
 detect_source() {
-    local status="" reference="" image_info="" id="" variant="" name=""
+    local reference="" image_info="" id="" variant="" name=""
     SOURCE_PROFILE=""
     SOURCE_SIGNAL=""
     SOURCE_VALUE=""
 
-    if status="$(status_json 2>/dev/null || true)"; then
-        reference="$(printf '%s\n' "$status" | grep -Eio '([[:alnum:]._-]+/)?[[:alnum:]._-]+(:[^"[:space:]]+|@sha256:[[:xdigit:]]{64})' | grep -Eim1 '(bluefin|dakota|omarchy)' || true)"
+    if reference="$(status_tracking_ref 2>/dev/null || true)" && [[ -n "$reference" ]]; then
         case "${reference,,}" in
             *dakota*)
                 SOURCE_PROFILE=dakota
@@ -324,11 +330,10 @@ apply_switch() {
 }
 
 verify_boot() {
-    local expected actual status
+    local expected actual
     expected="$(state_value target_resolved_digest "$PREFLIGHT_FILE")"
     [[ "$expected" =~ ^sha256:[[:xdigit:]]{64}$ ]] || DIE 'preflight has no accepted resolved digest'
-    status="$(status_json 2>/dev/null || true)"
-    actual="$(printf '%s\n' "$status" | grep -Eio 'sha256:[[:xdigit:]]{64}' | head -n 1 || true)"
+    actual="$(status_booted_digest 2>/dev/null || true)"
     [[ "$actual" == "$expected" ]] || DIE "booted deployment digest is not the accepted digest (expected ${expected}, found ${actual:-none})"
     printf 'status=verified\nbooted_digest=%s\n' "$actual"
 }

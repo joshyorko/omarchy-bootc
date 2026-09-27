@@ -30,7 +30,7 @@ done <"${HOOK_INVENTORY}"
 
 install -D -m 0644 /dev/stdin \
     /usr/lib/dracut/dracut.conf.d/40-bootc-required-modules.conf <<'EOF'
-# bootc v1.16.10 baseimage/dracut/usr/lib/dracut.conf.d/10-bootc-base.conf
+# bootc v1.16.13 baseimage/dracut/usr/lib/dracut.conf.d/10-bootc-base.conf
 # requires both modules. This final-layer correction leaves the pinned
 # Bootcrew construction snapshot unmodified.
 add_dracutmodules+=" ostree bootc "

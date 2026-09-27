@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build and verify official Omarchy Quattro v4.0.1 on an empty-root Omarchy-stable Arch package universe using pinned Bootcrew bootc construction.
+**Goal:** Build and verify official Omarchy Quattro v4.0.4 on an empty-root Omarchy-stable Arch package universe using pinned Bootcrew bootc construction.
 
-**Architecture:** Use current Arch only as a pinned disposable pacman tool, populate an empty root from Omarchy stable, and apply Bootcrew mono commit `5f048fa…` there. Build bootc commit `3e76c165…` inside that stable root, then install the official signed Quattro closure and isolate only demonstrated Limine/mkinitcpio/Snapper collisions.
+**Architecture:** Use current Arch only as a pinned disposable pacman tool, populate an empty root from Omarchy stable, and apply Bootcrew mono commit `5f048fa…` there. Build bootc commit `fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60` inside that stable root, then install the official signed Quattro closure and isolate only demonstrated Limine/mkinitcpio/Snapper collisions.
 
 **Tech Stack:** Containerfile, Bash, pacman, systemd, bootc, dracut, Podman, QEMU/KVM.
 
@@ -14,10 +14,10 @@
 
 - Do not inherit the published rolling Bootcrew image.
 - Use Bootcrew mono construction commit `5f048fa65a94daefc814d3cdd941d8d1e113c09e`.
-- Build bootc from commit `3e76c16556c55e6d15d31bd47602b231e2131cb2`.
+- Build bootc from commit `fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60`.
 - Resolve the final root from an empty filesystem against Omarchy stable; never use `pacman -Syyuu` to downgrade a prebuilt root.
-- Use official Omarchy v4.0.1 packages from source commit `13f18b2cb7286fb54f87daf571a031aa6af3d8f0`.
-- Use `omacom-io/omarchy-iso` Quattro commit `268bac16d351a21d867e37565738f458b11cb06c` as the installer UX and acceptance reference.
+- Use official Omarchy v4.0.4 packages from source commit `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`.
+- Use `omacom/omarchy-iso` Quattro commit `86c07785cb0f63be78edb1349843d5817b5c0e66` as the installer UX and acceptance reference.
 - Do not modify or wrap an `omarchy-*` command.
 - Bootc exclusively owns deployment, `/boot`, initramfs, upgrade, and rollback.
 - Neutralize only evidenced Limine/mkinitcpio/Snapper collisions.
@@ -58,7 +58,7 @@
 
 **Interfaces:**
 - Consumes: pinned Arch bootstrap tooling, pinned Bootcrew construction, pinned bootc source, and Omarchy stable repositories.
-- Produces: a fatal-lint-clean stable foundation plus an OCI image containing `omarchy-settings 4.0.1-1`, `omarchy 4.0.1-1`, and the upstream base manifest closure.
+- Produces: a fatal-lint-clean stable foundation plus an OCI image containing `omarchy-settings 4.0.4-1`, `omarchy 4.0.4-1`, and the upstream base manifest closure.
 
 - [ ] Extend the contract test with an ephemeral-root fixture proving package-list parsing ignores comments and blanks and rejects an unavailable base package.
 - [ ] Run `just test-contract`; expect the new package-closure assertion to fail.
@@ -82,7 +82,7 @@
 
 - [ ] Add contract fixtures that reject an unresolved optional-package report and an initramfs report missing either the `ostree` or `bootc` module and their root-setup payloads.
 - [ ] Run `just test-contract`; expect failure because the ownership script does not exist.
-- [ ] Disable and mask only those three units, preserve package payloads, enable upstream SDDM and ordinary services, regenerate the latest-kernel initramfs with dracut, and inspect it for the bootc v1.16.10 `ostree` and `bootc` modules plus both root-setup services.
+- [ ] Disable and mask only those three units, preserve package payloads, enable upstream SDDM and ordinary services, regenerate the latest-kernel initramfs with dracut, and inspect it for the bootc v1.16.13 `ostree` and `bootc` modules plus both root-setup services.
 - [ ] Run `just test-contract && just validate && just lint`; expect success.
 - [ ] Rebuild the OCI image and run `bootc container lint` inside it.
 
@@ -127,7 +127,7 @@
 **Repository:** `dudley-iso`
 
 **Files:**
-- Create: a Quattro-specific backend adapter against pinned `omacom-io/omarchy-iso`
+- Create: a Quattro-specific backend adapter against pinned `omacom/omarchy-iso`
 - Preserve: all existing Dudley, Dakota, and Bluefin installer variants and their tests
 - Test: the pinned upstream `bin/omarchy-iso-test` and in-guest acceptance suite
 
@@ -135,7 +135,7 @@
 - Consumes: the signed Quattro OCI digest from this repository, the upstream configurator/orchestrator inputs, and upstream-created target mounts.
 - Produces: an ISO with upstream Omarchy UX that replaces only pacstrap/Limine/mutable-root deployment with `bootc install to-filesystem`, deployment-specific `/etc` injection, and `bootc install finalize`.
 
-- [ ] Build and retain a baseline ISO from upstream commit `268bac16d351a21d867e37565738f458b11cb06c`.
+- [ ] Build and retain a baseline ISO from upstream commit `86c07785cb0f63be78edb1349843d5817b5c0e66`.
 - [ ] Add a failing adapter contract proving the Quattro backend is variant-scoped and cannot alter existing installer image references, storage policy, provisioning, or branding.
 - [ ] Implement only the deployment phase seam defined in `docs/installer-parity-contract.md`; preserve upstream configurator, dashboard, user finalizer, SDDM setup, autoinstall, and deferred provisioning.
 - [ ] Run the same pinned upstream acceptance harness against baseline and Quattro ISOs for ordinary, encrypted, deferred-provisioning, and cidata paths.

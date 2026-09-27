@@ -68,6 +68,7 @@ jobs:
         run: |
           bash tests/test-quattro-source-contract.sh
           bash tests/test-transition-contract.sh
+          bash tests/test-published-image-trust.sh
 
       # Free up space on the runner — Arch images can be large.
       # Uncomment if builds exceed runner disk limits.
@@ -203,46 +204,43 @@ jobs:
           username: ${{ env.REGISTRY_USER }}
           password: ${{ env.REGISTRY_PASSWORD }}
 
-      # TODO: Enable signing before any release/stability claims.
-      # ── OPTIONAL: Image signing with Cosign ─────────────────────────────────
-      # To enable:
-      #   1. Generate a key pair:  cosign generate-key-pair
-      #   2. Add COSIGN_PRIVATE_KEY as a repository secret (Settings → Secrets)
-      #   3. Commit cosign.pub to the repo root
-      #   4. Uncomment the two steps below
-      # Documentation: https://docs.sigstore.dev/cosign/overview/
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
 
-      # - name: Install Cosign
-      #   uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
-      #   if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-      #
-      # - name: Sign container image
-      #   if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-      #   run: |
-      #     IMAGE_FULL="${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}"
-      #     for tag in ${{ steps.metadata.outputs.tags }}; do
-      #       cosign sign -y --key env://COSIGN_PRIVATE_KEY "${IMAGE_FULL}:${tag}"
-      #     done
-      #   env:
-      #     COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+      - name: Sign and attest published image digest
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          IMAGE: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "${DIGEST}" =~ ^sha256:[[:xdigit:]]{64}$ ]]
+          mkdir -p "$RUNNER_TEMP/build-receipt"
+          jq -n \
+            --arg source_sha "${SOURCE_SHA}" \
+            --arg image "${IMAGE}" \
+            --arg oci_manifest_digest "${DIGEST}" \
+            --arg acceptance_overlay "not-applied" \
+            '{schema:"omarchy-bootc.published-image/v1", source_sha:$source_sha,
+              image:$image, oci_manifest_digest:$oci_manifest_digest,
+              acceptance_overlay:$acceptance_overlay}' \
+            > "$RUNNER_TEMP/build-receipt/published-image-receipt.json"
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+          cosign attest --yes \
+            --type https://omarchy.org/attestation/published-image-receipt/v1 \
+            --predicate "$RUNNER_TEMP/build-receipt/published-image-receipt.json" \
+            "${IMAGE}@${DIGEST}"
 
-      # TODO: Enable SBOM attestation with signing for provenance completeness.
-      # ── OPTIONAL: SBOM attestation ──────────────────────────────────────────
-      # Requires image signing to be enabled first (see above).
-      # - name: Add SBOM Attestation
-      #   if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-      #   env:
-      #     IMAGE: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
-      #     DIGEST: ${{ steps.push.outputs.digest }}
-      #     COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-      #     SBOM_OUTPUT: ${{ steps.generate-sbom.outputs.OUTPUT_PATH }}
-      #   run: |
-      #     cd "$(dirname "$SBOM_OUTPUT")"
-      #     cosign attest -y \
-      #       --predicate "$(basename "$SBOM_OUTPUT")" \
-      #       --type spdxjson \
-      #       --key env://COSIGN_PRIVATE_KEY \
-      #       "${IMAGE}@${DIGEST}"
+      - name: Upload signed image receipt
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-image-receipt-${{ github.sha }}
+          path: ${{ runner.temp }}/build-receipt/published-image-receipt.json
+          if-no-files-found: error
+          retention-days: 90
 
   build_installer_iso:
     name: Build installer ISO

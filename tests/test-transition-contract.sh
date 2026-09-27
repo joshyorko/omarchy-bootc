@@ -28,7 +28,7 @@ printf '%s\n' 'root:x:0:' 'alice:x:1000:' >"$fixture_dir/etc/group"
 cat >"$fixture_dir/usr/bin/bootc" <<'EOF'
 #!/usr/bin/env bash
 if [[ ${1:-} == status ]]; then
-    printf '%s\n' '{"deployments":[{"booted":true,"image":{"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}'
+    printf '%s\n' '{"spec":{"image":{"image":"ghcr.io/ublue-os/bluefin-dakota:stable"}},"status":{"booted":{"image":{"imageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"staged":null,"rollback":null}}'
 fi
 EOF
 chmod +x "$fixture_dir/usr/bin/bootc"
@@ -70,9 +70,27 @@ fi
 env "${common_env[@]}" bash "$TRANSITION" backup | grep -Fq 'status=backed-up' || fail 'backup did not report backed-up state'
 
 cat >"$fixture_dir/status.json" <<'EOF'
-{"deployments":[{"booted":true,"image":{"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}
+{"spec":{"image":{"image":"ghcr.io/ublue-os/bluefin-dakota:stable"}},"status":{"booted":{"image":{"imageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"staged":null,"rollback":null}}
 EOF
 env "${common_env[@]}" OMARCHY_TRANSITION_STATUS_FILE="$fixture_dir/status.json" \
     bash "$TRANSITION" verify-boot | grep -Fq 'status=verified' || fail 'post-boot digest verification failed'
+
+cat >"$fixture_dir/status.json" <<'EOF'
+{"spec":{"image":{"image":"ghcr.io/joshyorko/omarchy-bootc:testing"}},"status":{"staged":{"image":{"imageDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},"rollback":{"image":{"imageDigest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}},"booted":{"image":{"imageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}}
+EOF
+sed -i 's/target_resolved_digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/target_resolved_digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/' "$fixture_dir/var/lib/omarchy-bootc/transitions/preflight.env"
+if env "${common_env[@]}" OMARCHY_TRANSITION_STATUS_FILE="$fixture_dir/status.json" \
+    bash "$TRANSITION" verify-boot; then
+    fail 'staged digest was mistaken for the authoritative booted digest'
+fi
+
+cat >"$fixture_dir/status.json" <<'EOF'
+{"deployments":[{"booted":true,"image":{"imageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},{"name":"bluefin","image":{"imageDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}]}
+EOF
+sed -i -e 's/^ID=.*/ID=unknown/' -e 's/^NAME=.*/NAME="bluefin"/' "$fixture_dir/usr/lib/os-release"
+if env "${common_env[@]}" OMARCHY_TRANSITION_STATUS_FILE="$fixture_dir/status.json" \
+    bash "$TRANSITION" inspect-source; then
+    fail 'familiar name outside authoritative status slot was accepted'
+fi
 
 printf 'PASS: cross-distro transition contract\n'

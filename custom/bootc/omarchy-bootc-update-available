@@ -7,15 +7,24 @@ set -euo pipefail
 source /usr/lib/omarchy-bootc/update-common.sh
 
 if ! run_as_root "$OMARCHY_BOOTC_BIN" upgrade --check >/dev/null 2>&1; then
-    echo 'Omarchy image is up to date'
+    echo 'Omarchy update check failed' >&2
     exit 1
 fi
 
 if status_update_available; then
     booted="$(status_booted_digest)"
     staged="$(status_staged_digest)"
-    printf 'bootc image update available (current=%s candidate=%s)\n' "${booted:-unknown}" "${staged:-unknown}"
+    candidate="$staged"
+    [[ -n "$candidate" ]] || candidate="$(status_cached_digest)"
+    printf 'bootc image update available (current=%s candidate=%s)\n' "${booted:-unknown}" "${candidate:-unknown}"
     exit 0
+else
+    status_rc=$?
+fi
+
+if (( status_rc == 2 )); then
+    echo 'bootc status is malformed or uses an unsupported schema' >&2
+    exit 1
 fi
 
 echo 'Omarchy image is up to date'

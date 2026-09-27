@@ -129,6 +129,7 @@ build_candidate() {
     local iso_revision=""
     local bootcrew_revision=""
     local bootc_revision=""
+    local bootc_version=""
     local arch_bootstrap_ref=""
     local bootcrew_source=""
     local bootc_source=""
@@ -153,12 +154,14 @@ build_candidate() {
     iso_revision="$(read_pin sources/omarchy-iso-quattro.revision)"
     bootcrew_revision="$(read_pin vendor/bootcrew/REVISION)"
     bootc_revision="$(read_pin vendor/bootcrew/BOOTC_REVISION)"
+    bootc_version="$(tr -d '\r\n' <vendor/bootcrew/BOOTC_VERSION)"
     arch_bootstrap_ref="$(read_arg ARCH_BOOTSTRAP_REF)"
     bootcrew_source="$(tr -d '\r\n' <vendor/bootcrew/SOURCE)"
     bootc_source="$(tr -d '\r\n' <vendor/bootcrew/BOOTC_SOURCE)"
     omarchy_source="$(tr -d '\r\n' <sources/omarchy-quattro.source)"
     omarchy_iso_source="$(tr -d '\r\n' <sources/omarchy-iso-quattro.source)"
     omarchy_version="$(tr -d '\r\n' <sources/omarchy-quattro-version)"
+    [[ "${bootc_version}" == "v1.16.13" ]] || die "unexpected bootc version record: ${bootc_version}"
     [[ -n "${arch_bootstrap_ref}" && -n "${bootcrew_source}" && -n "${bootc_source}" && -n "${omarchy_source}" && -n "${omarchy_iso_source}" && -n "${omarchy_version}" ]] || die "missing Containerfile or upstream source metadata"
 
     run_logged build sudo -n podman build \
@@ -173,6 +176,7 @@ build_candidate() {
         --label "com.omarchy.candidate.quattro-version=${omarchy_version}" \
         --label "com.omarchy.candidate.bootcrew=${bootcrew_revision}" \
         --label "com.omarchy.candidate.bootc=${bootc_revision}" \
+        --label "com.omarchy.candidate.bootc-version=${bootc_version}" \
         "${ROOT_DIR}"
 
     run_logged fatal-lint sudo -n podman run --rm --pull=never --privileged "${IMAGE_REF}" bootc container lint --fatal-warnings
@@ -209,6 +213,7 @@ build_candidate() {
         --arg bootcrew_revision "${bootcrew_revision}" \
         --arg bootc_source "${bootc_source}" \
         --arg bootc_revision "${bootc_revision}" \
+        --arg bootc_version "${bootc_version}" \
         --arg quattro_revision "${quattro_revision}" \
         --arg iso_revision "${iso_revision}" \
         --arg omarchy_version "${omarchy_version}" \
@@ -216,18 +221,22 @@ build_candidate() {
         --arg firmware_source "$(cat sources/apple-bcm-firmware.source)" \
         --arg firmware_sha256 "$(awk 'NR == 1 {print $1}' sources/apple-bcm-firmware.sha256)" \
         --arg lint_result 'passed:bootc container lint --fatal-warnings' \
-        '{schema:$schema, repository:$repository, event:$event, source_head:$head,
+        '{schema:$schema, repository:$repository, event:$event,
+          source_sha:$head, source_head:$head,
           image:$image, archive:$archive, archive_sha256:$archive_sha256,
-          archive_size_bytes:($archive_size|tonumber), manifest_digest:$manifest_digest,
+          archive_size_bytes:($archive_size|tonumber),
+          oci_manifest_digest:$manifest_digest, manifest_digest:$manifest_digest,
           image_id:$image_id, created_at:$created_at, lint_result:$lint_result,
           upstream_pins:{arch_bootstrap_ref:$arch_bootstrap_ref,
             omarchy_source:$omarchy_source, omarchy_iso_source:$omarchy_iso_source,
             bootcrew_source:$bootcrew_source, bootcrew_revision:$bootcrew_revision,
             bootc_source:$bootc_source, bootc_revision:$bootc_revision,
+            bootc_version:$bootc_version,
             omarchy_quattro_revision:$quattro_revision,
             omarchy_iso_quattro_revision:$iso_revision,
             omarchy_version:$omarchy_version, tracking_ref:$tracking_ref,
-            apple_bcm_firmware:{source:$firmware_source, sha256:$firmware_sha256}}}' \
+            apple_bcm_firmware:{source:$firmware_source, sha256:$firmware_sha256}},
+          acceptance_overlay:{applied:false, target:"final"}}' \
         >"${receipt_path}"
 
     printf 'Candidate archive: %s\nReceipt: %s\n' "${archive_path}" "${receipt_path}"

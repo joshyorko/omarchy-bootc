@@ -12,41 +12,52 @@ bootc_status_json() {
     fi
 }
 
-status_digests() {
-    bootc_status_json | grep -Eio 'sha256:[[:xdigit:]]{64}' | awk '!seen[$0]++'
+# The supported bootc JSON contract is status.booted/staged/rollback, where a
+# BootEntry carries image.imageDigest and optionally image.image. Never search
+# arbitrary descendants: other deployment slots and metadata are not identity.
+status_field() {
+    local key="$1" status
+    status="$(bootc_status_json)" || return
+    jq -r --arg key "$key" '
+      def digest($entry):
+        if $entry == null then ""
+        elif ($entry|type) != "object" then error("invalid BootEntry")
+        elif ($entry.image|type) != "object" then error("invalid BootEntry.image")
+        elif ($entry.image.imageDigest|type) != "string" then error("missing BootEntry.image.imageDigest")
+        elif ($entry.image.imageDigest|test("^sha256:[A-Fa-f0-9]{64}$")) then $entry.image.imageDigest
+        else error("invalid BootEntry image digest") end;
+      if type != "object" or (.status|type) != "object" or
+         (["booted","staged","rollback"] - (.status|keys)) != [] then
+        error("unsupported bootc status schema") else . end
+      | if (.spec|type) != "object" or (.spec.image|type) != "object" or
+           (.spec.image.image|type) != "string" or (.spec.image.image|length) == 0 or
+           (.spec.image.image|test("[[:space:]]")) then error("invalid configured image ref") else . end
+      | if $key == "booted" then
+          if .status.booted == null then error("missing booted BootEntry") else digest(.status.booted) end
+        elif $key == "staged" or $key == "rollback" then
+          if .status[$key] == null then "" else digest(.status[$key]) end
+        elif $key == "cached" then
+          if (.status|has("cachedUpdate")|not) or .status.cachedUpdate == null then ""
+          else digest(.status.cachedUpdate) end
+        elif $key == "tracking" then
+          .spec.image.image
+        else error("unknown status field") end
+    ' <<<"$status"
 }
 
-status_booted_digest() {
-    local status digest
-    status="$(bootc_status_json)"
-    if command -v jq >/dev/null 2>&1; then
-        digest="$(jq -r '.. | objects | select(.booted == true or .state == "booted") | tostring' <<<"$status" |
-            grep -Eio 'sha256:[[:xdigit:]]{64}' | head -n 1 || true)"
-    fi
-    [[ -n "${digest:-}" ]] || digest="$(printf '%s\n' "$status" | grep -Eio 'sha256:[[:xdigit:]]{64}' | head -n 1 || true)"
-    printf '%s\n' "$digest"
-}
-
-status_staged_digest() {
-    local status digest
-    status="$(bootc_status_json)"
-    if command -v jq >/dev/null 2>&1; then
-        digest="$(jq -r '.. | objects | select(.booted == false or .state == "staged" or .state == "pending") | tostring' <<<"$status" |
-            grep -Eio 'sha256:[[:xdigit:]]{64}' | head -n 1 || true)"
-    fi
-    [[ -n "${digest:-}" ]] || digest="$(status_digests | sed -n '2p')"
-    printf '%s\n' "$digest"
-}
+status_booted_digest() { status_field booted; }
+status_staged_digest() { status_field staged; }
+status_rollback_digest() { status_field rollback; }
+status_cached_digest() { status_field cached; }
+status_tracking_ref() { status_field tracking; }
 
 status_update_available() {
-    local status booted staged
-    status="$(bootc_status_json)"
-    if grep -Eqi '"(update_available|updates_available|upgrade_available)"[[:space:]]*:[[:space:]]*true' <<<"$status"; then
-        return 0
-    fi
-    booted="$(status_booted_digest)"
-    staged="$(status_staged_digest)"
-    [[ -n "$staged" && "$staged" != "$booted" ]]
+    local booted staged cached
+    booted="$(status_booted_digest)" || return 2
+    staged="$(status_staged_digest)" || return 2
+    cached="$(status_cached_digest)" || return 2
+    [[ -n "$staged" && "$staged" != "$booted" ]] && return 0
+    [[ -n "$cached" && "$cached" != "$booted" ]]
 }
 
 run_as_root() {

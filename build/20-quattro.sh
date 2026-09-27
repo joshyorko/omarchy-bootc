@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-trap 'printf "Quattro assembly failed at line %s: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
+phase=initialization
+trap 'status=$?; printf "Quattro assembly failed (status %s, phase %s, line %s): %s\n" "$status" "$phase" "$LINENO" "$BASH_COMMAND" >&2; pacman -Q >&2 || true; exit "$status"' ERR
 
 # shellcheck disable=SC1091
 source /ctx/build/lib/quattro-packages.sh
 
 OMARCHY_VERSION="${OMARCHY_VERSION:-4.0.4-1}"
-OMARCHY_QUATTRO_REVISION="${OMARCHY_QUATTRO_REVISION:-45748a2812f42e32f915b053caf4074e150e2048}"
+OMARCHY_QUATTRO_REVISION="${OMARCHY_QUATTRO_REVISION:-c668141e9c42b13c80c9ca4ea108e11708c5e8a5}"
 OMARCHY_SOURCE="/ctx/sources/omarchy-quattro.source"
 OMARCHY_REVISION_FILE="/ctx/sources/omarchy-quattro.revision"
 OMARCHY_VERSION_FILE="/ctx/sources/omarchy-quattro-version"
@@ -21,6 +22,7 @@ BOOTC_HOOK_DIR="/usr/share/omarchy-bootc/pacman-hooks"
 
 # Preserve Bootcrew's bootc-specific pacman options and relocated database/cache
 # paths while replacing only the repository sections with Quattro's topology.
+phase=configure-repositories
 bash /ctx/build/configure-quattro-repositories.sh /etc/pacman.conf "${REPOSITORY_CONFIG}"
 
 # Pacman gives later HookDir entries precedence by filename. Install valid,
@@ -43,21 +45,39 @@ EOF
 done <"${HOOK_INVENTORY}"
 sed -i "/^\[options\]$/a HookDir = ${BOOTC_HOOK_DIR}" /etc/pacman.conf
 
+phase=refresh-signing-keys
 pacman-key --init
 pacman-key --populate archlinux
+omarchy_key_file=/ctx/sources/omarchy-package-signing-key.asc
+omarchy_key_fingerprint="$(cat /ctx/sources/omarchy-package-signing-key.fingerprint)"
+[[ "${omarchy_key_fingerprint}" == 40DFB630FF42BCFFB047046CF0134EE680CAC571 ]]
+printf '%s  %s\n' \
+    "$(awk 'NR == 1 {print $1}' /ctx/sources/omarchy-package-signing-key.sha256)" \
+    "${omarchy_key_file}" | sha256sum -c -
+actual_omarchy_key_fingerprint="$(gpg --show-keys --with-colons "${omarchy_key_file}" \
+    | awk -F: '$1 == "fpr" {print $10; exit}')"
+[[ "${actual_omarchy_key_fingerprint}" == "${omarchy_key_fingerprint}" ]]
+pacman-key --add "${omarchy_key_file}"
+pacman-key --lsign-key "${omarchy_key_fingerprint}"
+install -D -m 0644 /ctx/sources/omarchy-package-signing-key.fingerprint \
+    /usr/share/omarchy-bootc/sources/omarchy-package-signing-key.fingerprint
+install -D -m 0644 /ctx/sources/omarchy-package-signing-key.source \
+    /usr/share/omarchy-bootc/sources/omarchy-package-signing-key.source
+phase=upgrade-stable-base
 pacman -Syyu --noconfirm
+phase=install-omarchy-release
 pacman -S --noconfirm --needed omarchy-keyring
 pacman-key --populate omarchy
 
-# Bootcrew maps /usr/local to mutable /var/usrlocal. Pacman cannot install a
-# package that owns /usr/local while the path is a symlink, so materialize it
-# only for the official transaction and restore the bootc layout afterward.
+# Bootcrew starts with /usr/local mapped into mutable state. Materialize it as
+# an image-owned directory and keep it that way so Omarchy CLI dispatch never
+# resolves through mutable /var/usrlocal.
 [[ -L /usr/local ]]
-usrlocal_target="$(readlink /usr/local)"
-[[ "${usrlocal_target}" == "../var/usrlocal" ]]
+[[ "$(readlink /usr/local)" == "../var/usrlocal" ]]
 rm /usr/local
 install -d -m 0755 /usr/local
 
+phase=install-quattro-packages
 pacman -S --noconfirm --needed omarchy-settings omarchy
 
 while IFS= read -r hook_name; do
@@ -74,7 +94,14 @@ mapfile -t other_packages < <(read_quattro_package_manifest "${OMARCHY_OTHER_MAN
 [[ ${#base_packages[@]} -gt 0 ]]
 [[ ${#other_packages[@]} -gt 0 ]]
 
+phase=install-base-closure
 pacman -S --noconfirm --needed "${base_packages[@]}"
+phase=register-package-system-users
+install -D -m 0644 /ctx/build/cups-browsed.sysusers.conf \
+    /usr/lib/sysusers.d/cups-browsed.conf
+systemd-sysusers
+getent passwd cups-browsed >/dev/null
+getent group cups-browsed >/dev/null
 
 # The optional manifest contains mutually exclusive hardware packages. Resolve
 # each dependency graph and retain the result without installing it wholesale.
@@ -89,6 +116,7 @@ printf '%s\n' "${OMARCHY_QUATTRO_REVISION}" > /usr/share/omarchy-bootc/sources/o
 
 optional_report=/usr/share/omarchy-bootc/optional-package-resolvability.txt
 optional_pacman_config=/tmp/quattro-optional-resolver.conf
+phase=resolve-optional-packages
 cp /etc/pacman.conf "${optional_pacman_config}"
 printf '\n' >>"${optional_pacman_config}"
 cat "${OPTIONAL_REPOSITORY_CONFIG}" >>"${optional_pacman_config}"
@@ -125,8 +153,20 @@ projected_session=/usr/share/wayland-sessions/omarchy.desktop
 cmp --silent "${usrlocal_files[1]}" "${canonical_session}"
 install -Dm644 "${canonical_session}" "${projected_session}"
 cmp --silent "${projected_session}" "${canonical_session}"
-# shellcheck disable=SC2114
-rm -rf /usr/local
-ln -s "${usrlocal_target}" /usr/local
+phase=record-package-provenance
+provenance_dir=/usr/share/omarchy-bootc
+pacman -Q >"${provenance_dir}/quattro-package-manifest.txt"
+pacman -Qi >"${provenance_dir}/quattro-package-provenance.txt"
+pacman -Qm >"${provenance_dir}/quattro-foreign-package-manifest.txt"
+cp /etc/pacman.conf "${provenance_dir}/pacman.conf"
+find /var/lib/pacman/sync -maxdepth 1 -type f -name '*.db*' -print0 \
+    | sort -z \
+    | xargs -0 -r sha256sum >"${provenance_dir}/repository-database-sha256sums.txt"
 
+phase=clean-pacman-cache
 pacman -Scc --noconfirm
+
+phase=verify-upstream-cli
+[[ -d /usr/local && ! -L /usr/local ]]
+[[ "$(command -v omarchy)" == /usr/bin/omarchy ]]
+[[ "$(readlink -f /usr/bin/omarchy)" == /usr/bin/omarchy ]]

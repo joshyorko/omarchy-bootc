@@ -4,8 +4,9 @@
 
 ARG ARCH_BOOTSTRAP_REF="docker.io/archlinux/archlinux:latest@sha256:0de35fe2ee793494ccfc99b202f6b30215b078baf2b082e9ccb027840c534fc1"
 ARG BOOTCREW_MONO_REVISION="5f048fa65a94daefc814d3cdd941d8d1e113c09e"
-ARG BOOTC_REVISION="3e76c16556c55e6d15d31bd47602b231e2131cb2"
-ARG OMARCHY_QUATTRO_REVISION="45748a2812f42e32f915b053caf4074e150e2048"
+ARG BOOTC_REVISION="fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60"
+ARG BOOTC_VERSION="v1.16.13"
+ARG OMARCHY_QUATTRO_REVISION="c668141e9c42b13c80c9ca4ea108e11708c5e8a5"
 ARG OMARCHY_VERSION="4.0.4-1"
 
 
@@ -68,10 +69,12 @@ COPY vendor/bootcrew /
 
 FROM stable-base AS bootc-builder
 ARG BOOTC_REVISION
+ARG BOOTC_VERSION
 RUN pacman -Syu --noconfirm make git rust go-md2man ostree glibc pkgconf
 WORKDIR /home/build
 RUN --mount=type=bind,from=bootcrew-ctx,source=/,target=/ctx \
     test "$(cat /ctx/BOOTC_REVISION)" = "${BOOTC_REVISION}" && \
+    test "$(cat /ctx/BOOTC_VERSION)" = "v1.16.13" && \
     BOOTC_SOURCE="$(cat /ctx/BOOTC_SOURCE)" \
     BOOTC_REVISION="${BOOTC_REVISION}" \
     bash /ctx/shared/build.sh
@@ -84,6 +87,7 @@ ENV OMARCHY_QUATTRO_REVISION="${OMARCHY_QUATTRO_REVISION}" \
 
 ARG BOOTCREW_MONO_REVISION
 ARG BOOTC_REVISION
+ARG BOOTC_VERSION
 COPY --from=bootc-builder /output /
 
 # Bootcrew mono arch/Containerfile at BOOTCREW_MONO_REVISION, applied to the
@@ -137,17 +141,24 @@ RUN --mount=type=bind,from=bootcrew-ctx,source=/,target=/ctx \
         /usr/share/omarchy-bootc/sources/bootc.source && \
     install -D -m 0644 /ctx/BOOTC_REVISION \
         /usr/share/omarchy-bootc/sources/bootc.revision && \
+    install -D -m 0644 /ctx/BOOTC_VERSION \
+        /usr/share/omarchy-bootc/sources/bootc-version && \
     install -d -m 0755 /usr/share/omarchy-bootc && \
     pacman -Q > /usr/share/omarchy-bootc/bootcrew-stable-package-manifest.txt && \
+    pacman -Qi > /usr/share/omarchy-bootc/bootcrew-stable-package-provenance.txt && \
+    find /var/lib/pacman/sync -maxdepth 1 -type f -name '*.db*' -print0 | sort -z | \
+        xargs -0 -r sha256sum > /usr/share/omarchy-bootc/bootcrew-repository-database-sha256sums.txt && \
     test -z "$(pacman -Qu)"
 
 LABEL org.opencontainers.image.bootcrew.revision="${BOOTCREW_MONO_REVISION}"
 LABEL org.opencontainers.image.bootc.revision="${BOOTC_REVISION}"
+LABEL org.opencontainers.image.bootc.version="${BOOTC_VERSION}"
 LABEL containers.bootc=1
 RUN bootc container lint --fatal-warnings
 
 FROM scratch AS install-ctx
 COPY build/20-quattro.sh /build/20-quattro.sh
+COPY build/cups-browsed.sysusers.conf /build/cups-browsed.sysusers.conf
 COPY sources /sources
 
 COPY build/configure-quattro-repositories.sh /build/configure-quattro-repositories.sh

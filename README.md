@@ -16,9 +16,9 @@ The build never inherits Bootcrew's published rolling image and never downgrades
 
 - Disposable Arch bootstrap tool: `docker.io/archlinux/archlinux:latest@sha256:0de35fe2ee793494ccfc99b202f6b30215b078baf2b082e9ccb027840c534fc1`
 - Bootcrew mono: `5f048fa65a94daefc814d3cdd941d8d1e113c09e`
-- bootc source: `3e76c16556c55e6d15d31bd47602b231e2131cb2`
-- Omarchy Quattro `4.0.4-1`: `45748a2812f42e32f915b053caf4074e150e2048`
-- Omarchy ISO Quattro reference: `7cfb7111a06873d61c45d37034577d4ba08d3f4f`
+- bootc source: `fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60`
+- Omarchy Quattro `4.0.4-1`: `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`
+- Omarchy ISO Quattro reference: `86c07785cb0f63be78edb1349843d5817b5c0e66`
 
 The source files under `sources/` are copied into the image provenance. A scheduled/manual tracker compares the pinned Omarchy Quattro revision with the live canonical `quattro` ref and opens one advisory issue; it never repins or publishes an image automatically.
 

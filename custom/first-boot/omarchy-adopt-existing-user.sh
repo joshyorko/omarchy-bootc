@@ -10,6 +10,7 @@ HOME_ROOT="${OMARCHY_ADOPTION_HOME_ROOT:-/var/home}"
 STATE_ROOT="${OMARCHY_ADOPTION_STATE_ROOT:-/var/lib/omarchy-bootc/adoption}"
 INSTALLER_ORIGIN="${OMARCHY_INSTALLER_ORIGIN_FILE:-/var/lib/omarchy-bootc/installer-origin}"
 USER_SELECTION="${OMARCHY_ADOPTION_USER_FILE:-/etc/omarchy/adoption-user}"
+PROVISION_BIN="${OMARCHY_ADOPTION_PROVISION_BIN:-/usr/bin/omarchy-provision-user}"
 STATE_FILE="${STATE_ROOT}/state.env"
 
 managed_paths=(
@@ -66,6 +67,7 @@ write_state() {
     local status="$1" user="$2" home="$3" uid="$4" gid="$5"
     local backup_root="$6" rollback_root="$7" manifest="$8"
     local created_user="$9" created_group="${10}" group_name="${11}"
+    local auth_ready="${12:-unknown}"
     local tmp="${STATE_FILE}.tmp.$$"
 
     install -d -m 0700 "$STATE_ROOT"
@@ -81,6 +83,7 @@ write_state() {
         printf 'created_user=%s\n' "$created_user"
         printf 'created_group=%s\n' "$created_group"
         printf 'group_name=%s\n' "$group_name"
+        printf 'auth_ready=%s\n' "$auth_ready"
     } >"$tmp"
     chmod 0600 "$tmp"
     mv -f -- "$tmp" "$STATE_FILE"
@@ -100,6 +103,9 @@ backup_path() {
 
     record_managed_path "$relative"
     if path_exists "$source"; then
+        # A crash/retry must retain the original snapshot rather than copying
+        # already-mutated state into the backup a second time.
+        path_exists "$destination" && return 0
         install -d -m 0700 "$(dirname "$destination")"
         cp -a -- "$source" "$destination"
     fi
@@ -203,6 +209,31 @@ if [[ -f "$STATE_FILE" ]]; then
     esac
 fi
 
+resume=0
+if [[ -f "$STATE_FILE" ]]; then
+    case "$(state_value status)" in
+        preparing|backed-up|needs-password|creating-group|creating-user|account-created|running|failed)
+            resume=1
+            selected_user="$(state_value user)"
+            HOME="$(state_value home)"
+            uid="$(state_value uid)"
+            gid="$(state_value gid)"
+            BACKUP_ROOT="$(state_value backup_root)"
+            ROLLBACK_ROOT="$(state_value rollback_root)"
+            MANIFEST="$(state_value manifest)"
+            created_user="$(state_value created_user)"
+            created_group="$(state_value created_group)"
+            group_name="$(state_value group_name)"
+            RUN_ROOT="$(dirname "$BACKUP_ROOT")"
+            [[ -n "$selected_user" && -d "$HOME" && -n "$MANIFEST" ]] || {
+                echo 'Adoption recovery state is incomplete; refusing to restart from a fresh baseline.' >&2
+                exit 1
+            }
+            ;;
+    esac
+fi
+
+if (( resume == 0 )); then
 mapfile -t candidates < <(
     if [[ -d "$HOME_ROOT" ]]; then
         find "$HOME_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
@@ -255,14 +286,20 @@ ROLLBACK_ROOT="${RUN_ROOT}/rollback"
 MANIFEST="${RUN_ROOT}/managed-paths"
 install -d -m 0700 "$RUN_ROOT" "$BACKUP_ROOT" "$ROLLBACK_ROOT"
 : >"$MANIFEST"
+created_user=0
+created_group=0
+group_name=""
+write_state "preparing" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" 0 0 "" no
+fi
+
+install -d -m 0700 "$RUN_ROOT" "$BACKUP_ROOT" "$ROLLBACK_ROOT"
+[[ -f "$MANIFEST" ]] || : >"$MANIFEST"
 backup_application_conflicts
 for relative in "${managed_paths[@]}"; do
     backup_path "$relative"
 done
+write_state "backed-up" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name" no
 
-created_user=0
-created_group=0
-group_name=""
 existing_passwd="$(getent passwd "$selected_user" || true)"
 if [[ -n "$existing_passwd" ]]; then
     existing_uid="$(cut -d: -f3 <<<"$existing_passwd")"
@@ -281,27 +318,35 @@ else
         group_name="$(getent group "$gid" | cut -d: -f1)"
     else
         group_name="$selected_user"
+        write_state "creating-group" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" 0 1 "$group_name" no
         groupadd --gid "$gid" "$group_name"
         created_group=1
     fi
+    write_state "creating-user" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" 1 "$created_group" "$group_name" no
     useradd --uid "$uid" --gid "$gid" --home-dir "$HOME" --no-create-home --shell /bin/bash "$selected_user"
     created_user=1
+    write_state "account-created" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name" no
     for group in wheel video audio input network; do
         getent group "$group" >/dev/null && usermod --append --groups "$group" "$selected_user"
     done
 
-    password="$(systemd-ask-password --timeout=300 "Create a password for ${selected_user}")" || {
-        write_state "needs-password" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name"
-        exit 1
-    }
-    [[ -n "$password" ]] || {
-        write_state "needs-password" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name"
-        exit 1
-    }
-    printf '%s:%s\n' "$selected_user" "$password" | chpasswd
 fi
 
-write_state "running" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name"
+password_status="$(passwd -S "$selected_user" 2>/dev/null | awk '{print $2}' || true)"
+if [[ "$password_status" != P ]]; then
+    write_state "needs-password" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name" no
+    password="$(systemd-ask-password --timeout=300 "Create a password for ${selected_user}")" || exit 1
+    [[ -n "$password" ]] || exit 1
+    printf '%s:%s\n' "$selected_user" "$password" | chpasswd
+    password_status="$(passwd -S "$selected_user" 2>/dev/null | awk '{print $2}' || true)"
+fi
+[[ "$password_status" == P ]] || {
+    write_state "needs-password" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name" no
+    echo "Account ${selected_user} still has no usable password; adoption remains pending." >&2
+    exit 1
+}
+
+write_state "running" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name" yes
 
 if ! runuser --user "$selected_user" -- env \
     HOME="$HOME" USER="$selected_user" LOGNAME="$selected_user" \
@@ -309,11 +354,11 @@ if ! runuser --user "$selected_user" -- env \
     OMARCHY_PATH=/usr/share/omarchy \
     OMARCHY_INSTALL=/usr/share/omarchy/install \
     PATH=/usr/share/omarchy/bin:/usr/local/bin:/usr/bin \
-    /usr/bin/omarchy-provision-user --first-install; then
-    write_state "failed" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name"
+    "$PROVISION_BIN" --first-install; then
+    write_state "failed" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name" yes
     exit 1
 fi
 
 restore_protected_paths
-write_state "complete" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name"
+write_state "complete" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name" yes
 echo "Omarchy adoption complete for ${selected_user}; existing user data was preserved."

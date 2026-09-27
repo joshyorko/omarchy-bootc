@@ -112,6 +112,7 @@ validate:
         build/verify-publishable-image.sh
         build/verify-quattro-payload.sh
         build/install-bootc-update.sh
+        build/cups-browsed.sysusers.conf
         custom/bootc/omarchy-bootc-common.sh
         custom/bootc/omarchy-bootc-update
         custom/bootc/omarchy-bootc-update-available
@@ -119,6 +120,10 @@ validate:
         sources/omarchy-quattro.source
         sources/omarchy-quattro.revision
         sources/omarchy-quattro-version
+        sources/omarchy-package-signing-key.asc
+        sources/omarchy-package-signing-key.fingerprint
+        sources/omarchy-package-signing-key.sha256
+        sources/omarchy-package-signing-key.source
         sources/omarchy-iso-quattro.source
         sources/omarchy-iso-quattro.revision
         transition/omarchy-transition.sh
@@ -132,12 +137,15 @@ validate:
         vendor/bootcrew/REVISION
         vendor/bootcrew/SOURCE
         vendor/bootcrew/BOOTC_REVISION
+        vendor/bootcrew/BOOTC_VERSION
         vendor/bootcrew/BOOTC_SOURCE
         vendor/bootcrew/SHA256SUMS
         vendor/bootcrew/shared/build.sh
         vendor/bootcrew/shared/initramfs.sh
         vendor/bootcrew/shared/bootc-rootfs.sh
         tests/test-quattro-source-contract.sh
+        tests/test-published-image-trust.sh
+        scripts/ci/verify-published-image-trust.sh
     )
 
     for f in "${REQUIRED_FILES[@]}"; do

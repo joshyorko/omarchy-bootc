@@ -14,7 +14,7 @@ The Quattro path is an additive installer variant. It must not replace, mutate, 
 
 - Source: `https://github.com/omacom/omarchy-iso.git`
 - Branch reviewed: `quattro`
-- Revision: `7cfb7111a06873d61c45d37034577d4ba08d3f4f`
+- Revision: `86c07785cb0f63be78edb1349843d5817b5c0e66`
 - Archiso submodule: resolved by the pinned upstream revision
 - Target OCI: the signed Omarchy Quattro bootc image produced by this repository from the Omarchy-stable package universe
 

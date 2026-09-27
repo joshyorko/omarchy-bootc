@@ -6,7 +6,7 @@ set -euo pipefail
 # The concrete commands are `bootc upgrade --check` and `bootc upgrade`.
 # until the first login on the deployment that booted the staged digest.
 # shellcheck disable=SC1091
-source /usr/lib/omarchy-bootc/update-common.sh
+source "${OMARCHY_BOOTC_COMMON_LIB:-/usr/lib/omarchy-bootc/update-common.sh}"
 
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then
     cat <<'EOF'
@@ -25,41 +25,93 @@ for arg in "$@"; do
     }
 done
 
-lock_root="${XDG_RUNTIME_DIR:-/tmp}"
-install -d -m 0700 "$lock_root"
-exec 9>"${lock_root}/omarchy-update.lock"
+# One root-owned lock covers every login. /tmp and per-user runtime dirs are
+# deliberately excluded: they allow concurrent staging or require chmods.
+lock_file="${OMARCHY_BOOTC_UPDATE_LOCK_FILE:-/run/lock/omarchy-update.lock}"
+run_as_root install -d -m 0755 "$(dirname "$lock_file")"
+run_as_root sh -c 'umask 000; : >> "$1"' sh "$lock_file"
+exec 9>>"$lock_file"
 flock -n 9 || {
     echo 'Another Omarchy update is already running.' >&2
     exit 1
 }
 
-if ! run_as_root "$OMARCHY_BOOTC_BIN" upgrade --check >/dev/null 2>&1; then
-    echo 'Omarchy image is already up to date.'
-    exit 0
+if ! run_as_root "$OMARCHY_BOOTC_BIN" upgrade --check; then
+    echo 'Omarchy update check failed; no update was staged.' >&2
+    exit 1
 fi
 
 # Never call pacman or snapshot tools here: bootc owns the deployment and
 # rollback boundary on this image.
-run_as_root "$OMARCHY_BOOTC_BIN" upgrade
-status="$(bootc_status_json)"
-expected="$(status_staged_digest <<<"$status")"
+booted="$(status_booted_digest)" || {
+    echo 'bootc status is malformed or uses an unsupported schema' >&2
+    exit 1
+}
+staged="$(status_staged_digest)" || {
+    echo 'bootc status is malformed or uses an unsupported schema' >&2
+    exit 1
+}
+candidate="$(status_cached_digest)" || {
+    echo 'bootc status is malformed or uses an unsupported schema' >&2
+    exit 1
+}
+tracking_ref="$(status_tracking_ref)" || {
+    echo 'bootc status is missing a valid configured image ref' >&2
+    exit 1
+}
+already_staged=0
+if [[ -n "$staged" && "$staged" != "$booted" ]]; then
+    expected="$staged"
+    already_staged=1
+elif [[ -n "$candidate" && "$candidate" != "$booted" ]]; then
+    expected="$candidate"
+else
+    echo 'bootc check succeeded but status has no candidate update digest' >&2
+    exit 1
+fi
 [[ "$expected" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
-    echo 'bootc staged an update but did not expose an exact candidate digest' >&2
+    echo 'bootc update candidate does not have an exact digest' >&2
     exit 1
 }
 
-user_home="${HOME:-/root}"
-if [[ -n "${SUDO_USER:-}" ]]; then
-    user_home="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+marker_user="${SUDO_USER:-$(id -un)}"
+marker_record="$(getent passwd "$marker_user")" || {
+    echo 'cannot determine the initiating user for the update marker' >&2
+    exit 1
+}
+marker_uid="$(cut -d: -f3 <<<"$marker_record")"
+marker_gid="$(cut -d: -f4 <<<"$marker_record")"
+user_home="$(cut -d: -f6 <<<"$marker_record")"
+state_home="${XDG_STATE_HOME:-${user_home}/.local/state}"
+if [[ -n "${SUDO_USER:-}" ]]; then state_home="${user_home}/.local/state"; fi
+pending_dir="${state_home}/omarchy-bootc"
+run_as_root install -d -m 0700 -o "$marker_uid" -g "$marker_gid" "$pending_dir"
+[[ ! -L "$pending_dir" ]] || { echo 'refusing a symlinked update marker directory' >&2; exit 1; }
+root_marker="${OMARCHY_BOOTC_TRANSACTION_MARKER:-${OMARCHY_BOOTC_STATE_ROOT}/pending-update}"
+run_as_root install -d -m 0755 "$(dirname "$root_marker")"
+marker_tmp="$(mktemp)"
+trap 'rm -f -- "$marker_tmp"' EXIT
+printf 'status=intent\nuser=%s\nuid=%s\ngid=%s\nhome=%s\nstate_home=%s\ntracking_ref=%s\nexpected_digest=%s\n' \
+    "$marker_user" "$marker_uid" "$marker_gid" "$user_home" "$state_home" "$tracking_ref" "$expected" >"$marker_tmp"
+run_as_root install -m 0600 -o "$marker_uid" -g "$marker_gid" "$marker_tmp" "${pending_dir}/pending-update"
+if ! run_as_root install -m 0600 "$marker_tmp" "$root_marker"; then
+    run_as_root rm -f -- "${pending_dir}/pending-update" || true
+    echo 'Could not persist the root update transaction marker; no image was staged.' >&2
+    exit 1
 fi
-[[ -n "$user_home" && -d "$user_home" ]] || user_home=/root
-pending_dir="${user_home}/.local/state/omarchy-bootc"
-install -d -m 0700 "$pending_dir"
-printf 'tracking_ref=%s\nexpected_digest=%s\n' \
-    "${OMARCHY_BOOTC_TRACKING_REF:-ghcr.io/joshyorko/omarchy-bootc:testing}" \
-    "$expected" >"${pending_dir}/pending-update"
-chmod 0600 "${pending_dir}/pending-update"
+
+if (( already_staged == 0 )); then
+    run_as_root "$OMARCHY_BOOTC_BIN" upgrade
+fi
+actual="$(status_staged_digest)" || {
+    echo 'bootc status is malformed after upgrade' >&2
+    exit 1
+}
+[[ "$actual" == "$expected" ]] || {
+    echo "bootc staged digest ${actual:-none} does not match checked candidate ${expected}" >&2
+    exit 1
+}
 
 printf 'status=staged\ntracking_ref=%s\nexpected_digest=%s\nreboot_required=yes\n' \
-    "${OMARCHY_BOOTC_TRACKING_REF:-ghcr.io/joshyorko/omarchy-bootc:testing}" "$expected"
+    "$tracking_ref" "$expected"
 echo 'Reboot to apply the staged deployment; migrations will run after login.'
