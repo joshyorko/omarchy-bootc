@@ -373,7 +373,7 @@ EOF
     run_guest 'sudo -n cat /run/omarchy-bootc-bootc-trace.log' >"$ARTIFACT_DIR/omarchy-update-bootc-trace.log"
     grep -Fq 'upgrade --check' "$ARTIFACT_DIR/omarchy-update-bootc-trace.log" \
         || fail "omarchy update did not invoke bootc upgrade --check"
-    grep -Fq 'upgrade' "$ARTIFACT_DIR/omarchy-update-bootc-trace.log" \
+    grep -Fxq 'upgrade' "$ARTIFACT_DIR/omarchy-update-bootc-trace.log" \
         || fail "omarchy update did not invoke a bootc upgrade operation"
     if grep -Eq '(^|[[:space:]])pacman([[:space:]]|$)' \
         "$ARTIFACT_DIR/omarchy-update-bootc-trace.log"; then
