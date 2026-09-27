@@ -35,6 +35,7 @@ jobs:
           bash tests/test-transition-contract.sh
           bash tests/test-published-image-trust.sh
           bash tests/test-foundation-contract.sh
+          bash tests/test-update-dispatch-contract.sh
 
       # The final image is large; use the runner's expanded container store when available.
       - name: Mount container storage
