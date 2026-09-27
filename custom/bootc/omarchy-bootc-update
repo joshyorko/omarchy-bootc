@@ -5,7 +5,7 @@ set -euo pipefail
 # entry point. It stages an image only; migrations are intentionally deferred
 # The concrete commands are `bootc upgrade --check` and `bootc upgrade`.
 # until the first login on the deployment that booted the staged digest.
-# shellcheck disable=SC1091
+# shellcheck disable=SC1090
 source "${OMARCHY_BOOTC_COMMON_LIB:-/usr/lib/omarchy-bootc/update-common.sh}"
 
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then

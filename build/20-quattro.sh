@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 phase=initialization
+status=0
 trap 'status=$?; printf "Quattro assembly failed (status %s, phase %s, line %s): %s\n" "$status" "$phase" "$LINENO" "$BASH_COMMAND" >&2; pacman -Q >&2 || true; exit "$status"' ERR
 
 # shellcheck disable=SC1091

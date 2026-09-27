@@ -19,7 +19,7 @@ if [[ ! -r "$COMMON_LIB" ]]; then
 fi
 # shellcheck disable=SC1090
 source "$COMMON_LIB"
-if [[ -n "$STATUS_FILE" ]]; then OMARCHY_BOOTC_STATUS_FILE="$STATUS_FILE"; fi
+if [[ -n "$STATUS_FILE" ]]; then export OMARCHY_BOOTC_STATUS_FILE="$STATUS_FILE"; fi
 
 DIE() {
     echo "ERROR: $*" >&2

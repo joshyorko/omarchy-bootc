@@ -10,6 +10,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 cat >"$tmp/status.json" <<'EOF'
 {"status":{"rollback":{"image":{"imageDigest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","image":"old"}},"staged":{"image":{"imageDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","image":"candidate"}},"booted":{"image":{"imageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","image":"current"}},"cachedUpdate":null},"spec":{"image":{"image":"ghcr.io/example/os:testing"}}}
 EOF
+# shellcheck disable=SC1090
 source "$COMMON"
 export OMARCHY_BOOTC_STATUS_FILE="$tmp/status.json"
 [[ "$(status_booted_digest)" == sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ]] || fail 'booted slot digest was not authoritative'
