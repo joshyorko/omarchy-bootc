@@ -55,7 +55,9 @@ omarchy_key_fingerprint="$(cat /ctx/sources/omarchy-package-signing-key.fingerpr
 printf '%s  %s\n' \
     "$(awk 'NR == 1 {print $1}' /ctx/sources/omarchy-package-signing-key.sha256)" \
     "${omarchy_key_file}" | sha256sum -c -
-actual_omarchy_key_fingerprint="$(gpg --show-keys --with-colons "${omarchy_key_file}" \
+omarchy_key_verification_home=/tmp/omarchy-key-verification
+install -d -m 0700 "${omarchy_key_verification_home}"
+actual_omarchy_key_fingerprint="$(gpg --homedir "${omarchy_key_verification_home}" --show-keys --with-colons "${omarchy_key_file}" \
     | awk -F: '$1 == "fpr" {print $10; exit}')"
 [[ "${actual_omarchy_key_fingerprint}" == "${omarchy_key_fingerprint}" ]]
 pacman-key --add "${omarchy_key_file}"
