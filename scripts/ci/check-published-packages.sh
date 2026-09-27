@@ -8,6 +8,19 @@ source /ctx/build/lib/quattro-packages.sh
 bash /ctx/build/configure-quattro-repositories.sh \
     /etc/pacman.conf /ctx/custom/pacman/quattro-repositories.conf
 cat /ctx/custom/pacman/quattro-optional-resolver.conf >>/etc/pacman.conf
+omarchy_key_file=/ctx/sources/omarchy-package-signing-key.asc
+omarchy_key_fingerprint="$(cat /ctx/sources/omarchy-package-signing-key.fingerprint)"
+[[ "${omarchy_key_fingerprint}" == 40DFB630FF42BCFFB047046CF0134EE680CAC571 ]]
+printf '%s  %s\n' \
+    "$(awk 'NR == 1 {print $1}' /ctx/sources/omarchy-package-signing-key.sha256)" \
+    "${omarchy_key_file}" | sha256sum -c -
+actual_omarchy_key_fingerprint="$(gpg --show-keys --with-colons "${omarchy_key_file}" \
+    | awk -F: '$1 == "fpr" {print $10; exit}')"
+[[ "${actual_omarchy_key_fingerprint}" == "${omarchy_key_fingerprint}" ]]
+pacman-key --init
+pacman-key --populate archlinux
+pacman-key --add "${omarchy_key_file}"
+pacman-key --lsign-key "${omarchy_key_fingerprint}"
 pacman -Sy --noconfirm
 expected_version="$(cat /ctx/sources/omarchy-quattro-version)"
 published_version="$(pacman -Sddp --print-format '%v' omarchy)"
