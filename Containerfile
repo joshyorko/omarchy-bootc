@@ -165,7 +165,9 @@ RUN printf 'L! /etc/resolv.conf - - - - /run/systemd/resolve/stub-resolv.conf\n'
 RUN --mount=type=tmpfs,dst=/tmp \
     --mount=type=tmpfs,dst=/root \
     --mount=type=bind,from=bootcrew-ctx,source=/,target=/ctx \
-    bash /ctx/shared/initramfs.sh
+    bash /ctx/shared/initramfs.sh && \
+    printf 'add_dracutmodules+=" ostree bootc "\n' \
+        > /usr/lib/dracut/dracut.conf.d/31-omarchy-bootc-native.conf
 
 RUN --mount=type=bind,from=bootcrew-ctx,source=/,target=/ctx \
     sed -i 's|^HOME=.*|HOME=/var/home|' /etc/default/useradd && \
