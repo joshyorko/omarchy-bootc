@@ -162,9 +162,13 @@ pacman -Q >"${provenance_dir}/quattro-package-manifest.txt"
 pacman -Qi >"${provenance_dir}/quattro-package-provenance.txt"
 pacman -Qm >"${provenance_dir}/quattro-foreign-package-manifest.txt" || [[ "$?" -eq 1 ]]
 cp /etc/pacman.conf "${provenance_dir}/pacman.conf"
-find /var/lib/pacman/sync -maxdepth 1 -type f -name '*.db*' -print0 \
-    | sort -z \
-    | xargs -0 -r sha256sum >"${provenance_dir}/repository-database-sha256sums.txt"
+if [[ -d /var/lib/pacman/sync ]]; then
+    find /var/lib/pacman/sync -maxdepth 1 -type f -name '*.db*' -print0 \
+        | sort -z \
+        | xargs -0 -r sha256sum >"${provenance_dir}/repository-database-sha256sums.txt"
+else
+    : >"${provenance_dir}/repository-database-sha256sums.txt"
+fi
 
 phase=clean-pacman-cache
 pacman -Scc --noconfirm
