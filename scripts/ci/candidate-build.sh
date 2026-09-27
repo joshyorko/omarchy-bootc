@@ -409,11 +409,17 @@ case "${1:-}" in
             -v "${ROOT_DIR}/scripts/ci/check-published-packages.sh:/ctx/check.sh:ro" \
             "$(read_arg ARCH_BOOTSTRAP_REF)" bash /ctx/check.sh
         ;;
+    foundation)
+        build_foundation
+        ;;
+    assembly)
+        build_assembly
+        ;;
     build)
         build_candidate
         ;;
     *)
-        echo "Usage: $0 {preflight|packages|build}" >&2
+        echo "Usage: $0 {preflight|packages|foundation|assembly|build}" >&2
         exit 2
         ;;
 esac
