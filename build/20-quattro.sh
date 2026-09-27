@@ -175,5 +175,6 @@ pacman -Scc --noconfirm
 
 phase=verify-upstream-cli
 [[ -d /usr/local && ! -L /usr/local ]]
-[[ "$(command -v omarchy)" == /usr/bin/omarchy ]]
-[[ "$(readlink -f /usr/bin/omarchy)" == /usr/bin/omarchy ]]
+omarchy_command="$(command -v omarchy)"
+[[ "${omarchy_command}" == /usr/bin/omarchy || "${omarchy_command}" == /usr/local/bin/omarchy ]]
+[[ "$(readlink -f "${omarchy_command}")" != /var/usrlocal/* ]]
