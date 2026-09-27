@@ -45,6 +45,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       image_tag: ${{ steps.build_config.outputs.image_tag }}
+      image_digest: ${{ steps.push.outputs.digest }}
 
     permissions:
       contents: read
@@ -130,22 +131,26 @@ jobs:
       - name: Fatal bootc container lint
         run: podman run --rm --privileged "${IMAGE_NAME}:${DEFAULT_TAG}" bootc container lint --fatal-warnings
 
-
-      - name: Install VM smoke test dependencies
-        if: github.event_name == 'workflow_dispatch' && inputs.run_vm_smoke
+      # A main artifact is publishable only after the exact image that will be
+      # pushed has installed to disk and completed the hosted runtime checks.
+      # Pull requests have the stricter candidate workflow, while a main build
+      # must gate publication itself so a later tag cannot hide an untested
+      # image.
+      - name: Install VM acceptance dependencies
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         run: |
           sudo apt-get update
           sudo apt-get install -y ovmf qemu-system-x86 qemu-utils sshpass systemd-container
 
-      - name: VM smoke test (headless qemu + ssh)
-        if: github.event_name == 'workflow_dispatch' && inputs.run_vm_smoke
+      - name: VM acceptance (headless UEFI QEMU + SSH)
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         env:
           CI_ARTIFACT_DIR: ${{ runner.temp }}/vm-smoke-artifacts
         run: |
           ./scripts/ci/vm-smoke.sh "${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}"
 
-      - name: Upload VM smoke artifacts
-        if: always() && github.event_name == 'workflow_dispatch' && inputs.run_vm_smoke
+      - name: Upload VM acceptance artifacts
+        if: always() && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         uses: actions/upload-artifact@v4
         with:
           name: vm-smoke-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
@@ -222,7 +227,7 @@ jobs:
             --arg source_sha "${SOURCE_SHA}" \
             --arg image "${IMAGE}" \
             --arg oci_manifest_digest "${DIGEST}" \
-            --arg acceptance_overlay "not-applied" \
+            --arg acceptance_overlay "hosted-vm-acceptance-passed-before-push" \
             '{schema:"omarchy-bootc.published-image/v1", source_sha:$source_sha,
               image:$image, oci_manifest_digest:$oci_manifest_digest,
               acceptance_overlay:$acceptance_overlay}' \

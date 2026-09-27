@@ -20,6 +20,7 @@ ADOPTION_SERVICE="${ROOT_DIR}/systemd/system/omarchy-adopt-existing-user.service
 BASE_BUILD="${ROOT_DIR}/build/10-base.sh"
 SERVICES_BUILD="${ROOT_DIR}/build/30-services.sh"
 TRANSITION_SCRIPT="${ROOT_DIR}/transition/omarchy-transition.sh"
+RUNTIME_SCRIPT="${ROOT_DIR}/scripts/ci/candidate-runtime.sh"
 BOOTCREW_REVISION_FILE="${ROOT_DIR}/vendor/bootcrew/REVISION"
 BOOTC_REVISION_FILE="${ROOT_DIR}/vendor/bootcrew/BOOTC_REVISION"
 BOOTC_VERSION_FILE="${ROOT_DIR}/vendor/bootcrew/BOOTC_VERSION"
@@ -284,6 +285,10 @@ if grep -Fq 'pacman -Syu' "${ROOT_DIR}/custom/bootc/omarchy-bootc-update"; then
 fi
 grep -Fq 'target_resolved_digest' "${TRANSITION_SCRIPT}" ||
     fail 'transition does not persist exact target digest'
+grep -Fq 'omarchy-bootc.accepted-candidate/v1' "${RUNTIME_SCRIPT}" \
+    || fail 'runtime acceptance does not emit a machine-readable accepted candidate receipt'
+grep -Fq 'publishable:false' "${RUNTIME_SCRIPT}" \
+    || fail 'unsigned local candidate receipt is not distinguished from a publishable image'
 
 for required_validation_input in \
     build/lib/bootc-initramfs.sh \

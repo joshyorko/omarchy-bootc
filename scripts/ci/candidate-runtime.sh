@@ -34,11 +34,7 @@ sudo -n podman run --rm --pull=never --privileged "${overlay}" \
     bootc container lint --fatal-warnings \
     2>&1 | tee "${artifact_dir}/acceptance-overlay-lint.log"
 sudo -n podman image inspect "${overlay}" | tee "${artifact_dir}/acceptance-overlay-inspect.json" >/dev/null
-jq -n --arg head "${head}" --arg parent "${manifest}" \
-    --arg overlay "$(sudo -n podman inspect --type image "${overlay}" --format '{{.Id}}')" \
-    '{source_head:$head, parent_manifest_digest:$parent, acceptance_image_id:$overlay,
-      scope:"Disposable acceptance child; not the publishable final digest"}' \
-    >"${artifact_dir}/runtime-subject.json"
+overlay_id="$(sudo -n podman inspect --type image "${overlay}" --format '{{.Id}}')"
 
 # Fetch only the official acceptance machinery at the accepted source pin.
 upstream_tests="$(mktemp -d)"
@@ -57,3 +53,25 @@ sudo -n env CI_ARTIFACT_DIR="${artifact_dir}" \
     timeout --signal=TERM --kill-after=30s 45m \
     bash scripts/ci/vm-smoke.sh "${overlay}" \
     2>&1 | tee "${artifact_dir}/vm-smoke.log"
+
+# This success receipt is emitted only after the exact image passed the VM and
+# pinned upstream/native acceptance suites. Its accepted subject remains the
+# final candidate image; the disposable acceptance overlay has its own ID.
+jq -n \
+    --arg source_sha "${head}" \
+    --arg image_archive "${archive_name}" \
+    --arg archive_sha256 "${checksum}" \
+    --arg candidate_oci_manifest_digest "${manifest}" \
+    --arg candidate_local_image_id "${parent}" \
+    --arg acceptance_overlay_image_id "${overlay_id}" \
+    --arg upstream_acceptance_revision "${quattro_revision}" \
+    '{schema:"omarchy-bootc.accepted-candidate/v1",
+      source_sha:$source_sha,
+      candidate:{archive:$image_archive, archive_sha256:$archive_sha256,
+        oci_manifest_digest:$candidate_oci_manifest_digest,
+        local_image_id:$candidate_local_image_id},
+      acceptance:{status:"passed", upstream_revision:$upstream_acceptance_revision,
+        overlay_image_id:$acceptance_overlay_image_id,
+        overlay_scope:"disposable-test-fixture-only"},
+      publishable:false}' \
+    >"${artifact_dir}/accepted-candidate.receipt.json"

@@ -8,7 +8,7 @@ trap 'rm -rf "$tmp"' EXIT
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
 cat >"$tmp/status.json" <<'EOF'
-{"status":{"rollback":{"image":{"imageDigest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","image":"old"}},"staged":{"image":{"imageDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","image":"candidate"}},"booted":{"image":{"imageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","image":"current"}},"cachedUpdate":null},"spec":{"image":{"image":"ghcr.io/example/os:testing"}}}
+{"status":{"rollback":{"image":{"imageDigest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","image":"old"}},"staged":{"image":{"imageDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","image":"candidate"}},"booted":{"image":{"imageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","image":"current"},"cachedUpdate":null}},"spec":{"image":{"image":"ghcr.io/example/os:testing"}}}
 EOF
 # shellcheck disable=SC1090
 source "$COMMON"
@@ -19,7 +19,7 @@ export OMARCHY_BOOTC_STATUS_FILE="$tmp/status.json"
 status_update_available || fail 'staged update was not detected'
 
 cat >"$tmp/status.json" <<'EOF'
-{"spec":{"image":{"image":"ghcr.io/example/os:testing"}},"status":{"booted":{"image":{"imageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"staged":null,"rollback":null,"cachedUpdate":{"image":{"imageDigest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}}}}
+{"spec":{"image":{"image":"ghcr.io/example/os:testing"}},"status":{"booted":{"image":{"imageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"cachedUpdate":{"imageDigest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}},"staged":null,"rollback":null}}
 EOF
 [[ -z "$(status_staged_digest)" ]] || fail 'null staged slot should mean no stage'
 status_update_available || fail 'cached update metadata was ignored'

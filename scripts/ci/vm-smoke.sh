@@ -8,6 +8,10 @@ if [[ -z "${IMAGE_REF}" ]]; then
 fi
 
 SSH_PORT="${SSH_PORT:-2222}"
+SSH_USER="${SSH_USER:-omarchy}"
+SSH_PASSWORD="${SSH_PASSWORD:-omarchy}"
+GUEST_HOME="${GUEST_HOME:-/home/${SSH_USER}}"
+VM_PROFILE="${VM_PROFILE:-omarchy}"
 DISK_SIZE="${DISK_SIZE:-32G}"
 SSH_WAIT_SECONDS="${SSH_WAIT_SECONDS:-360}"
 QCOW_PATH="output/qcow2/disk.qcow2"
@@ -107,7 +111,133 @@ cp "${OVMF_VARS_TEMPLATE}" "${QEMU_OVMF_VARS}"
 } >"${ARTIFACT_DIR}/qemu-firmware.txt"
 
 run_guest() {
-    sshpass -p omarchy ssh "${SSH_OPTS[@]}" omarchy@127.0.0.1 "$@"
+    sshpass -p "${SSH_PASSWORD}" ssh "${SSH_OPTS[@]}" "${SSH_USER}@127.0.0.1" "$@"
+}
+
+wait_for_guest_reboot() {
+    local before_boot_id="$1" after_boot_id=""
+    for _ in $(seq 1 180); do
+        sleep 2
+        after_boot_id="$(run_guest 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null || true)"
+        if [[ -n "${after_boot_id}" && "${after_boot_id}" != "${before_boot_id}" ]]; then
+            printf '%s\n' "${after_boot_id}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+reboot_guest() {
+    local before_boot_id
+    before_boot_id="$(run_guest 'cat /proc/sys/kernel/random/boot_id')"
+    run_guest 'sudo -n systemctl reboot' || true
+    wait_for_guest_reboot "${before_boot_id}"
+}
+
+build_lifecycle_revision() {
+    local lifecycle_dir="$1" base_ref="$2" b_ref="$3" archive="$4"
+    mkdir -p "${lifecycle_dir}"
+    cat >"${lifecycle_dir}/Containerfile" <<EOF
+FROM ${base_ref}
+RUN printf '%s\\n' lifecycle-b > /usr/lib/omarchy-bootc/lifecycle-b
+EOF
+    podman build --pull=never --format=oci --file "${lifecycle_dir}/Containerfile" \
+        --tag "${b_ref}" "${lifecycle_dir}" \
+        2>&1 | tee "${ARTIFACT_DIR}/lifecycle-b-build.log"
+    podman run --rm --pull=never --privileged "${b_ref}" \
+        bootc container lint --fatal-warnings \
+        2>&1 | tee "${ARTIFACT_DIR}/lifecycle-b-lint.log"
+    podman save --format=oci-archive --output "${archive}" "${b_ref}" \
+        2>&1 | tee "${ARTIFACT_DIR}/lifecycle-b-export.log"
+    tar -xOf "${archive}" index.json | jq -er '.manifests[0].digest' \
+        >"${ARTIFACT_DIR}/lifecycle-b-digest.txt"
+    sha256sum "${archive}" >"${ARTIFACT_DIR}/lifecycle-b-archive.sha256"
+}
+
+run_lifecycle_acceptance() {
+    [[ "${RUN_LIFECYCLE_ACCEPTANCE:-1}" == 1 ]] || return 0
+
+    local lifecycle_dir="${RUNNER_TEMP:-/tmp}/omarchy-lifecycle-b"
+    local b_archive="${lifecycle_dir}/lifecycle-b.oci.tar"
+    local b_ref="localhost/omarchy-bootc:acceptance-b"
+    local a_digest="${expected_digest}"
+    local b_digest=""
+    local b_path="${GUEST_HOME}/lifecycle-b.oci.tar"
+    local update_status=0
+
+    build_lifecycle_revision "${lifecycle_dir}" "${IMAGE_REF}" "${b_ref}" "${b_archive}"
+    b_digest="$(cat "${ARTIFACT_DIR}/lifecycle-b-digest.txt")"
+    [[ "${b_digest}" =~ ^sha256:[[:xdigit:]]{64}$ ]] || fail "lifecycle B has no immutable OCI digest"
+    printf 'A=%s\nB=%s\n' "${a_digest}" "${b_digest}" >"${ARTIFACT_DIR}/lifecycle-ab.txt"
+
+        sshpass -p "${SSH_PASSWORD}" scp -P "${SSH_PORT}" \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "${b_archive}" "${SSH_USER}@127.0.0.1:${b_path}"
+    run_guest "sha256sum '${b_path}'" >"${ARTIFACT_DIR}/guest-lifecycle-b-archive.sha256"
+
+    # Stage B from an explicit OCI archive. This exercises the selected bootc
+    # transport without requiring a mutable registry or a cached tag.
+    run_guest "sudo -n bootc switch --transport oci-archive --download-only 'oci-archive:${b_path}'" \
+        2>&1 | tee "${ARTIFACT_DIR}/lifecycle-stage-b.log"
+    run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/lifecycle-staged-status.json"
+    jq -e --arg digest "${b_digest}" '.status.staged.image.imageDigest == $digest' \
+        "${ARTIFACT_DIR}/lifecycle-staged-status.json" >/dev/null \
+        || fail "bootc did not stage exact lifecycle B digest"
+
+    reboot_guest || fail "lifecycle B reboot was not observed"
+    run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/lifecycle-b-booted-status.json"
+    jq -e --arg digest "${b_digest}" '.status.booted.image.imageDigest == $digest' \
+        "${ARTIFACT_DIR}/lifecycle-b-booted-status.json" >/dev/null \
+        || fail "lifecycle B did not boot"
+    run_guest 'test "$(cat /usr/lib/omarchy-bootc/lifecycle-b)" = lifecycle-b' \
+        || fail "lifecycle B payload was not present after reboot"
+
+    # Roll back to A, reboot, and verify the original exact deployment. User
+    # state is intentionally checked across both transitions.
+    run_guest 'sudo -n bootc rollback' 2>&1 | tee "${ARTIFACT_DIR}/lifecycle-rollback.log"
+    reboot_guest || fail "rollback reboot was not observed"
+    run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/lifecycle-a-rollback-status.json"
+    jq -e --arg digest "${a_digest}" '.status.booted.image.imageDigest == $digest' \
+        "${ARTIFACT_DIR}/lifecycle-a-rollback-status.json" >/dev/null \
+        || fail "rollback did not restore exact lifecycle A digest"
+    run_guest 'test -d "$HOME/.config/omarchy/plugins"' || fail "user/plugin state did not survive rollback"
+
+    # Gate 5: stage the same controlled B through the real Omarchy updater.
+    # The tracing shim only records the bootc calls; the delegated binary is
+    # still the image's native bootc. A pacman database timestamp proves that
+    # no live package transaction mutated image-owned OS state.
+    run_guest "sudo -n bootc switch --transport oci-archive --download-only 'oci-archive:${b_path}'" \
+        2>&1 | tee "${ARTIFACT_DIR}/update-stage-b.log"
+    run_guest 'sudo -n sha256sum /var/lib/pacman/local/ALPM_DB_VERSION 2>/dev/null || true' \
+        >"${ARTIFACT_DIR}/pacman-db-before.txt"
+    cat >"${lifecycle_dir}/bootc-trace" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> /run/omarchy-bootc-bootc-trace.log
+exec /usr/bin/bootc "$@"
+EOF
+    sshpass -p "${SSH_PASSWORD}" scp -P "${SSH_PORT}" \
+        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "${lifecycle_dir}/bootc-trace" "${SSH_USER}@127.0.0.1:${GUEST_HOME}/bootc-trace"
+    run_guest 'sudo -n install -m 0755 /home/omarchy/bootc-trace /usr/local/bin/bootc-trace'
+    set +e
+    run_guest 'env OMARCHY_BOOTC_BIN=/usr/local/bin/bootc-trace /usr/local/bin/omarchy update -y' \
+        2>&1 | tee "${ARTIFACT_DIR}/omarchy-update.log"
+    update_status="${PIPESTATUS[0]}"
+    set -e
+    (( update_status == 0 )) || fail "omarchy update did not complete the staged bootc transaction"
+    run_guest 'sudo -n cat /run/omarchy-bootc-bootc-trace.log' >"${ARTIFACT_DIR}/omarchy-update-bootc-trace.log"
+    grep -Fq 'upgrade --check' "${ARTIFACT_DIR}/omarchy-update-bootc-trace.log" \
+        || fail "omarchy update did not invoke bootc upgrade --check"
+    run_guest 'sudo -n sha256sum /var/lib/pacman/local/ALPM_DB_VERSION 2>/dev/null || true' \
+        >"${ARTIFACT_DIR}/pacman-db-after.txt"
+    cmp -s "${ARTIFACT_DIR}/pacman-db-before.txt" "${ARTIFACT_DIR}/pacman-db-after.txt" \
+        || fail "omarchy update changed the pacman database"
+    reboot_guest || fail "update reboot was not observed"
+    run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/update-booted-status.json"
+    jq -e --arg digest "${b_digest}" '.status.booted.image.imageDigest == $digest' \
+        "${ARTIFACT_DIR}/update-booted-status.json" >/dev/null \
+        || fail "the updater did not boot the staged exact B digest"
+    printf '%s\n' passed >"${ARTIFACT_DIR}/gate-3-5.receipt"
 }
 
 write_artifact() {
@@ -279,21 +409,24 @@ if ! run_guest 'echo ssh-up' >/dev/null 2>&1; then
 fi
 echo "::endgroup::"
 
-echo "::group::Wait for acceptance provisioning"
-for _ in $(seq 1 "$((SSH_WAIT_SECONDS / 2))"); do
-    if run_guest 'test -f /var/lib/omarchy-acceptance/ready && test -f /home/omarchy/.local/state/omarchy/done/finalize-user'; then
-        break
-    fi
-    sleep 2
-done
+if [[ "${VM_PROFILE}" == omarchy ]]; then
+    echo "::group::Wait for acceptance provisioning"
+    for _ in $(seq 1 "$((SSH_WAIT_SECONDS / 2))"); do
+        if run_guest 'test -f /var/lib/omarchy-acceptance/ready && test -f /home/omarchy/.local/state/omarchy/done/finalize-user'; then
+            break
+        fi
+        sleep 2
+    done
 
-if ! run_guest 'test -f /var/lib/omarchy-acceptance/ready && test -f /home/omarchy/.local/state/omarchy/done/finalize-user'; then
-    fail "Acceptance first-boot provisioning did not complete in time."
+    if ! run_guest 'test -f /var/lib/omarchy-acceptance/ready && test -f /home/omarchy/.local/state/omarchy/done/finalize-user'; then
+        fail "Acceptance first-boot provisioning did not complete in time."
+    fi
+    echo "::endgroup::"
 fi
-echo "::endgroup::"
 
 echo "::group::Run in-VM smoke checks"
-run_guest 'set -euo pipefail
+if [[ "${VM_PROFILE}" == omarchy ]]; then
+    run_guest 'set -euo pipefail
 id omarchy
 [[ -f /var/lib/omarchy-acceptance/ready ]]
 [[ -f /home/omarchy/.local/state/omarchy/done/finalize-user ]]
@@ -309,6 +442,13 @@ cmp --silent /usr/share/omarchy/default/wayland-sessions/omarchy.desktop /usr/sh
 [[ "$(pacman -Qoq /usr/bin/omarchy-theme-list)" == omarchy ]]
 [[ -d /usr/share/omarchy/shell ]]
 [[ -d /usr/share/omarchy/themes ]]' || fail "In-VM runtime checks failed."
+else
+    run_guest 'set -euo pipefail
+id
+systemctl is-active sshd
+test -r /etc/os-release
+test -x /usr/bin/bootc' || fail "In-VM generic bootc checks failed."
+fi
 echo "::endgroup::"
 
 run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/first-boot-status.json"
@@ -318,11 +458,11 @@ jq -e --arg digest "${expected_digest}" '.status.booted.image.imageDigest == $di
     || fail "Booted acceptance digest differs from the installed OCI manifest."
 
 acceptance_status=0
-if [[ -n "${UPSTREAM_ACCEPTANCE_DIR:-}" ]]; then
+if [[ "${VM_PROFILE}" == omarchy && -n "${UPSTREAM_ACCEPTANCE_DIR:-}" ]]; then
     # scp uses -P rather than ssh's -p. Transfer only tests, never the source .git.
-    sshpass -p omarchy scp -r -P "${SSH_PORT}" \
+    sshpass -p "${SSH_PASSWORD}" scp -r -P "${SSH_PORT}" \
         -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        "${UPSTREAM_ACCEPTANCE_DIR}/test" omarchy@127.0.0.1:upstream-acceptance-test
+        "${UPSTREAM_ACCEPTANCE_DIR}/test" "${SSH_USER}@127.0.0.1:upstream-acceptance-test"
     run_guest 'mkdir -p "$HOME/upstream-acceptance/test"; cp -a "$HOME/upstream-acceptance-test/." "$HOME/upstream-acceptance/test/"'
     if ! run_guest 'env OMARCHY_ACCEPTANCE_DIR="$HOME/acceptance-receipts/upstream" OMARCHY_ACCEPTANCE_TEST_TIMEOUT=120 timeout 20m bash "$HOME/upstream-acceptance/test/acceptance"' \
         2>&1 | tee "${ARTIFACT_DIR}/upstream-acceptance.log"; then
@@ -330,10 +470,10 @@ if [[ -n "${UPSTREAM_ACCEPTANCE_DIR:-}" ]]; then
     fi
 fi
 
-if [[ -n "${NATIVE_ACCEPTANCE_SCRIPT:-}" ]]; then
-    sshpass -p omarchy scp -P "${SSH_PORT}" \
+if [[ "${VM_PROFILE}" == omarchy && -n "${NATIVE_ACCEPTANCE_SCRIPT:-}" ]]; then
+    sshpass -p "${SSH_PASSWORD}" scp -P "${SSH_PORT}" \
         -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        "${NATIVE_ACCEPTANCE_SCRIPT}" omarchy@127.0.0.1:guest-native-acceptance.sh
+        "${NATIVE_ACCEPTANCE_SCRIPT}" "${SSH_USER}@127.0.0.1:guest-native-acceptance.sh"
     if run_guest 'env OMARCHY_ACCEPTANCE_DIR="$HOME/acceptance-receipts/native" timeout 5m bash "$HOME/guest-native-acceptance.sh" prepare' \
         2>&1 | tee "${ARTIFACT_DIR}/native-prepare.log"; then
         before_boot="$(run_guest 'cat /proc/sys/kernel/random/boot_id')"
@@ -365,7 +505,10 @@ if [[ -n "${NATIVE_ACCEPTANCE_SCRIPT:-}" ]]; then
     fi
 fi
 
+if [[ "${VM_PROFILE}" == omarchy ]]; then
+    run_lifecycle_acceptance
+fi
 capture_host_diagnostics
 capture_guest_diagnostics
 ((acceptance_status == 0)) || fail "One or more graphical/native acceptance checks failed; inspect individual receipts."
-echo "Requested first-boot/runtime checks passed. A/B rollback and Dakota round-trip still require separate evidence."
+echo "Requested first-boot/runtime and A/B lifecycle checks passed. Dakota round-trip remains a separate transition gate."

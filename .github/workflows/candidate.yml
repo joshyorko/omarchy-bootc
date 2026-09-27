@@ -114,3 +114,12 @@ jobs:
           path: ${{ runner.temp }}/runtime-receipts
           retention-days: 7
           if-no-files-found: warn
+
+      - name: Retain accepted candidate handoff
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-bootc-accepted-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/runtime-receipts/accepted-candidate.receipt.json
+          retention-days: 90
+          if-no-files-found: error

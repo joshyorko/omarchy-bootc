@@ -8,7 +8,7 @@ trap 'rm -rf -- "$tmp"' EXIT
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
 cat >"$tmp/status.json" <<'EOF'
-{"spec":{"image":{"image":"ghcr.io/example/os:testing"}},"status":{"booted":{"image":{"imageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"staged":null,"rollback":null,"cachedUpdate":{"image":{"imageDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}}}
+{"spec":{"image":{"image":"ghcr.io/example/os:testing"}},"status":{"booted":{"image":{"imageDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"cachedUpdate":{"imageDigest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},"staged":null,"rollback":null}}
 EOF
 cat >"$tmp/bootc" <<'EOF'
 #!/usr/bin/env bash

@@ -26,6 +26,12 @@ status_field() {
         elif ($entry.image.imageDigest|type) != "string" then error("missing BootEntry.image.imageDigest")
         elif ($entry.image.imageDigest|test("^sha256:[A-Fa-f0-9]{64}$")) then $entry.image.imageDigest
         else error("invalid BootEntry image digest") end;
+      def cached_digest($entry):
+        if $entry == null then ""
+        elif ($entry|type) != "object" then error("invalid cached ImageStatus")
+        elif ($entry.imageDigest|type) != "string" then error("missing cached ImageStatus.imageDigest")
+        elif ($entry.imageDigest|test("^sha256:[A-Fa-f0-9]{64}$")) then $entry.imageDigest
+        else error("invalid cached ImageStatus digest") end;
       if type != "object" or (.status|type) != "object" or
          (["booted","staged","rollback"] - (.status|keys)) != [] then
         error("unsupported bootc status schema") else . end
@@ -37,8 +43,10 @@ status_field() {
         elif $key == "staged" or $key == "rollback" then
           if .status[$key] == null then "" else digest(.status[$key]) end
         elif $key == "cached" then
-          if (.status|has("cachedUpdate")|not) or .status.cachedUpdate == null then ""
-          else digest(.status.cachedUpdate) end
+          if .status.booted == null then ""
+          elif (.status.booted|type) != "object" then error("invalid booted BootEntry")
+          elif (.status.booted|has("cachedUpdate")|not) or .status.booted.cachedUpdate == null then ""
+          else cached_digest(.status.booted.cachedUpdate) end
         elif $key == "tracking" then
           .spec.image.image
         else error("unknown status field") end

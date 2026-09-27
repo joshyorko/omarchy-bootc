@@ -70,7 +70,7 @@ COPY vendor/bootcrew /
 FROM stable-base AS bootc-builder
 ARG BOOTC_REVISION
 ARG BOOTC_VERSION
-RUN pacman -Syu --noconfirm make git rust go-md2man ostree glibc pkgconf
+RUN pacman -Syu --noconfirm make git rust go-md2man ostree glibc pkgconf libselinux
 WORKDIR /home/build
 RUN --mount=type=bind,from=bootcrew-ctx,source=/,target=/ctx \
     test "$(cat /ctx/BOOTC_REVISION)" = "${BOOTC_REVISION}" && \

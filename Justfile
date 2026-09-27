@@ -146,6 +146,7 @@ validate:
         tests/test-quattro-source-contract.sh
         tests/test-published-image-trust.sh
         scripts/ci/verify-published-image-trust.sh
+        scripts/ci/candidate-runtime.sh
     )
 
     for f in "${REQUIRED_FILES[@]}"; do
