@@ -440,11 +440,14 @@ case "${1:-}" in
     assembly)
         build_assembly
         ;;
+    integration)
+        build_integration
+        ;;
     build)
         build_candidate
         ;;
     *)
-        echo "Usage: $0 {preflight|packages|foundation|assembly|build}" >&2
+        echo "Usage: $0 {preflight|packages|foundation|assembly|integration|build}" >&2
         exit 2
         ;;
 esac
