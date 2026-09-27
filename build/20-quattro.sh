@@ -160,7 +160,7 @@ phase=record-package-provenance
 provenance_dir=/usr/share/omarchy-bootc
 pacman -Q >"${provenance_dir}/quattro-package-manifest.txt"
 pacman -Qi >"${provenance_dir}/quattro-package-provenance.txt"
-pacman -Qm >"${provenance_dir}/quattro-foreign-package-manifest.txt"
+pacman -Qm >"${provenance_dir}/quattro-foreign-package-manifest.txt" || [[ "$?" -eq 1 ]]
 cp /etc/pacman.conf "${provenance_dir}/pacman.conf"
 find /var/lib/pacman/sync -maxdepth 1 -type f -name '*.db*' -print0 \
     | sort -z \
