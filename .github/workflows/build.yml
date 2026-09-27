@@ -71,6 +71,7 @@ jobs:
           bash tests/test-transition-contract.sh
           bash tests/test-published-image-trust.sh
           bash tests/test-foundation-contract.sh
+          bash tests/test-update-dispatch-contract.sh
 
       # Free up space on the runner — Arch images can be large.
       # Uncomment if builds exceed runner disk limits.
