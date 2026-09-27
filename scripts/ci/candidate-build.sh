@@ -267,8 +267,14 @@ build_assembly() {
         --label "com.omarchy.assembly.head=${head_sha}" \
         --label "com.omarchy.assembly.foundation=${foundation_image_id}" \
         "${ROOT_DIR}"
-    run_logged assembly-lint sudo -n podman run --rm --pull=never --privileged \
-        "${image_ref}" bootc container lint --fatal-warnings
+    run_logged assembly-contract sudo -n podman run --rm --pull=never --privileged \
+        "${image_ref}" bash -ceu 'set -euo pipefail
+            test -s /usr/share/omarchy-bootc/quattro-package-manifest.txt
+            test -s /usr/share/omarchy-bootc/quattro-package-provenance.txt
+            test -s /usr/share/omarchy-bootc/package-provenance.txt
+            test -s /usr/share/omarchy-bootc/optional-package-resolvability.txt
+            test -s /usr/share/omarchy-bootc/pacman.conf
+            printf "Omarchy assembly package/provenance contract passed\\n"'
     export_stage assembly "${image_ref}" omarchy-bootc.assembly/v1 \
         "omarchy-bootc-assembly-head-${head_sha}" "${foundation_image_id}"
     printf 'assembly head=%s foundation=%s\n' \
