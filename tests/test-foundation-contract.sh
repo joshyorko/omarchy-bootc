@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root_dir="${(cd "$(dirname "$0")/.." && pwd)}"
+root_dir="$(cd "$(dirname "$0")/.." && pwd)"
 containerfile="${root_dir}/Containerfile"
 contract="${root_dir}/build/foundation-contract.sh"
 hypothesis="${root_dir}/docs/foundation-hypothesis.md"
@@ -29,7 +29,7 @@ grep -Fq 'mkcomposefs' "${contract}"
 grep -Fq '/usr/lib/dracut/modules.d/51bootc' "${contract}"
 grep -Fq '/usr/lib/ostree/prepare-root.conf' "${contract}"
 
-foundation_block="${(sed -n '/^FROM bootcrew-system AS foundation$/,/^FROM /p' "${containerfile}")}"
+foundation_block="$(sed -n '/^FROM bootcrew-system AS foundation$/,/^FROM /p' "${containerfile}")"
 test -n "${foundation_block}"
 ! grep -Fq '20-quattro.sh' <<<"${foundation_block}"
 ! grep -Fq 'omarchy' <<<"${foundation_block}" || grep -Fq 'omarchy-bootc' <<<"${foundation_block}"
