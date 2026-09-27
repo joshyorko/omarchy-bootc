@@ -36,8 +36,6 @@ jobs:
           bash tests/test-update-dispatch-contract.sh
           bash tests/test-transition-contract.sh
           bash tests/test-published-image-trust.sh
-          bash tests/test-foundation-contract.sh
-          bash tests/test-update-dispatch-contract.sh
 
       # The final image is large; use the runner's expanded container store when available.
       - name: Mount container storage
@@ -100,62 +98,6 @@ jobs:
           name: omarchy-bootc-integration-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             ${{ runner.temp }}/omarchy-bootc-candidate/*integration*
-          if-no-files-found: warn
-          compression-level: 0
-          retention-days: 30
-
-      - name: Build and export immutable bootc foundation
-        env:
-          CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
-          FOUNDATION_IMAGE_REF: localhost/omarchy-bootc:foundation
-        run: timeout --signal=TERM --kill-after=60s 75m ./scripts/ci/candidate-build.sh foundation
-
-      - name: Upload foundation archive and receipt
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: omarchy-bootc-foundation-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            ${{ runner.temp }}/omarchy-bootc-candidate/*foundation*.oci.tar
-            ${{ runner.temp }}/omarchy-bootc-candidate/*foundation*.receipt.json
-          if-no-files-found: warn
-          compression-level: 0
-          retention-days: 30
-
-      - name: Build and export Omarchy package assembly
-        env:
-          CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
-          FOUNDATION_IMAGE_REF: localhost/omarchy-bootc:foundation
-          ASSEMBLY_IMAGE_REF: localhost/omarchy-bootc:assembly
-        run: timeout --signal=TERM --kill-after=60s 45m ./scripts/ci/candidate-build.sh assembly
-
-      - name: Upload assembly archive and receipt
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: omarchy-bootc-assembly-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            ${{ runner.temp }}/omarchy-bootc-candidate/*assembly*.oci.tar
-            ${{ runner.temp }}/omarchy-bootc-candidate/*assembly*.receipt.json
-          if-no-files-found: warn
-          compression-level: 0
-          retention-days: 30
-
-      - name: Build and verify integration layer
-        env:
-          CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
-          ASSEMBLY_IMAGE_REF: localhost/omarchy-bootc:assembly
-          INTEGRATION_IMAGE_REF: localhost/omarchy-bootc:integration
-        run: timeout --signal=TERM --kill-after=60s 30m ./scripts/ci/candidate-build.sh integration
-
-      - name: Upload integration archive and receipt
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: omarchy-bootc-integration-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            ${{ runner.temp }}/omarchy-bootc-candidate/*integration*.oci.tar
-            ${{ runner.temp }}/omarchy-bootc-candidate/*integration*.receipt.json
           if-no-files-found: warn
           compression-level: 0
           retention-days: 30
