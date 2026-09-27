@@ -70,6 +70,7 @@ jobs:
           bash tests/test-quattro-source-contract.sh
           bash tests/test-transition-contract.sh
           bash tests/test-published-image-trust.sh
+          bash tests/test-foundation-contract.sh
 
       # Free up space on the runner — Arch images can be large.
       # Uncomment if builds exceed runner disk limits.
@@ -117,6 +118,33 @@ jobs:
             containers.bootc=1
           sep-tags: " "
           sep-annotations: " "
+
+      - name: Prove immutable bootc foundation before full image build
+        env:
+          CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-lower-stages
+        run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh foundation
+
+      - name: Prove Omarchy package assembly before full image build
+        env:
+          CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-lower-stages
+        run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh assembly
+
+      - name: Prove integration layer before full image build
+        env:
+          CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-lower-stages
+        run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh integration
+
+      - name: Upload lower-stage receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-bootc-lower-stages-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/omarchy-bootc-lower-stages/*.receipt.json
+            ${{ runner.temp }}/omarchy-bootc-lower-stages/logs
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 30
 
       - name: Build Image
         id: build_image
