@@ -6,6 +6,9 @@ ARG ARCH_BOOTSTRAP_REF="docker.io/archlinux/archlinux:latest@sha256:0de35fe2ee79
 ARG BOOTCREW_MONO_REVISION="5f048fa65a94daefc814d3cdd941d8d1e113c09e"
 ARG BOOTC_REVISION="fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60"
 ARG BOOTC_VERSION="v1.16.13"
+ARG SELINUX_USERSPACE_VERSION="3.11"
+ARG SELINUX_LIBSEPOL_SHA256="79f3d2c88f44b7eb5cf54d9792e03232297e17f97a179163f2750099a00f164d"
+ARG SELINUX_LIBSELINUX_SHA256="73d419c6e20e874adaa4019372cbd097eecf4d276e13f27ec5e67d35c0bd203c"
 ARG OMARCHY_QUATTRO_REVISION="c668141e9c42b13c80c9ca4ea108e11708c5e8a5"
 ARG OMARCHY_VERSION="4.0.4-1"
 
@@ -70,14 +73,36 @@ COPY vendor/bootcrew /
 FROM stable-base AS bootc-builder
 ARG BOOTC_REVISION
 ARG BOOTC_VERSION
-RUN pacman -Syu --noconfirm make git rust go-md2man ostree glibc pkgconf libselinux
+ARG SELINUX_USERSPACE_VERSION
+ARG SELINUX_LIBSEPOL_SHA256
+ARG SELINUX_LIBSELINUX_SHA256
+RUN pacman -Syu --noconfirm curl flex make git rust go-md2man ostree glibc pkgconf pcre2 && \
+    workdir="$(mktemp -d)" && \
+    curl --fail --location --retry 3 --retry-delay 2 \
+        "https://github.com/SELinuxProject/selinux/releases/download/${SELINUX_USERSPACE_VERSION}/libsepol-${SELINUX_USERSPACE_VERSION}.tar.gz" \
+        --output "${workdir}/libsepol.tar.gz" && \
+    curl --fail --location --retry 3 --retry-delay 2 \
+        "https://github.com/SELinuxProject/selinux/releases/download/${SELINUX_USERSPACE_VERSION}/libselinux-${SELINUX_USERSPACE_VERSION}.tar.gz" \
+        --output "${workdir}/libselinux.tar.gz" && \
+    printf '%s  %s\n' "${SELINUX_LIBSEPOL_SHA256}" "${workdir}/libsepol.tar.gz" | sha256sum -c - && \
+    printf '%s  %s\n' "${SELINUX_LIBSELINUX_SHA256}" "${workdir}/libselinux.tar.gz" | sha256sum -c - && \
+    tar -xzf "${workdir}/libsepol.tar.gz" -C "${workdir}" && \
+    tar -xzf "${workdir}/libselinux.tar.gz" -C "${workdir}" && \
+    make -C "${workdir}/libsepol-${SELINUX_USERSPACE_VERSION}" -j"$(nproc)" && \
+    make -C "${workdir}/libsepol-${SELINUX_USERSPACE_VERSION}" DESTDIR=/ SHLIBDIR=/usr/lib install && \
+    make -C "${workdir}/libselinux-${SELINUX_USERSPACE_VERSION}" DISABLE_RPM=y USE_PCRE2=y -j"$(nproc)" && \
+    make -C "${workdir}/libselinux-${SELINUX_USERSPACE_VERSION}" DISABLE_RPM=y USE_PCRE2=y DESTDIR=/ SBINDIR=/usr/bin SHLIBDIR=/usr/lib install && \
+    ldconfig && \
+    rm -rf "${workdir}"
 WORKDIR /home/build
 RUN --mount=type=bind,from=bootcrew-ctx,source=/,target=/ctx \
     test "$(cat /ctx/BOOTC_REVISION)" = "${BOOTC_REVISION}" && \
     test "$(cat /ctx/BOOTC_VERSION)" = "v1.16.13" && \
     BOOTC_SOURCE="$(cat /ctx/BOOTC_SOURCE)" \
     BOOTC_REVISION="${BOOTC_REVISION}" \
-    bash /ctx/shared/build.sh
+    bash /ctx/shared/build.sh && \
+    install -D -m 0755 /usr/lib/libselinux.so.1 /output/usr/lib/libselinux.so.1 && \
+    install -D -m 0755 /usr/lib/libsepol.so.2 /output/usr/lib/libsepol.so.2
 
 FROM stable-base AS bootcrew-system
 ARG OMARCHY_QUATTRO_REVISION
@@ -88,6 +113,7 @@ ENV OMARCHY_QUATTRO_REVISION="${OMARCHY_QUATTRO_REVISION}" \
 ARG BOOTCREW_MONO_REVISION
 ARG BOOTC_REVISION
 ARG BOOTC_VERSION
+ARG SELINUX_USERSPACE_VERSION
 COPY --from=bootc-builder /output /
 
 # Bootcrew mono arch/Containerfile at BOOTCREW_MONO_REVISION, applied to the
@@ -100,7 +126,7 @@ RUN pacman -Syu --noconfirm
 RUN pacman -Sy --noconfirm \
         base bubblewrap dracut linux linux-firmware ostree btrfs-progs \
         e2fsprogs xfsprogs dosfstools skopeo dbus dbus-glib glib2 \
-        shadow openssh && \
+        shadow openssh pcre2 && \
     pacman -S --clean --noconfirm
 
 RUN systemctl enable systemd-networkd systemd-resolved systemd-timesyncd sshd && \
@@ -153,6 +179,7 @@ RUN --mount=type=bind,from=bootcrew-ctx,source=/,target=/ctx \
 LABEL org.opencontainers.image.bootcrew.revision="${BOOTCREW_MONO_REVISION}"
 LABEL org.opencontainers.image.bootc.revision="${BOOTC_REVISION}"
 LABEL org.opencontainers.image.bootc.version="${BOOTC_VERSION}"
+LABEL org.opencontainers.image.selinux.userspace.version="${SELINUX_USERSPACE_VERSION}"
 LABEL containers.bootc=1
 RUN bootc container lint --fatal-warnings
 
