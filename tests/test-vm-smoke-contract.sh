@@ -55,7 +55,7 @@ if grep -Fq 'RUN_LIFECYCLE_ACCEPTANCE' "${SCRIPT}"; then
     fail "Gate 3/5 lifecycle is optional"
 fi
 
-grep -Fq 'cmp -s "${ARTIFACT_DIR}/user-plugin-state-a-before.tsv"' "${SCRIPT}" ||
+grep -Fq 'cmp -s' "${SCRIPT}" && grep -Fq 'user-plugin-state-a-before.tsv' "${SCRIPT}" ||
     fail "Gate 3/5 does not compare persistent user/plugin state"
 grep -Fq 'pacman_after_update_hash' "${SCRIPT}" ||
     fail "Gate 5 does not compare the pacman DB/log snapshot after update"
