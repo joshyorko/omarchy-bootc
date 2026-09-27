@@ -32,25 +32,25 @@ for path in \
     require_elf "$path"
 done
 
-bootc_version="${(bootc --version 2>&1)}"
+bootc_version="$(bootc --version 2>&1)"
 grep -Eq '(^|[[:space:]])1\.16\.13([[:space:]]|$)' <<<"${bootc_version}" \
     || fail "unexpected bootc version: ${bootc_version}"
 
 [[ -r /usr/share/omarchy-bootc/sources/bootc.revision ]] \
     || fail "bootc source receipt missing"
-[[ "${(tr -d '\r\n' < /usr/share/omarchy-bootc/sources/bootc.revision)}" \
+[[ "$(tr -d '\r\n' < /usr/share/omarchy-bootc/sources/bootc.revision)" \
     == "fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60" ]] \
     || fail "bootc source revision receipt is not v1.16.13"
 [[ -r /usr/share/omarchy-bootc/sources/bootc-version ]] \
     || fail "bootc version receipt missing"
-[[ "${(tr -d '\r\n' < /usr/share/omarchy-bootc/sources/bootc-version)}" == "v1.16.13" ]] \
+[[ "$(tr -d '\r\n' < /usr/share/omarchy-bootc/sources/bootc-version)" == "v1.16.13" ]] \
     || fail "bootc version receipt mismatch"
 
 pacman -Q composefs >/dev/null 2>&1 \
     || fail "composefs package is not installed"
 [[ -d /sysroot ]] || fail "missing /sysroot logical root"
 [[ -L /ostree ]] || fail "/ostree is not a symlink"
-[[ "${(readlink /ostree)}" == *ostree* ]] || fail "/ostree does not target ostree state"
+[[ "$(readlink /ostree)" == *ostree* ]] || fail "/ostree does not target ostree state"
 [[ -x /usr/lib/bootc/initramfs-setup ]] || fail "bootc initramfs setup is not executable"
 [[ -d /usr/lib/dracut/modules.d/51bootc ]] \
     || fail "bootc dracut module is missing"
@@ -70,7 +70,7 @@ grep -Eq '^[[:space:]]*enabled[[:space:]]*=[[:space:]]*(yes|true)' \
 bootc container lint --fatal-warnings
 
 receipt=/usr/share/omarchy-bootc/foundation-receipt.txt
-install -d -m 0755 "${(dirname "$receipt")}"
+install -d -m 0755 "$(dirname "$receipt")"
 {
     printf 'schema=omarchy-bootc.foundation/v1\n'
     printf 'bootc_version=v1.16.13\n'
