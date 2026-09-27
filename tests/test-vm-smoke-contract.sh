@@ -25,7 +25,7 @@ for required in \
     user-plugin-state-a-rollback.tsv \
     user-plugin-state-b-update.tsv \
     pacman.log \
-    pacman-db-log \
+    pacman_db_log_before \
     gate-3-5.receipt.json \
     OMARCHY_EXPECTED_TRACKING_REF \
     OMARCHY_ASSERT_TESTING_REF; do
