@@ -80,7 +80,7 @@ ARG SELINUX_LIBSEPOL_SHA256
 ARG SELINUX_LIBSELINUX_SHA256
 ARG COREUTILS_VERSION
 ARG COREUTILS_SHA256
-RUN pacman -Syu --noconfirm curl flex clang gperf python make git rust go-md2man ostree glibc pkgconf pcre2 && \
+RUN pacman -Syu --noconfirm curl flex clang gcc gperf python make git diffutils inetutils rust go-md2man ostree glibc pkgconf pcre2 && \
     workdir="$(mktemp -d)" && \
     curl --fail --location --retry 3 --retry-delay 2 \
         "https://github.com/SELinuxProject/selinux/releases/download/${SELINUX_USERSPACE_VERSION}/libsepol-${SELINUX_USERSPACE_VERSION}.tar.gz" \
@@ -103,8 +103,8 @@ RUN pacman -Syu --noconfirm curl flex clang gperf python make git rust go-md2man
     printf '%s  %s\n' "${COREUTILS_SHA256}" "${workdir}/coreutils.tar.xz" | sha256sum -c - && \
     tar -xJf "${workdir}/coreutils.tar.xz" -C "${workdir}" && \
     cd "${workdir}/coreutils-${COREUTILS_VERSION}" && \
-    FORCE_UNSAFE_CONFIGURE=1 ./configure --prefix=/usr --libexecdir=/usr/lib --with-selinux --disable-nls && \
-    make -j"$(nproc)" src/chcon && \
+    FORCE_UNSAFE_CONFIGURE=1 CC=gcc ./configure --prefix=/usr --libexecdir=/usr/lib --with-selinux --disable-nls && \
+    make CC=gcc -j"$(nproc)" src/chcon && \
     install -D -m 0755 src/chcon /output/usr/bin/chcon && \
     rm -rf "${workdir}"
 WORKDIR /home/build
