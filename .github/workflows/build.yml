@@ -230,7 +230,7 @@ jobs:
             --arg acceptance_overlay "hosted-vm-acceptance-passed-before-push" \
             '{schema:"omarchy-bootc.published-image/v1", source_sha:$source_sha,
               image:$image, oci_manifest_digest:$oci_manifest_digest,
-              acceptance_overlay:$acceptance_overlay}' \
+              acceptance_overlay:"not-applied", acceptance_evidence:$acceptance_overlay}' \
             > "$RUNNER_TEMP/build-receipt/published-image-receipt.json"
           cosign sign --yes "${IMAGE}@${DIGEST}"
           cosign attest --yes \
