@@ -3,7 +3,13 @@ set -euo pipefail
 
 ctx=/ctx/custom/bootc
 lib=/usr/lib/omarchy-bootc
-trap 'rc=$?; printf "install-bootc-update failed line=%s command=%q status=%s\n" "$LINENO" "$BASH_COMMAND" "$rc" >&2; ls -ld /usr/local /usr/local/bin /var/usrlocal /var/usrlocal/bin "$lib" 2>&1 || true; exit "$rc"' ERR
+on_error() {
+    local rc="${1:-1}" line="${2:-unknown}" command="${3:-unknown}"
+    printf 'install-bootc-update failed line=%s command=%q status=%s\n' "$line" "$command" "$rc" >&2
+    ls -ld /usr/local /usr/local/bin /var/usrlocal /var/usrlocal/bin "$lib" 2>&1 || true
+    exit "$rc"
+}
+trap 'on_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 install -d -m 0755 "$lib" /usr/libexec /usr/local/bin /usr/lib/systemd/user /etc/systemd/user/graphical-session.target.wants /etc/profile.d
 printf '%s\n' 'export PATH=/usr/local/bin:$PATH' > /etc/profile.d/omarchy-bootc-path.sh
 chmod 0644 /etc/profile.d/omarchy-bootc-path.sh
