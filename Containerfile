@@ -76,7 +76,7 @@ ARG BOOTC_VERSION
 ARG SELINUX_USERSPACE_VERSION
 ARG SELINUX_LIBSEPOL_SHA256
 ARG SELINUX_LIBSELINUX_SHA256
-RUN pacman -Syu --noconfirm curl flex make git rust go-md2man ostree glibc pkgconf pcre2 && \
+RUN pacman -Syu --noconfirm curl flex clang make git rust go-md2man ostree glibc pkgconf pcre2 && \
     workdir="$(mktemp -d)" && \
     curl --fail --location --retry 3 --retry-delay 2 \
         "https://github.com/SELinuxProject/selinux/releases/download/${SELINUX_USERSPACE_VERSION}/libsepol-${SELINUX_USERSPACE_VERSION}.tar.gz" \
