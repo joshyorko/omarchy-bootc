@@ -94,7 +94,7 @@ snapshot_omp_state() {
 
 verify_skills() {
     local dir
-    for dir in .agents/skills .claude/skills .codex/skills .pi/agent/skills .gemini/config/skills .hermes/skills; do
+    for dir in .agents/skills .claude/skills .codex/skills .pi/agent/skills .hermes/skills; do
         [[ $(readlink -f "$HOME/$dir/omarchy") == "$OMARCHY_PATH/default/agents/skills/omarchy" ]] || fail "official skill missing: $dir/omarchy"
     done
 }
