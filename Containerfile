@@ -108,7 +108,7 @@ RUN pacman -Syu --noconfirm curl flex clang gcc gperf python make git diffutils 
         "${workdir}/coreutils-${COREUTILS_VERSION}/lib/mcel.h" && \
     cd "${workdir}/coreutils-${COREUTILS_VERSION}" && \
     FORCE_UNSAFE_CONFIGURE=1 CC=gcc ./configure --prefix=/usr --libexecdir=/usr/lib --with-selinux --disable-nls && \
-    make CC=gcc -j"$(nproc)" lib/locale.h && \
+    make CC=gcc -j"$(nproc)" lib/locale.h lib/string.h lib/sys/stat.h && \
     make CC=gcc -j"$(nproc)" src/chcon && \
     install -D -m 0755 src/chcon /output/usr/bin/chcon && \
     rm -rf "${workdir}"
