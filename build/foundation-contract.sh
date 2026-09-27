@@ -40,6 +40,11 @@ bootc_version="$(bootc --version 2>&1)"
 grep -Eq '(^|[[:space:]])1\.16\.13([[:space:]]|$)' <<<"${bootc_version}" \
     || fail "unexpected bootc version: ${bootc_version}"
 
+[[ -r /usr/share/omarchy-bootc/sources/bootcrew-mono.revision ]] \
+    || fail "Bootcrew source receipt missing" \
+[[ "$(tr -d '\r\n' < /usr/share/omarchy-bootc/sources/bootcrew-mono.revision)" \
+    == "5f048fa65a94daefc814d3cdd941d8d1e113c09e" ]] \
+    || fail "Bootcrew source revision receipt mismatch" \
 [[ -r /usr/share/omarchy-bootc/sources/bootc.revision ]] \
     || fail "bootc source receipt missing"
 [[ -r /usr/share/omarchy-bootc/sources/bootcrew-mono.revision ]] \
@@ -69,7 +74,11 @@ find /usr/lib/dracut/modules.d -mindepth 1 -maxdepth 1 -type d \
     -iname '*ostree*' -print -quit | grep -q . \
     || fail "ostree dracut module is missing"
 grep -R -Eq 'ostree|bootc' /usr/lib/dracut/modules.d/51bootc \
-    || fail "bootc dracut module has no ostree/bootc integration"
+    || fail "bootc dracut module has no ostree/bootc integration" \
+[[ -r /usr/lib/dracut/dracut.conf.d/31-omarchy-bootc-native.conf ]] \
+    || fail "native dracut configuration is missing" \
+grep -Eq 'ostree bootc' /usr/lib/dracut/dracut.conf.d/31-omarchy-bootc-native.conf \
+    || fail "native dracut configuration does not request ostree and bootc"
 grep -R -Eq 'add_dracutmodules.*(ostree.*bootc|bootc.*ostree)' \
     /usr/lib/dracut/dracut.conf.d \
     || fail "dracut configuration does not request ostree and bootc"
