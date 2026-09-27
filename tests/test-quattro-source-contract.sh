@@ -166,9 +166,9 @@ fi
 [[ -f "${ADOPTION_SERVICE}" ]] || fail 'cross-distro adoption service is missing'
 [[ -x "${TRANSITION_SCRIPT}" ]] || fail 'state-aware transition helper is missing or not executable'
 
-grep -Fq 'FROM quattro-base AS acceptance' "${CONTAINERFILE}" \
+grep -Fq 'FROM quattro-integration AS acceptance' "${CONTAINERFILE}" \
     || fail 'acceptance identity is not isolated in its own image target'
-grep -Fq 'FROM quattro-base AS final' "${CONTAINERFILE}" \
+grep -Fq 'FROM quattro-integration AS final' "${CONTAINERFILE}" \
     || fail 'publishable final image is not separated from acceptance identity'
 grep -Fq 'omarchy-provision-user --first-install' "${ACCEPTANCE_FIRSTBOOT}" \
     || fail 'acceptance user does not run official Quattro finalization'
