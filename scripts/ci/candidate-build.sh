@@ -275,6 +275,31 @@ build_assembly() {
         "${head_short}" "${foundation_image_id}" | tee "${LOG_DIR}/assembly.txt"
 }
 
+
+build_integration() {
+    local head_sha=""
+    local image_ref="${INTEGRATION_IMAGE_REF:-localhost/omarchy-bootc:integration}"
+    local assembly_image_ref="${ASSEMBLY_IMAGE_REF:-localhost/omarchy-bootc:assembly}"
+    local assembly_image_id=""
+
+    cd "${ROOT_DIR}"
+    head_sha="$(git rev-parse --verify HEAD)"
+    assembly_image_id="$(sudo -n podman image inspect "${assembly_image_ref}" \
+        --format '{{.Id}}' 2>/dev/null || true)"
+    [[ -n "${assembly_image_id}" ]] \
+        || die "immutable assembly image is not present before integration"
+    run_logged integration-build sudo -n podman build \
+        --pull=missing --format=oci --target quattro-integration \
+        --tag "${image_ref}" \
+        --label "org.opencontainers.image.revision=${head_sha}" \
+        --label "com.omarchy.integration.head=${head_sha}" \
+        --label "com.omarchy.integration.assembly=${assembly_image_id}" \
+        "${ROOT_DIR}"
+    run_logged integration-lint sudo -n podman run --rm --pull=never --privileged \
+        "${image_ref}" bootc container lint --fatal-warnings
+    export_stage integration "${image_ref}" omarchy-bootc.integration/v1 \
+        "omarchy-bootc-integration-head-${head_sha}" "${assembly_image_id}"
+}
 build_candidate() {
     local head_sha=""
     local head_short=""
