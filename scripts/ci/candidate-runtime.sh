@@ -43,13 +43,23 @@ git -C "${upstream_tests}" remote add origin "$(cat sources/omarchy-quattro.sour
 quattro_revision="$(cat sources/omarchy-quattro.revision)"
 git -C "${upstream_tests}" fetch --depth=1 --filter=blob:none origin "${quattro_revision}"
 [[ "$(git -C "${upstream_tests}" rev-parse FETCH_HEAD)" == "${quattro_revision}" ]]
-git -C "${upstream_tests}" archive FETCH_HEAD test/acceptance test/acceptance.d \
-    | tar -x -C "${upstream_tests}"
+upstream_acceptance_enabled=0
+if git -C "${upstream_tests}" ls-tree -r --name-only FETCH_HEAD test/acceptance \
+    | grep -q .; then
+  git -C "${upstream_tests}" archive FETCH_HEAD test/acceptance test/acceptance.d \
+      | tar -x -C "${upstream_tests}"
+  upstream_acceptance_enabled=1
+fi
 printf '%s\n' "${quattro_revision}" >"${artifact_dir}/upstream-acceptance-revision.txt"
 
-sudo -n env CI_ARTIFACT_DIR="${artifact_dir}" \
-    UPSTREAM_ACCEPTANCE_DIR="${upstream_tests}" \
-    NATIVE_ACCEPTANCE_SCRIPT="${PWD}/scripts/ci/guest-native-acceptance.sh" \
+vm_env=(
+  "CI_ARTIFACT_DIR=${artifact_dir}"
+  "NATIVE_ACCEPTANCE_SCRIPT=${PWD}/scripts/ci/guest-native-acceptance.sh"
+)
+if ((upstream_acceptance_enabled)); then
+  vm_env+=("UPSTREAM_ACCEPTANCE_DIR=${upstream_tests}")
+fi
+sudo -n env "${vm_env[@]}" \
     timeout --signal=TERM --kill-after=30s 45m \
     bash scripts/ci/vm-smoke.sh "${overlay}" \
     2>&1 | tee "${artifact_dir}/vm-smoke.log"
