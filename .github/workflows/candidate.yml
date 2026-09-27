@@ -20,6 +20,7 @@ jobs:
     env:
       FOUNDATION_IMAGE_REF: localhost/omarchy-bootc:foundation
       ASSEMBLY_IMAGE_REF: localhost/omarchy-bootc:assembly
+      INTEGRATION_IMAGE_REF: localhost/omarchy-bootc:integration
 
     steps:
       - name: Checkout exact pull request head
@@ -80,6 +81,22 @@ jobs:
           name: omarchy-bootc-assembly-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             ${{ runner.temp }}/omarchy-bootc-candidate/*assembly*
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 30
+
+      - name: Build and export integration layer
+        env:
+          CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
+        run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh integration
+
+      - name: Upload immutable integration handoff
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-bootc-integration-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/omarchy-bootc-candidate/*integration*
           if-no-files-found: warn
           compression-level: 0
           retention-days: 30
