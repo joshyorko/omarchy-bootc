@@ -262,9 +262,8 @@ RUN --mount=type=bind,from=provenance-ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/tmp \
     bash /ctx/build/verify-quattro-payload.sh
 
-LABEL containers.bootc=1
-RUN bootc container lint --fatal-warnings
-
+# Assembly is intentionally checked before Bootcrew ownership cleanup. Fatal
+# lint remains mandatory on quattro-base/quattro-integration/final.
 FROM quattro-assembly AS quattro-base
 
 RUN --mount=type=bind,from=boot-ownership-ctx,source=/,target=/ctx \
