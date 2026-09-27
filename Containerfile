@@ -205,6 +205,11 @@ LABEL org.opencontainers.image.coreutils.version="${COREUTILS_VERSION}"
 LABEL containers.bootc=1
 RUN bootc container lint --fatal-warnings
 
+FROM bootcrew-system AS foundation
+COPY build/foundation-contract.sh /usr/lib/omarchy-bootc/foundation-contract.sh
+RUN chmod 0755 /usr/lib/omarchy-bootc/foundation-contract.sh && \
+    /usr/lib/omarchy-bootc/foundation-contract.sh
+
 FROM scratch AS install-ctx
 COPY build/20-quattro.sh /build/20-quattro.sh
 COPY build/cups-browsed.sysusers.conf /build/cups-browsed.sysusers.conf
@@ -244,7 +249,7 @@ COPY systemd/system/omarchy-adopt-existing-user.service /systemd/system/omarchy-
 FROM scratch AS transition-ctx
 COPY transition/omarchy-transition.sh /transition/omarchy-transition.sh
 
-FROM bootcrew-system AS quattro-base
+FROM bootcrew-system AS quattro-assembly
 
 RUN --mount=type=bind,from=install-ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/usr/lib/sysimage/cache/pacman/pkg,sharing=locked \
@@ -254,6 +259,11 @@ RUN --mount=type=bind,from=install-ctx,source=/,target=/ctx \
 RUN --mount=type=bind,from=provenance-ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/tmp \
     bash /ctx/build/verify-quattro-payload.sh
+
+LABEL containers.bootc=1
+RUN bootc container lint --fatal-warnings
+
+FROM quattro-assembly AS quattro-base
 
 RUN --mount=type=bind,from=boot-ownership-ctx,source=/,target=/ctx \
     bash /ctx/build/30-bootc-ownership.sh
