@@ -23,7 +23,7 @@ install -m 0755 "$ctx/omarchy-wrapper" "$lib/omarchy-wrapper"
 install -m 0755 "$ctx/omarchy-update-wrapper" "$lib/omarchy-update-wrapper"
 install -m 0755 "$ctx/omarchy-update-available-wrapper" "$lib/omarchy-update-available-wrapper"
 
-install -m 0755 "$lib/omarchy-wrapper" /usr/local/bin/omarchy
+ln -sfn "$lib/omarchy-wrapper" /usr/local/bin/omarchy
 ln -sfn "$lib/omarchy-update-wrapper" /usr/local/bin/omarchy-update
 ln -sfn "$lib/omarchy-update-available-wrapper" /usr/local/bin/omarchy-update-available
 ln -sfn /usr/libexec/omarchy-bootc-finalize \
