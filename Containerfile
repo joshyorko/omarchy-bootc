@@ -296,14 +296,18 @@ RUN --mount=type=bind,from=transition-ctx,source=/,target=/ctx \
 LABEL containers.bootc=1
 RUN bootc container lint --fatal-warnings
 
-FROM quattro-base AS acceptance
+FROM quattro-base AS quattro-integration
+LABEL containers.bootc=1
+RUN bootc container lint --fatal-warnings
+
+FROM quattro-integration AS acceptance
 RUN --mount=type=bind,from=acceptance-ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/tmp \
     bash /ctx/build/stage-acceptance-node.sh && \
     bash /ctx/build/25-quattro-user.sh
 RUN bootc container lint --fatal-warnings
 
-FROM quattro-base AS final
+FROM quattro-integration AS final
 RUN --mount=type=bind,from=final-ctx,source=/,target=/ctx \
     bash /ctx/build/verify-publishable-image.sh
 
