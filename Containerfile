@@ -104,9 +104,12 @@ RUN pacman -Syu --noconfirm curl flex clang gcc gperf python make git diffutils 
         --output "${workdir}/coreutils.tar.xz" && \
     printf '%s  %s\n' "${COREUTILS_SHA256}" "${workdir}/coreutils.tar.xz" | sha256sum -c - && \
     tar -xJf "${workdir}/coreutils.tar.xz" -C "${workdir}" && \
+    sed -i '1i#include <wchar.h>' \
+        "${workdir}/coreutils-${COREUTILS_VERSION}/lib/mcel.h" && \
     cd "${workdir}/coreutils-${COREUTILS_VERSION}" && \
-    CPPFLAGS="-include wchar.h" FORCE_UNSAFE_CONFIGURE=1 CC=gcc ./configure --prefix=/usr --libexecdir=/usr/lib --with-selinux --disable-nls && \
-    CPPFLAGS="-include wchar.h" make CC=gcc -j"$(nproc)" src/chcon && \
+    FORCE_UNSAFE_CONFIGURE=1 CC=gcc ./configure --prefix=/usr --libexecdir=/usr/lib --with-selinux --disable-nls && \
+    make CC=gcc -j"$(nproc)" lib/locale.h && \
+    make CC=gcc -j"$(nproc)" src/chcon && \
     install -D -m 0755 src/chcon /output/usr/bin/chcon && \
     rm -rf "${workdir}"
 WORKDIR /home/build
