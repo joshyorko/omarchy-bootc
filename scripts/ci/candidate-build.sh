@@ -122,6 +122,159 @@ preflight() {
     } | tee "${LOG_DIR}/preflight.txt"
 }
 
+
+export_stage() {
+    local target="$1"
+    local image_ref="$2"
+    local schema="$3"
+    local archive_stem="$4"
+    local foundation_image_id="$5"
+    local image_id=""
+    local manifest_digest=""
+    local archive_path=""
+    local receipt_path=""
+    local archive_sha256=""
+    local archive_size=""
+    local created_at=""
+    local head_sha=""
+    local quattro_revision=""
+    local iso_revision=""
+    local bootcrew_revision=""
+    local bootc_revision=""
+    local bootc_version=""
+    local arch_bootstrap_ref=""
+    local omarchy_source=""
+    local omarchy_iso_source=""
+    local omarchy_version=""
+    local tracking_ref="ghcr.io/joshyorko/omarchy-bootc:testing"
+
+    head_sha="$(git -C "${ROOT_DIR}" rev-parse --verify HEAD)"
+    quattro_revision="$(read_pin "${ROOT_DIR}/sources/omarchy-quattro.revision")"
+    iso_revision="$(read_pin "${ROOT_DIR}/sources/omarchy-iso-quattro.revision")"
+    bootcrew_revision="$(read_pin "${ROOT_DIR}/vendor/bootcrew/REVISION")"
+    bootc_revision="$(read_pin "${ROOT_DIR}/vendor/bootcrew/BOOTC_REVISION")"
+    bootc_version="$(tr -d '\r\n' <"${ROOT_DIR}/vendor/bootcrew/BOOTC_VERSION")"
+    arch_bootstrap_ref="$(read_arg ARCH_BOOTSTRAP_REF)"
+    omarchy_source="$(tr -d '\r\n' <"${ROOT_DIR}/sources/omarchy-quattro.source")"
+    omarchy_iso_source="$(tr -d '\r\n' <"${ROOT_DIR}/sources/omarchy-iso-quattro.source")"
+    omarchy_version="$(tr -d '\r\n' <"${ROOT_DIR}/sources/omarchy-quattro-version")"
+
+    image_id="$(sudo -n podman image inspect "${image_ref}" --format '{{.Id}}')"
+    [[ "${image_id}" =~ ^(sha256:)?[[:xdigit:]]{64}$ ]] \
+        || die "${target} image ID is not immutable: ${image_id}"
+    archive_path="${ARTIFACT_DIR}/${archive_stem}.oci.tar"
+    receipt_path="${ARTIFACT_DIR}/${archive_stem}.receipt.json"
+    run_logged "${target}-export" sudo -n podman save --format=oci-archive \
+        --output "${archive_path}" "${image_ref}"
+    archive_sha256="$(sha256sum "${archive_path}" | awk '{print $1}')"
+    manifest_digest="$(tar -xOf "${archive_path}" index.json | jq -er '.manifests[0].digest')"
+    [[ "${manifest_digest}" =~ ^sha256:[[:xdigit:]]{64}$ ]] \
+        || die "${target} archive has no immutable manifest digest"
+    archive_size="$(stat -c '%s' "${archive_path}")"
+    created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+    jq -n \
+        --arg schema "${schema}" \
+        --arg source_sha "${head_sha}" \
+        --arg target "${target}" \
+        --arg image "${image_ref}" \
+        --arg image_id "${image_id}" \
+        --arg archive "$(basename "${archive_path}")" \
+        --arg archive_sha256 "sha256:${archive_sha256}" \
+        --arg archive_size "${archive_size}" \
+        --arg manifest_digest "${manifest_digest}" \
+        --arg created_at "${created_at}" \
+        --arg foundation_image_id "${foundation_image_id}" \
+        --arg arch_bootstrap_ref "${arch_bootstrap_ref}" \
+        --arg omarchy_source "${omarchy_source}" \
+        --arg omarchy_iso_source "${omarchy_iso_source}" \
+        --arg omarchy_version "${omarchy_version}" \
+        --arg bootcrew_revision "${bootcrew_revision}" \
+        --arg bootc_revision "${bootc_revision}" \
+        --arg bootc_version "${bootc_version}" \
+        --arg quattro_revision "${quattro_revision}" \
+        --arg iso_revision "${iso_revision}" \
+        --arg tracking_ref "${tracking_ref}" \
+        '{schema:$schema, source_sha:$source_sha, target:$target, image:$image,
+          image_id:$image_id, archive:$archive, archive_sha256:$archive_sha256,
+          archive_size_bytes:($archive_size|tonumber),
+          oci_manifest_digest:$manifest_digest, created_at:$created_at,
+          foundation_image_id:$foundation_image_id,
+          upstream_pins:{arch_bootstrap_ref:$arch_bootstrap_ref,
+            omarchy_source:$omarchy_source, omarchy_iso_source:$omarchy_iso_source,
+            omarchy_version:$omarchy_version,
+            bootcrew_revision:$bootcrew_revision, bootc_revision:$bootc_revision,
+            bootc_version:$bootc_version,
+            omarchy_quattro_revision:$quattro_revision,
+            omarchy_iso_quattro_revision:$iso_revision,
+            tracking_ref:$tracking_ref}}' \
+        >"${receipt_path}"
+    printf '%s archive: %s\n%s receipt: %s\n' \
+        "${target}" "${archive_path}" "${target}" "${receipt_path}"
+}
+
+build_foundation() {
+    local head_sha=""
+    local image_ref="${FOUNDATION_IMAGE_REF:-localhost/omarchy-bootc:foundation}"
+    local head_short=""
+    local bootcrew_revision=""
+    local bootc_revision=""
+    local bootc_version=""
+    local arch_bootstrap_ref=""
+
+    cd "${ROOT_DIR}"
+    head_sha="$(git rev-parse --verify HEAD)"
+    head_short="${head_sha:0:12}"
+    bootcrew_revision="$(read_pin vendor/bootcrew/REVISION)"
+    bootc_revision="$(read_pin vendor/bootcrew/BOOTC_REVISION)"
+    bootc_version="$(tr -d '\r\n' <vendor/bootcrew/BOOTC_VERSION)"
+    arch_bootstrap_ref="$(read_arg ARCH_BOOTSTRAP_REF)"
+    run_logged foundation-build sudo -n podman build \
+        --pull=missing --format=oci --target foundation \
+        --tag "${image_ref}" \
+        --label "org.opencontainers.image.revision=${head_sha}" \
+        --label "com.omarchy.foundation.head=${head_sha}" \
+        --label "com.omarchy.foundation.bootcrew=${bootcrew_revision}" \
+        --label "com.omarchy.foundation.bootc=${bootc_revision}" \
+        --label "com.omarchy.foundation.bootc-version=${bootc_version}" \
+        --label "com.omarchy.foundation.arch-bootstrap=${arch_bootstrap_ref}" \
+        "${ROOT_DIR}"
+    run_logged foundation-contract sudo -n podman run --rm --pull=never --privileged \
+        "${image_ref}" /usr/lib/omarchy-bootc/foundation-contract.sh
+    export_stage foundation "${image_ref}" omarchy-bootc.foundation/v1 \
+        "omarchy-bootc-foundation-head-${head_sha}-bootc-${bootc_revision:0:12}" ""
+    printf 'foundation head=%s\n' "${head_short}" | tee "${LOG_DIR}/foundation.txt"
+}
+
+build_assembly() {
+    local head_sha=""
+    local image_ref="${ASSEMBLY_IMAGE_REF:-localhost/omarchy-bootc:assembly}"
+    local foundation_image_ref="${FOUNDATION_IMAGE_REF:-localhost/omarchy-bootc:foundation}"
+    local foundation_image_id=""
+    local head_short=""
+
+    cd "${ROOT_DIR}"
+    head_sha="$(git rev-parse --verify HEAD)"
+    head_short="${head_sha:0:12}"
+    foundation_image_id="$(sudo -n podman image inspect "${foundation_image_ref}" \
+        --format '{{.Id}}' 2>/dev/null || true)"
+    [[ -n "${foundation_image_id}" ]] \
+        || die "immutable foundation image is not present before assembly"
+    run_logged assembly-build sudo -n podman build \
+        --pull=missing --format=oci --target quattro-assembly \
+        --tag "${image_ref}" \
+        --label "org.opencontainers.image.revision=${head_sha}" \
+        --label "com.omarchy.assembly.head=${head_sha}" \
+        --label "com.omarchy.assembly.foundation=${foundation_image_id}" \
+        "${ROOT_DIR}"
+    run_logged assembly-lint sudo -n podman run --rm --pull=never --privileged \
+        "${image_ref}" bootc container lint --fatal-warnings
+    export_stage assembly "${image_ref}" omarchy-bootc.assembly/v1 \
+        "omarchy-bootc-assembly-head-${head_sha}" "${foundation_image_id}"
+    printf 'assembly head=%s foundation=%s\n' \
+        "${head_short}" "${foundation_image_id}" | tee "${LOG_DIR}/assembly.txt"
+}
+
 build_candidate() {
     local head_sha=""
     local head_short=""
