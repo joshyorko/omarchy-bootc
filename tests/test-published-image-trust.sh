@@ -10,7 +10,7 @@ grep -Fq 'https://github.com/joshyorko/omarchy-bootc/.github/workflows/build.yml
 grep -Fq 'https://token.actions.githubusercontent.com' "${verifier}"
 grep -Fq 'cosign sign --yes' "${workflow}"
 grep -Fq 'cosign attest --yes' "${workflow}"
-grep -Fq '"acceptance_overlay":"not-applied"' "${workflow}" ||
+grep -Fq 'acceptance_overlay:"not-applied"' "${workflow}" ||
     grep -Fq 'acceptance_overlay:$acceptance_overlay' "${workflow}"
 if grep -Eiq 'SigLevel[[:space:]]*=[[:space:]]*(Optional|Never)|TrustAll' "${repositories}"; then
     printf 'Omarchy repository signature verification is not fail-closed\n' >&2
