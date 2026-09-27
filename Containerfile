@@ -109,7 +109,7 @@ RUN pacman -Syu --noconfirm curl flex clang gcc gperf python make git diffutils 
     cd "${workdir}/coreutils-${COREUTILS_VERSION}" && \
     FORCE_UNSAFE_CONFIGURE=1 CC=gcc ./configure --prefix=/usr --libexecdir=/usr/lib --with-selinux --disable-nls && \
     make CC=gcc CPPFLAGS="-include ${workdir}/coreutils-${COREUTILS_VERSION}/lib/arg-nonnull.h" -j"$(nproc)" \
-        $(find lib -type f -name '*.in.h' -print | sed 's/\\.in\\.h$/.h/') && \
+        $(find lib -type f -name '*.in.h' -print | sed 's/\.in\.h$/.h/') && \
     make CC=gcc CPPFLAGS="-include ${workdir}/coreutils-${COREUTILS_VERSION}/lib/arg-nonnull.h" \
         -j"$(nproc)" src/chcon && \
     install -D -m 0755 src/chcon /output/usr/bin/chcon && \
