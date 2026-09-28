@@ -1,0 +1,145 @@
+name: Prove Omarchy package assembly
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/assembly.yml'
+      - 'Containerfile'
+      - 'build/foundation-contract.sh'
+      - 'scripts/ci/candidate-build.sh'
+      - 'sources/**'
+      - 'tests/test-foundation-contract.sh'
+      - 'tests/test-assembly-handoff-contract.sh'
+      - 'docs/assembly-hypothesis.md'
+      - 'vendor/bootcrew/**'
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Optional branch, tag, or commit to prove (defaults to this workflow ref)'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.event.inputs.source_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  assembly:
+    name: Build and hand off Omarchy assembly
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    env:
+      CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-assembly
+      FOUNDATION_IMAGE_REF: localhost/omarchy-bootc:foundation
+      ASSEMBLY_IMAGE_REF: localhost/omarchy-bootc:assembly
+    steps:
+      - name: Checkout exact subject
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.event.inputs.source_ref || github.sha }}
+          fetch-depth: 1
+
+      - name: Record exact subject
+        id: subject
+        run: |
+          set -euo pipefail
+          head="$(git rev-parse --verify HEAD)"
+          [[ "${head}" =~ ^[[:xdigit:]]{40}$ ]]
+          echo "head=${head}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate assembly contracts
+        run: |
+          bash tests/test-foundation-contract.sh
+          bash tests/test-foundation-handoff-contract.sh
+          bash tests/test-assembly-handoff-contract.sh
+          bash -n scripts/ci/candidate-build.sh
+          bash -n build/foundation-contract.sh
+
+      - name: Mount container storage
+        uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140 # main
+        continue-on-error: true
+        with:
+          target-dir: /var/lib/containers
+          mount-opts: compress-force=zstd:2
+
+      - name: Probe rootful Podman
+        run: timeout --signal=TERM --kill-after=30s 10m ./scripts/ci/candidate-build.sh preflight
+
+      - name: Build and export immutable foundation
+        run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh foundation
+
+      - name: Build and export Omarchy package assembly
+        run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh assembly
+
+      - name: Verify assembly handoff
+        env:
+          ASSEMBLY_HEAD: ${{ steps.subject.outputs.head }}
+        run: |
+          set -euo pipefail
+          mapfile -t receipts < <(
+            find "${CANDIDATE_ARTIFACT_DIR}" -maxdepth 1 -type f \
+              -name '*assembly*.receipt.json' -print
+          )
+          (( ${#receipts[@]} == 1 )) || {
+            printf 'expected one assembly receipt, found %s\n' "${#receipts[@]}" >&2
+            find "${CANDIDATE_ARTIFACT_DIR}" -maxdepth 2 -type f -print >&2
+            exit 1
+          }
+          receipt="${receipts[0]}"
+          jq -e --arg head "${ASSEMBLY_HEAD}" '
+            (.schema == "omarchy-bootc.assembly/v1") and
+            (.source_sha == $head) and
+            (.target == "assembly") and
+            (try (.image_id | test("^(sha256:)?[0-9a-fA-F]{64}$")) catch false) and
+            (try (.oci_manifest_digest | test("^sha256:[0-9a-fA-F]{64}$")) catch false) and
+            (try (.archive_sha256 | test("^sha256:[0-9a-fA-F]{64}$")) catch false) and
+            (.foundation_image_id | length > 0) and
+            (.upstream_pins.omarchy_version | length > 0) and
+            (.upstream_pins.omarchy_quattro_revision | test("^[0-9a-f]{40}$")) and
+            (.upstream_pins.omarchy_iso_quattro_revision | test("^[0-9a-f]{40}$")) and
+            (.upstream_pins.tracking_ref == "ghcr.io/joshyorko/omarchy-bootc:testing")
+          ' "${receipt}"
+          archive_name="$(jq -er '.archive' "${receipt}")"
+          [[ "${archive_name}" != */* ]]
+          archive="${CANDIDATE_ARTIFACT_DIR}/${archive_name}"
+          [[ -f "${archive}" ]]
+          expected_archive_sha="$(jq -er '.archive_sha256' "${receipt}")"
+          actual_archive_sha="sha256:$(sha256sum "${archive}" | awk '{print $1}')"
+          [[ "${actual_archive_sha}" == "${expected_archive_sha}" ]]
+          expected_manifest="$(jq -er '.oci_manifest_digest' "${receipt}")"
+          actual_manifest="$(tar -xOf "${archive}" index.json | jq -er '.manifests[0].digest')"
+          [[ "${actual_manifest}" == "${expected_manifest}" ]]
+          sudo -n podman load -i "${archive}"
+          image="$(jq -er '.image' "${receipt}")"
+          sudo -n podman run --rm --pull=never "${image}" bash -eu -o pipefail -c '
+            test -s /usr/share/omarchy-bootc/quattro-package-manifest.txt
+            test -s /usr/share/omarchy-bootc/quattro-package-provenance.txt
+          '
+          printf 'verified assembly handoff: head=%s manifest=%s archive=%s\n' \
+            "${ASSEMBLY_HEAD}" "${actual_manifest}" "${actual_archive_sha}"
+
+      - name: Upload assembly logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-bootc-assembly-logs-${{ steps.subject.outputs.head }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/omarchy-bootc-assembly/logs
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload verified assembly handoff
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-bootc-assembly-${{ steps.subject.outputs.head }}
+          path: |
+            ${{ runner.temp }}/omarchy-bootc-assembly/*assembly*.oci.tar
+            ${{ runner.temp }}/omarchy-bootc-assembly/*assembly*.receipt.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

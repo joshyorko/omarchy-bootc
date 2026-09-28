@@ -1,0 +1,133 @@
+name: Prove immutable bootc foundation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/foundation.yml'
+      - 'Containerfile'
+      - 'build/foundation-contract.sh'
+      - 'scripts/ci/candidate-build.sh'
+      - 'tests/test-foundation-contract.sh'
+      - 'tests/test-foundation-handoff-contract.sh'
+      - 'docs/foundation-hypothesis.md'
+      - 'vendor/bootcrew/**'
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Optional branch, tag, or commit to prove (defaults to this workflow ref)'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.event.inputs.source_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundation:
+    name: Build and hand off bootc foundation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-foundation
+      FOUNDATION_IMAGE_REF: localhost/omarchy-bootc:foundation
+
+    steps:
+      - name: Checkout exact subject
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.event.inputs.source_ref || github.sha }}
+          fetch-depth: 1
+
+      - name: Record exact subject
+        id: subject
+        run: |
+          set -euo pipefail
+          head="$(git rev-parse --verify HEAD)"
+          [[ "${head}" =~ ^[[:xdigit:]]{40}$ ]]
+          echo "head=${head}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate foundation contracts
+        run: |
+          bash tests/test-foundation-contract.sh
+          bash tests/test-foundation-handoff-contract.sh
+          bash -n scripts/ci/candidate-build.sh
+          bash -n build/foundation-contract.sh
+
+      - name: Mount container storage
+        uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140 # main
+        continue-on-error: true
+        with:
+          target-dir: /var/lib/containers
+          mount-opts: compress-force=zstd:2
+
+      - name: Probe rootful Podman
+        run: timeout --signal=TERM --kill-after=30s 10m ./scripts/ci/candidate-build.sh preflight
+
+      - name: Build and prove isolated foundation
+        run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh foundation
+
+      - name: Verify immutable foundation handoff
+        env:
+          FOUNDATION_HEAD: ${{ steps.subject.outputs.head }}
+        run: |
+          set -euo pipefail
+          mapfile -t receipts < <(
+            find "${CANDIDATE_ARTIFACT_DIR}" -maxdepth 1 -type f \
+              -name '*foundation*.receipt.json' -print
+          )
+          (( ${#receipts[@]} == 1 )) || {
+            printf 'expected one foundation receipt, found %s\n' "${#receipts[@]}" >&2
+            find "${CANDIDATE_ARTIFACT_DIR}" -maxdepth 2 -type f -print >&2
+            exit 1
+          }
+          receipt="${receipts[0]}"
+          jq -e --arg head "${FOUNDATION_HEAD}" '
+            (.schema == "omarchy-bootc.foundation/v1") and
+            (.source_sha == $head) and
+            (.target == "foundation") and
+            (try (.image_id | test("^(sha256:)?[0-9a-fA-F]{64}$")) catch false) and
+            (try (.oci_manifest_digest | test("^sha256:[0-9a-fA-F]{64}$")) catch false) and
+            (try (.archive_sha256 | test("^sha256:[0-9a-fA-F]{64}$")) catch false) and
+            (.upstream_pins.bootc_version == "v1.16.13") and
+            (.upstream_pins.bootc_revision == "fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60") and
+            (.upstream_pins.bootcrew_revision == "5f048fa65a94daefc814d3cdd941d8d1e113c09e")
+          ' "${receipt}"
+          archive_name="$(jq -er '.archive' "${receipt}")"
+          [[ "${archive_name}" != */* ]]
+          archive="${CANDIDATE_ARTIFACT_DIR}/${archive_name}"
+          [[ -f "${archive}" ]]
+          expected_archive_sha="$(jq -er '.archive_sha256' "${receipt}")"
+          actual_archive_sha="sha256:$(sha256sum "${archive}" | awk '{print $1}')"
+          [[ "${actual_archive_sha}" == "${expected_archive_sha}" ]]
+          expected_manifest="$(jq -er '.oci_manifest_digest' "${receipt}")"
+          actual_manifest="$(tar -xOf "${archive}" index.json | jq -er '.manifests[0].digest')"
+          [[ "${actual_manifest}" == "${expected_manifest}" ]]
+          printf 'verified foundation handoff: head=%s image_id=%s manifest=%s archive=%s\n' \
+            "${FOUNDATION_HEAD}" "$(jq -r '.image_id' "${receipt}")" \
+            "${actual_manifest}" "${actual_archive_sha}"
+
+      - name: Upload foundation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-bootc-foundation-logs-${{ steps.subject.outputs.head }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/omarchy-bootc-foundation/logs
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload verified immutable foundation handoff
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-bootc-foundation-${{ steps.subject.outputs.head }}
+          path: |
+            ${{ runner.temp }}/omarchy-bootc-foundation/*foundation*.oci.tar
+            ${{ runner.temp }}/omarchy-bootc-foundation/*foundation*.receipt.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
