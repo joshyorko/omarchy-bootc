@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Dakota receipt source is resolved relative to this script at runtime.
+# shellcheck disable=SC1091
 set -euo pipefail
 
 # Gate 4: boot a current, immutable Dakota input, switch to the accepted
@@ -157,9 +159,15 @@ capture_guest_diagnostics() {
 }
 
 capture_host_diagnostics() {
-    [[ -f "${QEMU_LOG}" ]] && cp "${QEMU_LOG}" "${ARTIFACT_DIR}/qemu-serial.log" || true
-    [[ -f "${QCOW_PATH}" ]] && qemu-img info "${QCOW_PATH}" >"${ARTIFACT_DIR}/qcow-info.txt" 2>&1 || true
-    [[ -f "${RAW_PATH}" ]] && qemu-img info "${RAW_PATH}" >"${ARTIFACT_DIR}/raw-info.txt" 2>&1 || true
+    if [[ -f "${QEMU_LOG}" ]]; then
+        cp "${QEMU_LOG}" "${ARTIFACT_DIR}/qemu-serial.log" || true
+    fi
+    if [[ -f "${QCOW_PATH}" ]]; then
+        qemu-img info "${QCOW_PATH}" >"${ARTIFACT_DIR}/qcow-info.txt" 2>&1 || true
+    fi
+    if [[ -f "${RAW_PATH}" ]]; then
+        qemu-img info "${RAW_PATH}" >"${ARTIFACT_DIR}/raw-info.txt" 2>&1 || true
+    fi
 }
 
 cleanup() {
