@@ -51,6 +51,15 @@ printf '%s\n' '%wheel ALL=(ALL:ALL) NOPASSWD: ALL' >"$fixture/sudoers"
 expect_failure 'unrestricted passwordless sudo' require_bounded_sudo_policy "$fixture/sudoers"
 printf '%s\n' 'omarchy ALL=(root) NOPASSWD: /usr/bin/true, \' ' ALL' >"$fixture/sudoers"
 expect_failure 'unrestricted passwordless sudo' require_bounded_sudo_policy "$fixture/sudoers"
+printf '%s\n' \
+    '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-status ""' \
+    '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-clear-transaction ""' \
+    >"$fixture/scoped-sudoers"
+require_scoped_sudo_command /usr/libexec/omarchy-bootc-status "$fixture"
+require_scoped_sudo_command /usr/libexec/omarchy-bootc-clear-transaction "$fixture"
+expect_failure 'missing scoped sudo command' \
+    require_scoped_sudo_command /usr/libexec/omarchy-bootc-status "$fixture/absent"
+
 
 # Package metadata is isolated; payload files and offline systemd enablement
 # use real filesystem state. Regressions reject incompatible or unowned payloads.

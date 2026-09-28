@@ -10,6 +10,12 @@ require_executable() {
     [[ -f "$1" && -x "$1" ]] || fail "missing executable: $1"
 }
 
+require_scoped_sudo_command() {
+    local command="$1" sudoers_dir="${2:-/etc/sudoers.d}"
+    grep -R -F -xq -- "%wheel ALL=(root) NOPASSWD: ${command} \"\"" "$sudoers_dir" \
+        || fail "missing scoped sudo command: ${command}"
+}
+
 require_immutable_command() {
     local path resolved
     path="$(command -v "$1")" || fail "missing command: $1"
@@ -145,8 +151,14 @@ main() {
         /usr/lib/omarchy-bootc/omarchy-update-wrapper \
         /usr/lib/omarchy-bootc/omarchy-update-available-wrapper \
         /usr/libexec/omarchy-bootc-finalize \
+        /usr/libexec/omarchy-bootc-status \
+        /usr/libexec/omarchy-bootc-clear-transaction \
         /usr/bin/omarchy /usr/bin/omarchy-menu /usr/bin/omarchy-theme-list; do
         require_executable "$path"
+    done
+    for path in /usr/libexec/omarchy-bootc-status /usr/libexec/omarchy-bootc-clear-transaction; do
+        [[ -f "$path" && -x "$path" && ! -L "$path" ]] \
+            || fail "helper is not an image-owned regular executable: $path"
     done
     [[ -d /usr/local && ! -L /usr/local ]] || fail '/usr/local must be immutable image content'
     for path in omarchy omarchy-update omarchy-update-available; do
@@ -250,7 +262,8 @@ main() {
         grep -Fxq '%wheel ALL=(ALL:ALL) PASSWD: ALL' /etc/sudoers.d/10-omarchy-wheel \
             || fail 'product wheel policy must require a password'
     fi
-
+    require_scoped_sudo_command /usr/libexec/omarchy-bootc-status
+    require_scoped_sudo_command /usr/libexec/omarchy-bootc-clear-transaction
     if [[ "$phase" == final ]]; then
         ! getent passwd omarchy >/dev/null || fail 'acceptance account leaked into final'
         [[ ! -e /etc/sudoers.d/90-omarchy-acceptance ]] || fail 'acceptance sudo policy leaked into final'

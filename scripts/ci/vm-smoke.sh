@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
+# Remote command strings intentionally defer guest-side expansion; source paths
+# are resolved from SCRIPT_DIR at runtime.
+# shellcheck disable=SC2016,SC1091
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/ci/lib/runtime-artifacts.sh
+# shellcheck source=lib/runtime-artifacts.sh
 source "${SCRIPT_DIR}/lib/runtime-artifacts.sh"
-# shellcheck source=scripts/ci/lib/upstream-acceptance.sh
+# shellcheck source=lib/upstream-acceptance.sh
 source "${SCRIPT_DIR}/lib/upstream-acceptance.sh"
 
 # The harness, QEMU, and receipts belong to the runner. Select only Podman's

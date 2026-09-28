@@ -33,6 +33,16 @@ grep -Fq 'state_home="${user_home}/.local/state"' \
     "${root_dir}/custom/bootc/omarchy-bootc-update"
 grep -Fq 'pending="${HOME}/.local/state/omarchy-bootc/pending-update"' \
     "${root_dir}/custom/bootc/omarchy-bootc-finalize"
+grep -Fq 'OMARCHY_BOOTC_STATUS_HELPER=/usr/libexec/omarchy-bootc-status' \
+    "${root_dir}/custom/bootc/omarchy-bootc-finalize"
+grep -Fq 'run_as_root_noninteractive /usr/libexec/omarchy-bootc-clear-transaction' \
+    "${root_dir}/custom/bootc/omarchy-bootc-finalize"
+grep -Fq '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-status ""' \
+    "${install_script}"
+grep -Fq '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-clear-transaction ""' \
+    "${install_script}"
+grep -Fq '/usr/bin/bootc status --format=json' \
+    "${root_dir}/custom/bootc/omarchy-bootc-status"
 grep -Fq 'readlink -f "${omarchy_command}"' "${assembly}"
 grep -Fq '!= /var/usrlocal/*' "${assembly}"
 grep -Fq 'rm -f /var/usrlocal/bin/omarchy' "${install_script}"

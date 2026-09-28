@@ -6,6 +6,7 @@ set -euo pipefail
 source /usr/lib/omarchy-bootc/update-common.sh
 export OMARCHY_BOOTC_BIN=/usr/bin/bootc
 export OMARCHY_BOOTC_STATUS_FILE=
+unset OMARCHY_BOOTC_STATUS_HELPER
 
 if ! run_as_root "$OMARCHY_BOOTC_BIN" upgrade --check >/dev/null 2>&1; then
     echo 'Omarchy update check failed' >&2

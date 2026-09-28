@@ -11,16 +11,23 @@ on_error() {
 }
 trap 'on_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 install -d -m 0755 "$lib" /usr/libexec /usr/local/bin /usr/lib/systemd/user /etc/systemd/user/graphical-session.target.wants /etc/profile.d
-printf '%s\n' "export PATH=/usr/local/bin:\$PATH" > /etc/profile.d/omarchy-bootc-path.sh
+cat >/etc/profile.d/omarchy-bootc-path.sh <<'EOF'
+export PATH=/usr/local/bin:$PATH
+EOF
 chmod 0644 /etc/profile.d/omarchy-bootc-path.sh
 
 for file in omarchy-bootc-common.sh omarchy-bootc-update omarchy-bootc-update-available; do
     install -m 0755 "$ctx/$file" "$lib/${file/omarchy-bootc-common.sh/update-common.sh}"
 done
 install -m 0755 "$ctx/omarchy-bootc-finalize" /usr/libexec/omarchy-bootc-finalize
+install -m 0755 "$ctx/omarchy-bootc-status" /usr/libexec/omarchy-bootc-status
+install -m 0755 "$ctx/omarchy-bootc-clear-transaction" /usr/libexec/omarchy-bootc-clear-transaction
 install -m 0755 "$ctx/omarchy-bootc-check" /usr/libexec/omarchy-bootc-check
 install -d -m 0755 /etc/sudoers.d
-printf '%s\n' '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-check ""' \
+printf '%s\n' \
+    '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-check ""' \
+    '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-status ""' \
+    '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-clear-transaction ""' \
     > /etc/sudoers.d/20-omarchy-update-check
 chmod 0440 /etc/sudoers.d/20-omarchy-update-check
 visudo -cf /etc/sudoers.d/20-omarchy-update-check

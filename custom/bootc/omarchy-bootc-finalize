@@ -5,6 +5,7 @@ set -euo pipefail
 source /usr/lib/omarchy-bootc/update-common.sh
 export OMARCHY_BOOTC_BIN=/usr/bin/bootc
 export OMARCHY_BOOTC_STATUS_FILE=
+export OMARCHY_BOOTC_STATUS_HELPER=/usr/libexec/omarchy-bootc-status
 
 pending_root="${HOME}/.local"
 pending_state="${pending_root}/state"
@@ -46,5 +47,6 @@ actual="$(status_booted_digest)"
 # against. The old Omarchy package pipeline must never run before this check.
 omarchy-migrate
 omarchy-hook post-update
+run_as_root_noninteractive /usr/libexec/omarchy-bootc-clear-transaction
 rm -f -- "$pending"
 printf 'status=finalized\nbooted_digest=%s\n' "$actual"

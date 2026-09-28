@@ -7,8 +7,13 @@ OMARCHY_BOOTC_STATE_ROOT="${OMARCHY_BOOTC_STATE_ROOT:-/var/lib/omarchy-bootc/upd
 bootc_status_json() {
     if [[ -n "${OMARCHY_BOOTC_STATUS_FILE:-}" ]]; then
         cat "$OMARCHY_BOOTC_STATUS_FILE"
-    else
+    elif [[ -z "${OMARCHY_BOOTC_STATUS_HELPER:-}" ]]; then
         run_as_root "$OMARCHY_BOOTC_BIN" status --format=json
+    elif [[ "${OMARCHY_BOOTC_STATUS_HELPER}" == /usr/libexec/omarchy-bootc-status ]]; then
+        run_as_root_noninteractive "$OMARCHY_BOOTC_STATUS_HELPER"
+    else
+        echo 'invalid bootc status helper' >&2
+        return 1
     fi
 }
 
@@ -136,5 +141,16 @@ run_as_root() {
             return 1
         }
         sudo -- "$@"
+    fi
+}
+run_as_root_noninteractive() {
+    if (( EUID == 0 )); then
+        "$@"
+    else
+        command -v sudo >/dev/null 2>&1 || {
+            echo 'bootc update requires sudo' >&2
+            return 1
+        }
+        sudo -n -- "$@"
     fi
 }

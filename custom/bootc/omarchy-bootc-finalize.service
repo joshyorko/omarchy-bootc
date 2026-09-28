@@ -7,3 +7,4 @@ ConditionPathExists=%h/.local/state/omarchy-bootc/pending-update
 [Service]
 Type=oneshot
 ExecStart=/usr/libexec/omarchy-bootc-finalize
+Environment=OMARCHY_BOOTC_STATUS_HELPER=/usr/libexec/omarchy-bootc-status
