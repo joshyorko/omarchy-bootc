@@ -66,6 +66,7 @@ test-contract:
     set -euo pipefail
     bash tests/test-quattro-source-contract.sh
     bash tests/test-transition-contract.sh
+    bash tests/test-vm-smoke-contract.sh
 
 # Validate the state-aware cross-distro switch boundary.
 [group('Utility')]

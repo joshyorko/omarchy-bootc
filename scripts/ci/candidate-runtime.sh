@@ -55,6 +55,9 @@ printf '%s\n' "${quattro_revision}" >"${artifact_dir}/upstream-acceptance-revisi
 vm_env=(
   "CI_ARTIFACT_DIR=${artifact_dir}"
   "NATIVE_ACCEPTANCE_SCRIPT=${PWD}/scripts/ci/guest-native-acceptance.sh"
+  "OMARCHY_TARGET_IMGREF=${OMARCHY_TARGET_IMGREF:-ghcr.io/joshyorko/omarchy-bootc:testing}"
+  "OMARCHY_EXPECTED_TRACKING_REF=${OMARCHY_EXPECTED_TRACKING_REF:-ghcr.io/joshyorko/omarchy-bootc:testing}"
+  "OMARCHY_ASSERT_TESTING_REF=1"
 )
 if ((upstream_acceptance_enabled)); then
   vm_env+=("UPSTREAM_ACCEPTANCE_DIR=${upstream_tests}")

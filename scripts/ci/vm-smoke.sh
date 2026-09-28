@@ -30,6 +30,11 @@ SSH_OPTS=(
 )
 OVMF_CODE_PATH=""
 OVMF_VARS_TEMPLATE=""
+LIFECYCLE_REGISTRY_CONTAINER="omarchy-bootc-lifecycle-registry-$"
+LIFECYCLE_REGISTRY_PORT="${LIFECYCLE_REGISTRY_PORT:-5000}"
+LIFECYCLE_REGISTRY_HOST="${LIFECYCLE_REGISTRY_HOST:-10.0.2.2}"
+LIFECYCLE_REGISTRY_STARTED=0
+OMARCHY_DEFAULT_TRACKING_REF="${OMARCHY_TARGET_IMGREF:-ghcr.io/joshyorko/omarchy-bootc:testing}"
 
 find_first_existing_file() {
     local candidate=""
@@ -154,8 +159,141 @@ EOF
     sha256sum "${archive}" >"${ARTIFACT_DIR}/lifecycle-b-archive.sha256"
 }
 
+snapshot_user_plugin_state() {
+    local label="$1"
+    local output="${ARTIFACT_DIR}/user-plugin-state-${label}.tsv"
+    local digest_line=""
+
+    run_guest 'set -euo pipefail
+snapshot_root() {
+    local root="$1"
+    local file rel digest
+    if [[ ! -e "$root" ]]; then
+        printf "missing\t%s\n" "$root"
+        return 0
+    fi
+    printf "root\t%s\n" "$root"
+    if [[ -d "$root" ]]; then
+        while IFS= read -r -d "" file; do
+            rel="${file#"$HOME"/}"
+            digest="$(sha256sum "$file")"
+            digest="${digest%% *}"
+            printf "%s\t%s\n" "$rel" "$digest"
+        done < <(find "$root" -type f -print0 | sort -z)
+    else
+        digest="$(sha256sum "$root")"
+        digest="${digest%% *}"
+        printf "%s\t%s\n" "$root" "$digest"
+    fi
+}
+for root in \
+    "$HOME/.config/omarchy/plugins" \
+    "$HOME/.config/omarchy/defaults" \
+    "$HOME/.agents/skills" \
+    "$HOME/.claude/skills" \
+    "$HOME/.codex/skills" \
+    "$HOME/.pi/agent/skills" \
+    "$HOME/.hermes/skills"; do
+    snapshot_root "$root"
+done' >"$output"
+
+    [[ -s "$output" ]] || fail "user/plugin state snapshot is empty: ${label}"
+    digest_line="$(sha256sum "$output")"
+    printf '%s\n' "${digest_line%% *}" >"${output}.sha256"
+    printf '%s\n' "${digest_line%% *}"
+}
+
+snapshot_pacman_state() {
+    local label="$1"
+    local output="${ARTIFACT_DIR}/pacman-state-${label}.tsv"
+    local digest_line=""
+
+    run_guest 'set -euo pipefail
+snapshot_tree() {
+    local kind="$1"
+    local root="$2"
+    local file digest
+    [[ -d "$root" ]] || return 0
+    printf "%s-root\t%s\n" "$kind" "$root"
+    while IFS= read -r -d "" file; do
+        digest="$(sha256sum "$file")"
+        digest="${digest%% *}"
+        printf "%s\t%s\t%s\n" "$kind" "$file" "$digest"
+    done < <(find "$root" -type f -print0 | sort -z)
+}
+db_seen=0
+log_seen=0
+for root in /var/lib/pacman/local /usr/lib/sysimage/var/lib/pacman/local /usr/lib/sysimage/lib/pacman/local; do
+    if [[ -d "$root" ]]; then
+        db_seen=1
+        snapshot_tree pacman-db "$root"
+    fi
+done
+for file in /var/log/pacman.log /usr/lib/sysimage/var/log/pacman.log; do
+    if [[ -f "$file" ]]; then
+        log_seen=1
+        digest="$(sha256sum "$file")"
+        digest="${digest%% *}"
+        printf "pacman-log\t%s\t%s\n" "$file" "$digest"
+    fi
+done
+[[ "$db_seen" == 1 ]] || { echo "pacman database was not found" >&2; exit 1; }
+if [[ "$log_seen" != 1 ]]; then
+    printf "pacman-log\\tabsent\\n"
+fi
+package_set="$(pacman -Q)"
+digest="$(printf "%s\n" "$package_set" | sha256sum)"
+printf "pacman-package-set\t%s\n" "${digest%% *}"' >"$output"
+
+    [[ -s "$output" ]] || fail "pacman DB/log snapshot is empty: ${label}"
+    digest_line="$(sha256sum "$output")"
+    printf '%s\n' "${digest_line%% *}" >"${output}.sha256"
+    printf '%s\n' "${digest_line%% *}"
+}
+
+record_configured_tracking_ref() {
+    local label="$1"
+    local status_file="$2"
+    local enforce="${3:-0}"
+    local tracking=""
+
+    tracking="$(jq -er '.spec.image.image | strings | select(length > 0)' "$status_file")" || \
+        fail "bootc status has no configured image ref: ${label}"
+    printf '%s\n' "$tracking" >"${ARTIFACT_DIR}/configured-ref-${label}.txt"
+
+    if [[ "$enforce" == 1 ]]; then
+        if [[ -n "${OMARCHY_EXPECTED_TRACKING_REF:-}" ]]; then
+            [[ "$tracking" == "$OMARCHY_EXPECTED_TRACKING_REF" ]] || \
+                fail "configured tracking ref mismatch: expected ${OMARCHY_EXPECTED_TRACKING_REF}, found ${tracking}"
+        elif [[ "${OMARCHY_ASSERT_TESTING_REF:-0}" == 1 ]]; then
+            [[ "$tracking" == *:testing ]] || \
+                fail "configured image ref is not the testing stream: ${tracking}"
+        fi
+    fi
+    printf '%s\n' "$tracking"
+}
+
+start_lifecycle_registry() {
+    (( LIFECYCLE_REGISTRY_STARTED == 1 )) && return 0
+    podman rm -f "${LIFECYCLE_REGISTRY_CONTAINER}" >/dev/null 2>&1 || true
+    if ! podman image exists registry:2 >/dev/null 2>&1; then
+        podman pull registry:2 2>&1 | tee "${ARTIFACT_DIR}/lifecycle-registry-pull.log"
+    fi
+    podman run --detach --name "${LIFECYCLE_REGISTRY_CONTAINER}" --network host \
+        --env "REGISTRY_HTTP_ADDR=0.0.0.0:${LIFECYCLE_REGISTRY_PORT}" registry:2 \
+        2>&1 | tee "${ARTIFACT_DIR}/lifecycle-registry-start.log"
+    for _ in $(seq 1 30); do
+        if timeout 5 bash -c "</dev/tcp/127.0.0.1/${LIFECYCLE_REGISTRY_PORT}" 2>/dev/null; then
+            LIFECYCLE_REGISTRY_STARTED=1
+            return 0
+        fi
+        sleep 1
+    done
+    fail "lifecycle registry did not listen on port ${LIFECYCLE_REGISTRY_PORT}"
+}
+
 run_lifecycle_acceptance() {
-    [[ "${RUN_LIFECYCLE_ACCEPTANCE:-1}" == 1 ]] || return 0
+    [[ "${VM_PROFILE}" == omarchy ]] || return 0
 
     local lifecycle_dir="${RUNNER_TEMP:-/tmp}/omarchy-lifecycle-b"
     local b_archive="${lifecycle_dir}/lifecycle-b.oci.tar"
@@ -164,82 +302,206 @@ run_lifecycle_acceptance() {
     local b_digest=""
     local b_path="${GUEST_HOME}/lifecycle-b.oci.tar"
     local update_status=0
+    local a_tracking_ref=""
+    local tracking_assertion="recorded-only"
+    local a_state_hash=""
+    local b_state_hash=""
+    local rollback_state_hash=""
+    local update_state_hash=""
+    local pacman_before_hash=""
+    local pacman_after_update_hash=""
+    local pacman_after_reboot_hash=""
+    local update_trace_hash=""
+    local final_tracking_ref=""
 
-    build_lifecycle_revision "${lifecycle_dir}" "${IMAGE_REF}" "${b_ref}" "${b_archive}"
-    b_digest="$(cat "${ARTIFACT_DIR}/lifecycle-b-digest.txt")"
-    [[ "${b_digest}" =~ ^sha256:[[:xdigit:]]{64}$ ]] || fail "lifecycle B has no immutable OCI digest"
-    printf 'A=%s\nB=%s\n' "${a_digest}" "${b_digest}" >"${ARTIFACT_DIR}/lifecycle-ab.txt"
+    [[ "$a_digest" =~ ^sha256:[[:xdigit:]]{64}$ ]] || fail "lifecycle A has no immutable OCI digest"
+    mkdir -p "$lifecycle_dir"
 
-        sshpass -p "${SSH_PASSWORD}" scp -P "${SSH_PORT}" \
-            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        "${b_archive}" "${SSH_USER}@127.0.0.1:${b_path}"
-    run_guest "sha256sum '${b_path}'" >"${ARTIFACT_DIR}/guest-lifecycle-b-archive.sha256"
+    build_lifecycle_revision "$lifecycle_dir" "$IMAGE_REF" "$b_ref" "$b_archive"
+    b_digest="$(cat "$ARTIFACT_DIR/lifecycle-b-digest.txt")"
+    [[ "$b_digest" =~ ^sha256:[[:xdigit:]]{64}$ ]] || fail "lifecycle B has no immutable OCI digest"
+    start_lifecycle_registry
+    podman push --tls-verify=false "${b_ref}" \
+        "127.0.0.1:${LIFECYCLE_REGISTRY_PORT}/omarchy-bootc:testing" \
+        2>&1 | tee "${ARTIFACT_DIR}/lifecycle-b-registry-push.log"
+    printf 'A=%s\nB=%s\n' "$a_digest" "$b_digest" >"$ARTIFACT_DIR/lifecycle-ab.txt"
 
-    # Stage B from an explicit OCI archive. This exercises the selected bootc
-    # transport without requiring a mutable registry or a cached tag.
-    run_guest "sudo -n bootc switch --transport oci-archive --download-only 'oci-archive:${b_path}'" \
-        2>&1 | tee "${ARTIFACT_DIR}/lifecycle-stage-b.log"
-    run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/lifecycle-staged-status.json"
-    jq -e --arg digest "${b_digest}" '.status.staged.image.imageDigest == $digest' \
-        "${ARTIFACT_DIR}/lifecycle-staged-status.json" >/dev/null \
+    sshpass -p "$SSH_PASSWORD" scp -P "$SSH_PORT" \
+        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "$b_archive" "$SSH_USER@127.0.0.1:$b_path"
+    run_guest "sha256sum '$b_path'" >"$ARTIFACT_DIR/guest-lifecycle-b-archive.sha256"
+
+    # Record A before any transition. The testing-ref assertion is only
+    # enforced when the caller provides the expected production origin; local
+    # OCI acceptance sources remain valid and are recorded without guessing.
+    run_guest 'sudo -n bootc status --format=json' >"$ARTIFACT_DIR/lifecycle-a-before-status.json"
+    a_tracking_ref="$(record_configured_tracking_ref lifecycle-a-before "$ARTIFACT_DIR/lifecycle-a-before-status.json" 1)"
+    if [[ -n "${OMARCHY_EXPECTED_TRACKING_REF:-}" || "${OMARCHY_ASSERT_TESTING_REF:-0}" == 1 ]]; then
+        tracking_assertion="passed"
+    fi
+    a_state_hash="$(snapshot_user_plugin_state a-before)"
+
+    # Gate 3: A -> B. This direct switch is the controlled exact-artifact
+    # transition; Gate 5 below deliberately does not pre-stage B this way.
+    run_guest "sudo -n bootc switch --transport oci-archive --download-only 'oci-archive:$b_path'" \
+        2>&1 | tee "$ARTIFACT_DIR/lifecycle-stage-b.log"
+    run_guest 'sudo -n bootc status --format=json' >"$ARTIFACT_DIR/lifecycle-staged-status.json"
+    jq -e --arg digest "$b_digest" '.status.staged.image.imageDigest == $digest' \
+        "$ARTIFACT_DIR/lifecycle-staged-status.json" >/dev/null \
         || fail "bootc did not stage exact lifecycle B digest"
 
     reboot_guest || fail "lifecycle B reboot was not observed"
-    run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/lifecycle-b-booted-status.json"
-    jq -e --arg digest "${b_digest}" '.status.booted.image.imageDigest == $digest' \
-        "${ARTIFACT_DIR}/lifecycle-b-booted-status.json" >/dev/null \
+    run_guest 'sudo -n bootc status --format=json' >"$ARTIFACT_DIR/lifecycle-b-booted-status.json"
+    jq -e --arg digest "$b_digest" '.status.booted.image.imageDigest == $digest' \
+        "$ARTIFACT_DIR/lifecycle-b-booted-status.json" >/dev/null \
         || fail "lifecycle B did not boot"
     run_guest 'test "$(cat /usr/lib/omarchy-bootc/lifecycle-b)" = lifecycle-b' \
         || fail "lifecycle B payload was not present after reboot"
+    b_state_hash="$(snapshot_user_plugin_state b-booted)"
+    cmp -s "$ARTIFACT_DIR/user-plugin-state-a-before.tsv" \
+        "$ARTIFACT_DIR/user-plugin-state-b-booted.tsv" \
+        || fail "user/plugin state changed across A -> B"
 
-    # Roll back to A, reboot, and verify the original exact deployment. User
-    # state is intentionally checked across both transitions.
-    run_guest 'sudo -n bootc rollback' 2>&1 | tee "${ARTIFACT_DIR}/lifecycle-rollback.log"
+    # Roll back to A and prove the same user/plugin state survives the
+    # deployment boundary.
+    run_guest 'sudo -n bootc rollback' 2>&1 | tee "$ARTIFACT_DIR/lifecycle-rollback.log"
     reboot_guest || fail "rollback reboot was not observed"
-    run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/lifecycle-a-rollback-status.json"
-    jq -e --arg digest "${a_digest}" '.status.booted.image.imageDigest == $digest' \
-        "${ARTIFACT_DIR}/lifecycle-a-rollback-status.json" >/dev/null \
+    run_guest 'sudo -n bootc status --format=json' >"$ARTIFACT_DIR/lifecycle-a-rollback-status.json"
+    jq -e --arg digest "$a_digest" '.status.booted.image.imageDigest == $digest' \
+        "$ARTIFACT_DIR/lifecycle-a-rollback-status.json" >/dev/null \
         || fail "rollback did not restore exact lifecycle A digest"
-    run_guest 'test -d "$HOME/.config/omarchy/plugins"' || fail "user/plugin state did not survive rollback"
+    rollback_state_hash="$(snapshot_user_plugin_state a-rollback)"
+    cmp -s "$ARTIFACT_DIR/user-plugin-state-a-before.tsv" \
+        "$ARTIFACT_DIR/user-plugin-state-a-rollback.tsv" \
+        || fail "user/plugin state did not survive rollback"
+    run_guest 'test -d "$HOME/.config/omarchy/plugins"' \
+        || fail "user/plugin state directory did not survive rollback"
+    # Restore the production tracking origin without staging anything. Gate 3's
+    # archive switch intentionally changes the origin; --in-place repairs only
+    # that mutable reference before Gate 5.
+    run_guest "sudo -n bootc switch --in-place '${OMARCHY_DEFAULT_TRACKING_REF}'"
+    run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/lifecycle-a-restored-origin-status.json"
+    record_configured_tracking_ref lifecycle-a-restored-origin "${ARTIFACT_DIR}/lifecycle-a-restored-origin-status.json" 1
+    jq -e '.status.staged == null' "${ARTIFACT_DIR}/lifecycle-a-restored-origin-status.json" >/dev/null \
+        || fail "restoring the tracking origin unexpectedly staged an image"
 
-    # Gate 5: stage the same controlled B through the real Omarchy updater.
-    # The tracing shim only records the bootc calls; the delegated binary is
-    # still the image's native bootc. A pacman database timestamp proves that
-    # no live package transaction mutated image-owned OS state.
-    run_guest "sudo -n bootc switch --transport oci-archive --download-only 'oci-archive:${b_path}'" \
-        2>&1 | tee "${ARTIFACT_DIR}/update-stage-b.log"
-    run_guest 'sudo -n sha256sum /var/lib/pacman/local/ALPM_DB_VERSION 2>/dev/null || true' \
-        >"${ARTIFACT_DIR}/pacman-db-before.txt"
-    cat >"${lifecycle_dir}/bootc-trace" <<'EOF'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >> /run/omarchy-bootc-bootc-trace.log
-exec /usr/bin/bootc "$@"
+    # The test registry is a mirror for the real :testing tracking ref. The
+    # guest still records and resolves ghcr.io/joshyorko/omarchy-bootc:testing.
+    cat >"${lifecycle_dir}/registry-mirror.conf" <<EOF
+[[registry]]
+prefix = "ghcr.io/joshyorko/omarchy-bootc"
+location = "${LIFECYCLE_REGISTRY_HOST}:${LIFECYCLE_REGISTRY_PORT}/omarchy-bootc"
+insecure = true
 EOF
     sshpass -p "${SSH_PASSWORD}" scp -P "${SSH_PORT}" \
         -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        "${lifecycle_dir}/bootc-trace" "${SSH_USER}@127.0.0.1:${GUEST_HOME}/bootc-trace"
-    run_guest 'sudo -n install -m 0755 /home/omarchy/bootc-trace /usr/local/bin/bootc-trace'
+        "${lifecycle_dir}/registry-mirror.conf" "${SSH_USER}@127.0.0.1:${GUEST_HOME}/registry-mirror.conf"
+    run_guest "sudo -n install -D -m 0644 '${GUEST_HOME}/registry-mirror.conf' /etc/containers/registries.conf.d/omarchy-acceptance-mirror.conf"
+    run_guest "timeout 5 bash -c '</dev/tcp/${LIFECYCLE_REGISTRY_HOST}/${LIFECYCLE_REGISTRY_PORT}'"
+
+    # Gate 5: call the real Omarchy updater from the A deployment. There is
+    # intentionally no direct bootc switch here: the updater's own
+    # upgrade --check/upgrade path must discover and stage the controlled B.
+    rm -f "$ARTIFACT_DIR/update-stage-b.log"
+    run_guest 'sudo -n rm -f /run/omarchy-bootc-bootc-trace.log'
+    cat >"$lifecycle_dir/bootc-trace" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> /run/omarchy-bootc-bootc-trace.log
+exec /usr/bin/bootc "$@"
+EOF
+    sshpass -p "$SSH_PASSWORD" scp -P "$SSH_PORT" \
+        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "$lifecycle_dir/bootc-trace" "$SSH_USER@127.0.0.1:$GUEST_HOME/bootc-trace"
+    run_guest "sudo -n install -m 0755 '$GUEST_HOME/bootc-trace' /usr/local/bin/bootc-trace"
+
+    pacman_before_hash="$(snapshot_pacman_state before-update)"
     set +e
     run_guest 'env OMARCHY_BOOTC_BIN=/usr/local/bin/bootc-trace /usr/local/bin/omarchy update -y' \
-        2>&1 | tee "${ARTIFACT_DIR}/omarchy-update.log"
+        2>&1 | tee "$ARTIFACT_DIR/omarchy-update.log"
     update_status="${PIPESTATUS[0]}"
     set -e
     (( update_status == 0 )) || fail "omarchy update did not complete the staged bootc transaction"
-    run_guest 'sudo -n cat /run/omarchy-bootc-bootc-trace.log' >"${ARTIFACT_DIR}/omarchy-update-bootc-trace.log"
-    grep -Fq 'upgrade --check' "${ARTIFACT_DIR}/omarchy-update-bootc-trace.log" \
+    run_guest 'sudo -n cat /run/omarchy-bootc-bootc-trace.log' >"$ARTIFACT_DIR/omarchy-update-bootc-trace.log"
+    grep -Fq 'upgrade --check' "$ARTIFACT_DIR/omarchy-update-bootc-trace.log" \
         || fail "omarchy update did not invoke bootc upgrade --check"
-    run_guest 'sudo -n sha256sum /var/lib/pacman/local/ALPM_DB_VERSION 2>/dev/null || true' \
-        >"${ARTIFACT_DIR}/pacman-db-after.txt"
-    cmp -s "${ARTIFACT_DIR}/pacman-db-before.txt" "${ARTIFACT_DIR}/pacman-db-after.txt" \
-        || fail "omarchy update changed the pacman database"
-    reboot_guest || fail "update reboot was not observed"
-    run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/update-booted-status.json"
-    jq -e --arg digest "${b_digest}" '.status.booted.image.imageDigest == $digest' \
-        "${ARTIFACT_DIR}/update-booted-status.json" >/dev/null \
-        || fail "the updater did not boot the staged exact B digest"
-    printf '%s\n' passed >"${ARTIFACT_DIR}/gate-3-5.receipt"
-}
+    grep -Fxq 'upgrade' "$ARTIFACT_DIR/omarchy-update-bootc-trace.log" \
+        || fail "omarchy update did not invoke a bootc upgrade operation"
+    if grep -Eq '(^|[[:space:]])pacman([[:space:]]|$)' \
+        "$ARTIFACT_DIR/omarchy-update-bootc-trace.log"; then
+        fail "omarchy update invoked pacman through the bootc trace"
+    fi
 
+    pacman_after_update_hash="$(snapshot_pacman_state after-update)"
+    [[ "$pacman_before_hash" == "$pacman_after_update_hash" ]] \
+        || fail "omarchy update changed the pacman DB or log snapshot"
+
+    reboot_guest || fail "update reboot was not observed"
+    run_guest 'sudo -n bootc status --format=json' >"$ARTIFACT_DIR/update-booted-status.json"
+    jq -e --arg digest "$b_digest" '.status.booted.image.imageDigest == $digest' \
+        "$ARTIFACT_DIR/update-booted-status.json" >/dev/null \
+        || fail "the updater did not boot the staged exact B digest"
+    update_state_hash="$(snapshot_user_plugin_state b-update)"
+    cmp -s "$ARTIFACT_DIR/user-plugin-state-a-before.tsv" \
+        "$ARTIFACT_DIR/user-plugin-state-b-update.tsv" \
+        || fail "user/plugin state did not survive the bootc update"
+    pacman_after_reboot_hash="$(snapshot_pacman_state after-update-reboot)"
+    [[ "$pacman_before_hash" == "$pacman_after_reboot_hash" ]] \
+        || fail "reboot changed the pacman DB or log snapshot"
+    final_tracking_ref="$(record_configured_tracking_ref update-booted "$ARTIFACT_DIR/update-booted-status.json" 0)"
+    update_trace_hash="$(sha256sum "$ARTIFACT_DIR/omarchy-update-bootc-trace.log")"
+    update_trace_hash="${update_trace_hash%% *}"
+
+    jq -n \
+        --arg schema "omarchy-bootc.gates-3-5/v2" \
+        --arg source_sha "${GITHUB_SHA:-unknown}" \
+        --arg image_ref "$IMAGE_REF" \
+        --arg a_digest "$a_digest" \
+        --arg b_digest "$b_digest" \
+        --arg initial_tracking_ref "$a_tracking_ref" \
+        --arg final_tracking_ref "$final_tracking_ref" \
+        --arg tracking_assertion "$tracking_assertion" \
+        --arg a_state_hash "$a_state_hash" \
+        --arg b_state_hash "$b_state_hash" \
+        --arg rollback_state_hash "$rollback_state_hash" \
+        --arg update_state_hash "$update_state_hash" \
+        --arg pacman_before_hash "$pacman_before_hash" \
+        --arg pacman_after_update_hash "$pacman_after_update_hash" \
+        --arg pacman_after_reboot_hash "$pacman_after_reboot_hash" \
+        --arg update_trace_hash "$update_trace_hash" \
+        --arg receipt "passed" \
+        '{
+          schema: $schema,
+          source_sha: $source_sha,
+          image_ref: $image_ref,
+          artifacts: {A: {digest: $a_digest}, B: {digest: $b_digest}},
+          configured_tracking_ref: {
+            initial: $initial_tracking_ref,
+            final: $final_tracking_ref,
+            assertion: $tracking_assertion
+          },
+          user_plugin_state_hashes: {
+            a_before: $a_state_hash,
+            b_booted: $b_state_hash,
+            a_rollback: $rollback_state_hash,
+            b_update: $update_state_hash
+          },
+          gate5: {
+            pre_stage: "none",
+            updater: "omarchy update -y",
+            bootc_trace_sha256: $update_trace_hash,
+            pacman_db_log_before: $pacman_before_hash,
+            pacman_db_log_after_update: $pacman_after_update_hash,
+            pacman_db_log_after_reboot: $pacman_after_reboot_hash
+          },
+          receipt: $receipt
+        }' >"$ARTIFACT_DIR/gate-3-5.receipt.json"
+    jq -e '.receipt == "passed" and .gate5.pre_stage == "none"' \
+        "$ARTIFACT_DIR/gate-3-5.receipt.json" >/dev/null \
+        || fail "Gate 3/5 JSON receipt was not complete"
+
+    printf '%s\n' passed >"$ARTIFACT_DIR/gate-3-5.receipt"
+}
 write_artifact() {
     local name="${1}"
     shift
@@ -303,6 +565,9 @@ fail() {
 }
 
 cleanup() {
+    if (( LIFECYCLE_REGISTRY_STARTED == 1 )); then
+        podman rm -f "${LIFECYCLE_REGISTRY_CONTAINER}" >/dev/null 2>&1 || true
+    fi
     capture_host_diagnostics
     capture_guest_diagnostics
     if [[ -f "${QEMU_PIDFILE}" ]]; then
@@ -343,6 +608,11 @@ SOURCE_IMGREF="oci:/data/${SOURCE_OCI_DIR}"
 echo "Using source imgref: ${SOURCE_IMGREF}" | tee "${ARTIFACT_DIR}/source-imgref.txt"
 echo "::endgroup::"
 
+install_target_args=()
+if [[ "${VM_PROFILE}" == omarchy ]]; then
+    install_target_args+=(--target-imgref "${OMARCHY_DEFAULT_TRACKING_REF}")
+fi
+
 echo "::group::Generate qcow2 via bootc install-to-disk"
 mkdir -p "$(dirname "${RAW_PATH}")" "$(dirname "${QCOW_PATH}")"
 truncate -s "${DISK_SIZE}" "${RAW_PATH}"
@@ -354,7 +624,7 @@ sudo podman run --rm --privileged --pid=host --pull=never \
     -v /etc/containers:/etc/containers \
     -v "${PWD}:/data" \
     "${IMAGE_REF}" \
-    bootc install to-disk --source-imgref "${SOURCE_IMGREF}" --composefs-backend --via-loopback "/data/${RAW_PATH}" --filesystem btrfs --wipe --bootloader systemd \
+    bootc install to-disk --source-imgref "${SOURCE_IMGREF}" "${install_target_args[@]}" --composefs-backend --via-loopback "/data/${RAW_PATH}" --filesystem btrfs --wipe --bootloader systemd \
     2>&1 | tee "${ARTIFACT_DIR}/bootc-install.log"
 
 qemu-img convert -O qcow2 "${RAW_PATH}" "${QCOW_PATH}"
