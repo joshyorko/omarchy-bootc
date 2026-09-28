@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+(( EUID == 0 && $# == 0 )) || {
+    echo 'bootc transaction clear helper requires root and accepts no arguments' >&2
+    exit 2
+}
+
+marker_dir=/var/lib/omarchy-bootc/updates
+marker=${marker_dir}/pending-update
+[[ ! -L "$marker_dir" && -d "$marker_dir" ]] || {
+    echo 'refusing an invalid bootc transaction marker directory' >&2
+    exit 1
+}
+[[ ! -L "$marker" ]] || {
+    echo 'refusing a symlinked bootc transaction marker' >&2
+    exit 1
+}
+[[ -e "$marker" ]] || exit 0
+[[ -f "$marker" ]] || {
+    echo 'refusing a non-regular bootc transaction marker' >&2
+    exit 1
+}
+marker_owner_mode="$(/usr/bin/stat -c '%u:%a' -- "$marker")" || {
+    echo 'cannot inspect bootc transaction marker' >&2
+    exit 1
+}
+[[ "$marker_owner_mode" == 0:600 ]] || {
+    echo 'refusing an unsecured bootc transaction marker' >&2
+    exit 1
+}
+/usr/bin/rm -f -- "$marker"

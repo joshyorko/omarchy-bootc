@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /usr/lib/omarchy-bootc/update-common.sh
+export OMARCHY_BOOTC_BIN=/usr/bin/bootc
+export OMARCHY_BOOTC_STATUS_FILE=
+export OMARCHY_BOOTC_STATUS_HELPER=/usr/libexec/omarchy-bootc-status
+
+pending_root="${HOME}/.local"
+pending_state="${pending_root}/state"
+pending_dir="${pending_state}/omarchy-bootc"
+[[ ! -L "$pending_root" && ! -L "$pending_state" && ! -L "$pending_dir" ]] || {
+    echo 'bootc update marker path contains a symlink; refusing migration' >&2
+    exit 1
+}
+pending="${HOME}/.local/state/omarchy-bootc/pending-update"
+[[ ! -L "$pending" ]] || {
+    echo 'bootc update marker is a symlink; refusing migration' >&2
+    exit 1
+}
+[[ -e "$pending" ]] || exit 0
+[[ -f "$pending" ]] || {
+    echo 'bootc update marker is not a regular file; refusing migration' >&2
+    exit 1
+}
+marker_owner_mode="$(stat -c '%u:%a' -- "$pending")" || {
+    echo 'cannot inspect bootc update marker; refusing migration' >&2
+    exit 1
+}
+[[ "$marker_owner_mode" == "$(id -u):600" ]] || {
+    echo 'bootc update marker has the wrong owner or mode; refusing migration' >&2
+    exit 1
+}
+expected="$(sed -n 's/^expected_digest=//p' "$pending" | sed -n '1p')"
+[[ "$expected" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+    echo 'bootc update marker has no exact expected digest; refusing migration' >&2
+    exit 1
+}
+actual="$(status_booted_digest)"
+[[ "$actual" == "$expected" ]] || {
+    echo "booted digest ${actual:-none} does not match staged digest ${expected}; migrations remain pending" >&2
+    exit 1
+}
+
+# The current deployment is now the one whose files migrations were authored
+# against. The old Omarchy package pipeline must never run before this check.
+omarchy-migrate
+omarchy-hook post-update
+run_as_root_noninteractive /usr/libexec/omarchy-bootc-clear-transaction
+rm -f -- "$pending"
+printf 'status=finalized\nbooted_digest=%s\n' "$actual"

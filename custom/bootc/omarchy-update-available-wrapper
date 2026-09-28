@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#
+# omarchy:summary=Check whether a bootc image update is available.
+# omarchy:args=
+# omarchy:examples=omarchy-update-available
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+(( $# == 0 )) || { echo 'Image availability accepts no arguments' >&2; exit 2; }
+if (( EUID == 0 )); then
+    exec /usr/libexec/omarchy-bootc-check
+fi
+exec sudo -n -- /usr/libexec/omarchy-bootc-check

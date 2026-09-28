@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bootc performs the authoritative check; digest resolution also supports
+# composefs status, which has no cachedUpdate. Never scrape human bootc output.
+# The image-installed helper is resolved only after installation.
+# shellcheck disable=SC1091
+source /usr/lib/omarchy-bootc/update-common.sh
+export OMARCHY_BOOTC_BIN=/usr/bin/bootc
+export OMARCHY_BOOTC_STATUS_FILE=
+unset OMARCHY_BOOTC_STATUS_HELPER
+
+if ! run_as_root "$OMARCHY_BOOTC_BIN" upgrade --check >/dev/null 2>&1; then
+    echo 'Omarchy update check failed' >&2
+    exit 1
+fi
+
+if candidate="$(status_update_available)"; then
+    booted="$(status_booted_digest)"
+    printf 'bootc image update available (current=%s candidate=%s)\n' "${booted:-unknown}" "${candidate:-unknown}"
+    exit 0
+else
+    status_rc=$?
+fi
+
+if (( status_rc == 2 )); then
+    echo 'Cannot determine bootc update availability: status or image resolution failed' >&2
+    exit 1
+fi
+
+echo 'Omarchy image is up to date'
+exit 1

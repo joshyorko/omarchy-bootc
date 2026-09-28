@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+(( EUID == 0 && $# == 0 )) || {
+    echo 'bootc status helper requires root and accepts no arguments' >&2
+    exit 2
+}
+exec /usr/bin/env -i \
+    PATH=/usr/bin:/usr/local/bin HOME=/root USER=root LOGNAME=root \
+    /usr/bin/bootc status --format=json
