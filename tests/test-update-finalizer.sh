@@ -72,7 +72,7 @@ if bash "$tmp/finalize" >"$tmp/mismatch.out" 2>&1; then
     fail 'digest mismatch was accepted'
 fi
 [[ ! -s "$tmp/actions.log" ]] || fail 'migration or hook ran before digest verification'
-[[ ! -e "$FAKE_ROOT_MARKER" ]] || fail 'root marker was cleared before digest verification'
+[[ -e "$FAKE_ROOT_MARKER" ]] || fail 'root marker was cleared before digest verification'
 [[ -e "$HOME/.local/state/omarchy-bootc/pending-update" ]] || fail 'user marker was removed after digest mismatch'
 
 write_status "$b"
