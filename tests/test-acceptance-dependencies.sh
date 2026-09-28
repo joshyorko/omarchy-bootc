@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Fixture strings intentionally preserve literal sudoers and shell syntax.
+# shellcheck disable=SC1003,SC2016
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,6 +25,7 @@ expect_failure 'Usage:' main final extra
 # discovery from the host's sudo installation without mocking command lookup.
 mkdir "$fixture/bin"
 printf 'sudo\n' >"$fixture/base.packages"
+host_path="$PATH"
 (
     export PATH="$fixture/bin"
     require_immutable_command sudo
@@ -33,7 +36,7 @@ printf '#!/bin/sh\nexit 0\n' >"$fixture/bin/sudo"
 expect_failure 'missing executable:' require_executable "$fixture/bin/sudo"
 chmod 0755 "$fixture/bin/sudo"
 expect_failure 'command is not image-owned:' env \
-    PATH="$fixture/bin:$PATH" bash -c 'source "$1"; require_immutable_command sudo' \
+    PATH="$fixture/bin:$host_path" bash -c 'source "$1"; require_immutable_command sudo' \
     bash "$root_dir/build/acceptance-dependencies.sh"
 rm "$fixture/bin/sudo"
 ln -s "$fixture/absent" "$fixture/bin/sudo"
@@ -131,19 +134,19 @@ unit="$2"
 printf 'enabled\n'
 EOF
 chmod 0755 "$fixture/bin/systemctl"
-PATH="$fixture/bin:$PATH" require_desktop_services "$service_root"
+PATH="$fixture/bin:$host_path" require_desktop_services "$service_root"
 rm "$service_root/usr/lib/systemd/system/cups.service"
-PATH="$fixture/bin:$PATH" expect_failure 'missing required service unit: cups.service' require_desktop_services "$service_root"
+PATH="$fixture/bin:$host_path" expect_failure 'missing required service unit: cups.service' require_desktop_services "$service_root"
 printf '[Unit]\nDescription=Fixture\n[Install]\nWantedBy=multi-user.target\n' \
     >"$service_root/usr/lib/systemd/system/cups.service"
 
 rm "$service_root/etc/systemd/system/multi-user.target.wants/ufw.service"
-PATH="$fixture/bin:$PATH" expect_failure 'required service is not enabled: ufw.service' require_desktop_services "$service_root"
+PATH="$fixture/bin:$host_path" expect_failure 'required service is not enabled: ufw.service' require_desktop_services "$service_root"
 ln -s /usr/lib/systemd/system/ufw.service "$service_root/etc/systemd/system/multi-user.target.wants/ufw.service"
 printf 'ENABLED=no\n' >"$service_root/etc/ufw/ufw.conf"
-PATH="$fixture/bin:$PATH" expect_failure 'UFW configuration is not enabled' require_desktop_services "$service_root"
+PATH="$fixture/bin:$host_path" expect_failure 'UFW configuration is not enabled' require_desktop_services "$service_root"
 printf 'ENABLED=yes\n' >"$service_root/etc/ufw/ufw.conf"
 rm "$service_root/usr/lib/systemd/user/pipewire-pulse.service"
-PATH="$fixture/bin:$PATH" expect_failure 'missing pipewire-pulse user service' require_desktop_services "$service_root"
+PATH="$fixture/bin:$host_path" expect_failure 'missing pipewire-pulse user service' require_desktop_services "$service_root"
 
 printf 'acceptance dependency boundaries, kernel headers and desktop services passed\n'

@@ -33,7 +33,9 @@ grep -Fq '/usr/lib/ostree/prepare-root.conf' "${contract}"
 
 foundation_block="$(sed -n '/^FROM bootcrew-system AS foundation$/,/^FROM /p' "${containerfile}")"
 test -n "${foundation_block}"
-! grep -Fq '20-quattro.sh' <<<"${foundation_block}"
+if grep -Fq '20-quattro.sh' <<<"${foundation_block}"; then
+    exit 1
+fi
 ! grep -Fq 'omarchy' <<<"${foundation_block}" || grep -Fq 'omarchy-bootc' <<<"${foundation_block}"
 
 printf 'foundation source contract passed\n'

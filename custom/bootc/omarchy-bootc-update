@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The image-installed helper is resolved only after installation; the remote
+# shell snippet intentionally defers its positional-parameter expansion.
+# shellcheck disable=SC1091,SC2016
 set -euo pipefail
 
 # This is the bootc replacement for upstream's pacman-backed omarchy update

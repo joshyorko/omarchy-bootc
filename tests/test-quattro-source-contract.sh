@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Contract needles and fixture callbacks intentionally preserve literal syntax.
+# shellcheck disable=SC2016,SC2317
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

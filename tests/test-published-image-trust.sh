@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Contract needles intentionally preserve workflow expressions literally.
+# shellcheck disable=SC2016
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

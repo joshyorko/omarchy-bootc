@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# jq filters and EXIT trap helpers intentionally use deferred expansions.
+# shellcheck disable=SC2016,SC2317
 set -euo pipefail
 
 phase="${1:-}"

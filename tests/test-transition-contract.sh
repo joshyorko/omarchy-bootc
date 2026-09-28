@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Adversarial ref fixtures intentionally preserve literal shell metacharacters.
+# shellcheck disable=SC2016
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
