@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-
+# Remote command strings intentionally defer guest-side expansion.
+# shellcheck disable=SC2016
 run_upstream_acceptance() {
     local upstream_dir="$1"
     local artifact_dir="$2"
