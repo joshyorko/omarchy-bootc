@@ -30,7 +30,7 @@ SSH_OPTS=(
 )
 OVMF_CODE_PATH=""
 OVMF_VARS_TEMPLATE=""
-LIFECYCLE_REGISTRY_CONTAINER="omarchy-bootc-lifecycle-registry-$"
+LIFECYCLE_REGISTRY_CONTAINER="omarchy-bootc-lifecycle-registry-$$"
 LIFECYCLE_REGISTRY_PORT="${LIFECYCLE_REGISTRY_PORT:-5000}"
 LIFECYCLE_REGISTRY_HOST="${LIFECYCLE_REGISTRY_HOST:-10.0.2.2}"
 LIFECYCLE_REGISTRY_STARTED=0
@@ -239,7 +239,7 @@ for file in /var/log/pacman.log /usr/lib/sysimage/var/log/pacman.log; do
 done
 [[ "$db_seen" == 1 ]] || { echo "pacman database was not found" >&2; exit 1; }
 if [[ "$log_seen" != 1 ]]; then
-    printf "pacman-log\\tabsent\\n"
+    printf "pacman-log\tabsent\n"
 fi
 package_set="$(pacman -Q)"
 digest="$(printf "%s\n" "$package_set" | sha256sum)"
