@@ -98,7 +98,9 @@ mapfile -t other_packages < <(read_quattro_package_manifest "${OMARCHY_OTHER_MAN
 [[ ${#other_packages[@]} -gt 0 ]]
 
 phase=install-base-closure
-pacman -S --noconfirm --needed "${base_packages[@]}"
+# PulseAudio compatibility is required by the desktop acceptance contract even
+# though upstream lists it alongside optional, mutually exclusive hardware.
+pacman -S --noconfirm --needed "${base_packages[@]}" pipewire-pulse
 phase=register-package-system-users
 install -D -m 0644 /ctx/build/cups-browsed.sysusers.conf \
     /usr/lib/sysusers.d/cups-browsed.conf

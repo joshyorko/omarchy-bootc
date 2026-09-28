@@ -8,7 +8,7 @@ bootc_status_json() {
     if [[ -n "${OMARCHY_BOOTC_STATUS_FILE:-}" ]]; then
         cat "$OMARCHY_BOOTC_STATUS_FILE"
     else
-        "$OMARCHY_BOOTC_BIN" status --format=json
+        run_as_root "$OMARCHY_BOOTC_BIN" status --format=json
     fi
 }
 
@@ -49,6 +49,13 @@ status_field() {
           else cached_digest(.status.booted.cachedUpdate) end
         elif $key == "tracking" then
           .spec.image.image
+        elif $key == "transport" then
+          if (.spec.image|has("transport")|not) then "registry"
+          elif (.spec.image.transport|type) == "string" then .spec.image.transport
+          else error("invalid image transport") end
+        elif $key == "architecture" then
+          if (.status.booted.image.architecture|type) == "string" then .status.booted.image.architecture
+          else error("missing booted image architecture") end
         else error("unknown status field") end
     ' <<<"$status"
 }
@@ -59,13 +66,65 @@ status_rollback_digest() { status_field rollback; }
 status_cached_digest() { status_field cached; }
 status_tracking_ref() { status_field tracking; }
 
+# Composefs bootc 1.16.13 never populates cachedUpdate, even after --check.
+# Inspect the configured transport using the same root registry/auth settings.
+# Do not override TLS or signature policy: bootc still owns check and staging.
+status_resolved_digest() (
+    local ref transport manifest digest architecture
+    ref="$(status_tracking_ref)" || return
+    transport="$(status_field transport)" || return
+    case "$transport" in
+        registry) ref="docker://${ref}" ;;
+        oci|oci-archive|docker-archive|containers-storage|dir) ref="${transport}:${ref}" ;;
+        *) echo "unsupported bootc image transport: ${transport}" >&2; return 1 ;;
+    esac
+    manifest="$(mktemp)" || return
+    trap 'rm -f -- "$manifest"' EXIT
+    run_as_root skopeo inspect --raw "$ref" >"$manifest" || return
+    if jq -e 'has("manifests")' "$manifest" >/dev/null; then
+        # Composefs records the platform manifest, not the multiarch index.
+        # Fail closed on ambiguous variants rather than guess a digest.
+        architecture="$(status_field architecture)" || return
+        digest="$(jq -er --arg arch "$architecture" '
+          [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch)]
+          | if length == 1 then .[0].digest else error("ambiguous or missing image platform") end
+        ' "$manifest")" || return
+    else
+        jq -e '.schemaVersion == 2 and (.config|type) == "object" and (.layers|type) == "array"' \
+            "$manifest" >/dev/null || return
+        digest="$(skopeo manifest-digest "$manifest")" || return
+    fi
+    [[ "$digest" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+        echo 'image resolver did not return an exact sha256 digest' >&2
+        return 1
+    }
+    printf '%s\n' "$digest"
+)
+
+status_candidate_digest() {
+    local booted staged candidate
+    booted="$(status_booted_digest)" || return
+    staged="$(status_staged_digest)" || return
+    if [[ -n "$staged" && "$staged" != "$booted" ]]; then
+        printf '%s\n' "$staged"
+        return 0
+    fi
+    candidate="$(status_cached_digest)" || return
+    if [[ -n "$candidate" ]]; then
+        printf '%s\n' "$candidate"
+    else
+        status_resolved_digest
+    fi
+}
+
+# Print the candidate only when an update exists; resolution errors are not
+# "up to date". Callers must preserve the distinction between exit 1 and 2.
 status_update_available() {
-    local booted staged cached
+    local booted candidate
     booted="$(status_booted_digest)" || return 2
-    staged="$(status_staged_digest)" || return 2
-    cached="$(status_cached_digest)" || return 2
-    [[ -n "$staged" && "$staged" != "$booted" ]] && return 0
-    [[ -n "$cached" && "$cached" != "$booted" ]]
+    candidate="$(status_candidate_digest)" || return 2
+    [[ "$candidate" != "$booted" ]] || return 1
+    printf '%s\n' "$candidate"
 }
 
 run_as_root() {

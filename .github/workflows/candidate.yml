@@ -31,11 +31,24 @@ jobs:
 
       - name: Validate source contracts
         run: |
-          bash tests/test-quattro-source-contract.sh
-          bash tests/test-foundation-contract.sh
-          bash tests/test-update-dispatch-contract.sh
-          bash tests/test-transition-contract.sh
-          bash tests/test-published-image-trust.sh
+          set -euo pipefail
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+            shellcheck "$script"
+          done < <(find build scripts tests custom/first-boot transition -name '*.sh' -print0)
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+            shellcheck "$script"
+          done < <(find custom/bootc -type f ! -name '*.service' -print0)
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          for script in Path("scripts/ci").rglob("*.py"):
+              ast.parse(script.read_text(), filename=str(script))
+          PY
+          for test in tests/test-*.sh; do
+            bash "$test"
+          done
 
       # The final image is large; use the runner's expanded container store when available.
       - name: Mount container storage
@@ -155,7 +168,7 @@ jobs:
       - name: Install hosted VM dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ovmf qemu-system-x86 qemu-utils sshpass
+          sudo apt-get install -y ovmf qemu-system-x86 qemu-utils sshpass skopeo
       - name: Verify artifact identity and boot
         env:
           CI_ARTIFACT_DIR: ${{ runner.temp }}/runtime-receipts

@@ -145,10 +145,22 @@ RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | xargs -n
 RUN pacman -Syu --noconfirm
 
 RUN pacman -Sy --noconfirm \
-        base bubblewrap dracut linux linux-firmware ostree btrfs-progs \
+        base bubblewrap dracut linux linux-headers linux-firmware ostree btrfs-progs \
         e2fsprogs xfsprogs dosfstools skopeo dbus dbus-glib glib2 \
-        shadow openssh pcre2 podman && \
-    pacman -S --clean --noconfirm
+        shadow openssh pcre2 podman sudo && \
+    pacman -S --clean --noconfirm && \
+    install -d -m 0755 /usr/share/omarchy-bootc && \
+    printf '%s\n' linux > /usr/share/omarchy-bootc/kernel-package
+
+RUN getent group wheel >/dev/null || groupadd wheel
+
+# Product updates elevate through sudo; only disposable acceptance uses NOPASSWD.
+RUN install -d -m 0755 /etc/sudoers.d && \
+    printf '%s\n' '%wheel ALL=(ALL:ALL) PASSWD: ALL' \
+        > /etc/sudoers.d/10-omarchy-wheel && \
+    chmod 0440 /etc/sudoers.d/10-omarchy-wheel && \
+    visudo -cf /etc/sudoers.d/10-omarchy-wheel && \
+    visudo -c
 
 RUN systemctl enable systemd-networkd systemd-resolved systemd-timesyncd sshd && \
     systemctl mask systemd-firstboot.service
@@ -299,6 +311,9 @@ RUN bootc container lint --fatal-warnings
 
 FROM quattro-base AS quattro-integration
 LABEL containers.bootc=1
+COPY build/acceptance-dependencies.sh /usr/lib/omarchy-bootc/acceptance-dependencies.sh
+RUN chmod 0755 /usr/lib/omarchy-bootc/acceptance-dependencies.sh && \
+    /usr/lib/omarchy-bootc/acceptance-dependencies.sh final
 RUN bootc container lint --fatal-warnings
 
 FROM quattro-integration AS acceptance

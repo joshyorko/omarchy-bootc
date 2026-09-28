@@ -368,7 +368,7 @@ build-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="
         -v /etc/containers:/etc/containers \
         -v "$(pwd):/data" \
         "{{ target_image }}:{{ tag }}" \
-        bootc install to-disk --source-imgref "${source_imgref}" --composefs-backend --via-loopback "/data/${raw_path}" --filesystem "{{ filesystem }}" --wipe --bootloader systemd
+        bootc install to-disk --source-imgref "${source_imgref}" --composefs-backend --via-loopback --filesystem "{{ filesystem }}" --wipe --bootloader systemd "/data/${raw_path}"
 
     if ! command -v qemu-img >/dev/null 2>&1; then
         echo "ERROR: qemu-img not found; install qemu-img or use build-raw. Raw image available at ${raw_path}."
@@ -407,7 +407,7 @@ build-raw $target_image=local_image $tag=default_tag size="20G": validate && (bu
         -v /etc/containers:/etc/containers \
         -v "$(pwd):/data" \
         "{{ target_image }}:{{ tag }}" \
-        bootc install to-disk --source-imgref "${source_imgref}" --composefs-backend --via-loopback "/data/${raw_path}" --filesystem "btrfs" --wipe --bootloader systemd
+        bootc install to-disk --source-imgref "${source_imgref}" --composefs-backend --via-loopback --filesystem "btrfs" --wipe --bootloader systemd "/data/${raw_path}"
 
 # Rebuild (OCI + qcow2) in one step using bootc install-to-disk
 [group('Build Virtual Machine Image')]

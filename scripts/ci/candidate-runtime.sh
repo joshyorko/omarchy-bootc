@@ -22,6 +22,9 @@ cp "${receipt}" "${artifact_dir}/parent-candidate.receipt.json"
 sudo -n podman load -i "${archive}"
 parent="$(jq -er .image_id "${receipt}")"
 [[ "$(sudo -n podman inspect --type image "${parent}" --format '{{.Id}}')" == "${parent}" ]]
+sudo -n podman run --rm --pull=never "${parent}" \
+    /usr/lib/omarchy-bootc/acceptance-dependencies.sh final \
+    2>&1 | tee "${artifact_dir}/candidate-dependencies.log"
 
 overlay=localhost/omarchy-bootc:acceptance
 sudo -n podman build --pull=never --format=oci \
@@ -33,40 +36,42 @@ sudo -n podman build --pull=never --format=oci \
 sudo -n podman run --rm --pull=never --privileged "${overlay}" \
     bootc container lint --fatal-warnings \
     2>&1 | tee "${artifact_dir}/acceptance-overlay-lint.log"
+sudo -n podman run --rm --pull=never "${overlay}" \
+    /usr/lib/omarchy-bootc/acceptance-dependencies.sh overlay \
+    2>&1 | tee "${artifact_dir}/overlay-dependencies.log"
 sudo -n podman image inspect "${overlay}" | tee "${artifact_dir}/acceptance-overlay-inspect.json" >/dev/null
 overlay_id="$(sudo -n podman inspect --type image "${overlay}" --format '{{.Id}}')"
 
 # Fetch only the official acceptance machinery at the accepted source pin.
 upstream_tests="$(mktemp -d)"
+trap 'rm -rf -- "${upstream_tests}"' EXIT
 git -C "${upstream_tests}" init -q
 git -C "${upstream_tests}" remote add origin "$(cat sources/omarchy-quattro.source)"
 quattro_revision="$(cat sources/omarchy-quattro.revision)"
 git -C "${upstream_tests}" fetch --depth=1 --filter=blob:none origin "${quattro_revision}"
 [[ "$(git -C "${upstream_tests}" rev-parse FETCH_HEAD)" == "${quattro_revision}" ]]
-upstream_acceptance_enabled=0
-if git -C "${upstream_tests}" ls-tree -r --name-only FETCH_HEAD test/acceptance \
-    | grep -q .; then
-  git -C "${upstream_tests}" archive FETCH_HEAD test/acceptance test/acceptance.d \
-      | tar -x -C "${upstream_tests}"
-  upstream_acceptance_enabled=1
-fi
+# Both the pinned upstream suite and its bounded bootc adaptation are mandatory.
+git -C "${upstream_tests}" archive FETCH_HEAD test/acceptance test/acceptance.d \
+    | tar -x -C "${upstream_tests}"
+python3 scripts/ci/adapt-upstream-acceptance.py \
+    --upstream-root "${upstream_tests}" --revision "${quattro_revision}" \
+    --artifacts "${artifact_dir}"
 printf '%s\n' "${quattro_revision}" >"${artifact_dir}/upstream-acceptance-revision.txt"
 
 vm_env=(
   "CI_ARTIFACT_DIR=${artifact_dir}"
+  "VM_PODMAN_ROOTFUL=1"
   "NATIVE_ACCEPTANCE_SCRIPT=${PWD}/scripts/ci/guest-native-acceptance.sh"
+  "UPSTREAM_ACCEPTANCE_DIR=${upstream_tests}"
 )
-if ((upstream_acceptance_enabled)); then
-  vm_env+=("UPSTREAM_ACCEPTANCE_DIR=${upstream_tests}")
-fi
-sudo -n env "${vm_env[@]}" \
-    timeout --signal=TERM --kill-after=30s 45m \
+env "${vm_env[@]}" \
+    timeout --signal=TERM --kill-after=30s 90m \
     bash scripts/ci/vm-smoke.sh "${overlay}" \
     2>&1 | tee "${artifact_dir}/vm-smoke.log"
 
-# This success receipt is emitted only after the exact image passed the VM and
-# pinned upstream/native acceptance suites. Its accepted subject remains the
-# final candidate image; the disposable acceptance overlay has its own ID.
+# Success proves every retained upstream/native gate plus the two explicitly
+# adapted bootc filesystem/kernel invariants. The adaptation receipt is part
+# of this evidence; the disposable overlay is not the publishable image.
 jq -n \
     --arg source_sha "${head}" \
     --arg image_archive "${archive_name}" \
@@ -75,12 +80,15 @@ jq -n \
     --arg candidate_local_image_id "${parent}" \
     --arg acceptance_overlay_image_id "${overlay_id}" \
     --arg upstream_acceptance_revision "${quattro_revision}" \
+    --slurpfile adaptation "${artifact_dir}/upstream-acceptance-adaptation.json" \
     '{schema:"omarchy-bootc.accepted-candidate/v1",
       source_sha:$source_sha,
       candidate:{archive:$image_archive, archive_sha256:$archive_sha256,
         oci_manifest_digest:$candidate_oci_manifest_digest,
         local_image_id:$candidate_local_image_id},
       acceptance:{status:"passed", upstream_revision:$upstream_acceptance_revision,
+        upstream_suite:"passed-with-bootc-filesystem-kernel-adapter",
+        upstream_adaptation:$adaptation[0],
         overlay_image_id:$acceptance_overlay_image_id,
         overlay_scope:"disposable-test-fixture-only"},
       publishable:false}' \

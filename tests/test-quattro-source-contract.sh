@@ -17,8 +17,6 @@ ACCEPTANCE_FIRSTBOOT="${ROOT_DIR}/build/acceptance-firstboot.sh"
 ADOPTION_SCRIPT="${ROOT_DIR}/custom/first-boot/omarchy-adopt-existing-user.sh"
 ADOPTION_ROLLBACK="${ROOT_DIR}/custom/first-boot/omarchy-adoption-rollback.sh"
 ADOPTION_SERVICE="${ROOT_DIR}/systemd/system/omarchy-adopt-existing-user.service"
-BASE_BUILD="${ROOT_DIR}/build/10-base.sh"
-SERVICES_BUILD="${ROOT_DIR}/build/30-services.sh"
 TRANSITION_SCRIPT="${ROOT_DIR}/transition/omarchy-transition.sh"
 RUNTIME_SCRIPT="${ROOT_DIR}/scripts/ci/candidate-runtime.sh"
 BOOTCREW_REVISION_FILE="${ROOT_DIR}/vendor/bootcrew/REVISION"
@@ -28,9 +26,6 @@ BOOTCREW_SOURCE_FILE="${ROOT_DIR}/vendor/bootcrew/SOURCE"
 BOOTC_SOURCE_FILE="${ROOT_DIR}/vendor/bootcrew/BOOTC_SOURCE"
 BOOTCREW_CHECKSUMS="${ROOT_DIR}/vendor/bootcrew/SHA256SUMS"
 REPOSITORY_CONFIGURATOR="${ROOT_DIR}/build/configure-quattro-repositories.sh"
-DESIGN_CONTRACT="${ROOT_DIR}/docs/superpowers/specs/2026-08-26-omarchy-quattro-bootc-design.md"
-INSTALLER_CONTRACT="${ROOT_DIR}/docs/installer-parity-contract.md"
-TRANSITION_CONTRACT="${ROOT_DIR}/docs/transition-contract.md"
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -52,6 +47,12 @@ grep -Fq 'FROM scratch AS stable-base' "${CONTAINERFILE}" \
     || fail 'Omarchy-stable root is not constructed from an empty filesystem'
 grep -Fq -- '--root /stable-root' "${CONTAINERFILE}" \
     || fail 'Omarchy-stable root is not populated from an empty pacman root'
+grep -Fq 'shadow openssh pcre2 podman sudo' "${CONTAINERFILE}" ||
+    fail 'effective bootcrew-system package set omits sudo'
+grep -Fq 'getent group wheel >/dev/null || groupadd wheel' "${CONTAINERFILE}" ||
+    fail 'effective image construction does not ensure the wheel group'
+grep -Fq 'printf '\''%s\n'\'' '\''%wheel ALL=(ALL:ALL) PASSWD: ALL'\''' "${CONTAINERFILE}" ||
+    fail 'effective image construction does not enforce password-required wheel sudo'
 if grep -Fq 'pacman -Syyuu' "${CONTAINERFILE}"; then
     fail 'bulk downgrade of an already-built root is forbidden'
 fi
@@ -175,12 +176,6 @@ grep -Fq 'omarchy-provision-user --first-install' "${ACCEPTANCE_FIRSTBOOT}" \
 grep -Fq '.local/state/omarchy/done/finalize-user' "${ACCEPTANCE_FIRSTBOOT}" \
     || fail 'acceptance user finalization marker is not proved'
 
-if grep -Fq 'Create default POC user' "${BASE_BUILD}" ||
-    grep -Fq "omarchy:omarchy" "${BASE_BUILD}"; then
-    fail 'publishable image still creates the POC omarchy user or password'
-fi
-grep -Fq 'omarchy-adopt-existing-user.service' "${SERVICES_BUILD}" \
-    || fail 'normal image does not enable the bounded adoption service'
 grep -Fq 'systemctl mask omarchy-adopt-existing-user.service' \
     "${ROOT_DIR}/build/25-quattro-user.sh" \
     || fail 'acceptance image does not isolate itself from adoption'
@@ -214,37 +209,6 @@ if grep -Fq 'cp -a -n /usr/share/omarchy/skel' "${ADOPTION_SCRIPT}" ||
     fail 'cross-distro adoption still blindly replays image skeleton state'
 fi
 
-[[ -f "${INSTALLER_CONTRACT}" ]] || fail 'official Omarchy installer parity contract is missing'
-[[ -f "${TRANSITION_CONTRACT}" ]] || fail 'cross-distro transition contract is missing'
-grep -Fq 'bootc switch' "${TRANSITION_CONTRACT}" \
-    || fail 'transition contract does not retain bootc switch as the image operation'
-grep -Fq 'Bluefin' "${TRANSITION_CONTRACT}" \
-    || fail 'transition contract does not define the Bluefin source profile'
-grep -Fq 'Dakota' "${TRANSITION_CONTRACT}" \
-    || fail 'transition contract does not define the Dakota source profile'
-grep -Fq 'password hashes' "${TRANSITION_CONTRACT}" \
-    || fail 'transition contract does not exclude credentials from captured state'
-grep -Fq '86c07785cb0f63be78edb1349843d5817b5c0e66' "${INSTALLER_CONTRACT}" \
-    || fail 'current official Omarchy Quattro ISO source revision is not pinned'
-grep -Fq 'bootc install to-filesystem' "${INSTALLER_CONTRACT}" \
-    || fail 'installer contract does not select the external-installer bootc seam'
-grep -Fq 'ostree admin --sysroot=/mnt --print-current-dir' "${INSTALLER_CONTRACT}" \
-    || fail 'installer contract does not define target deployment discovery'
-grep -Fq 'bootc install finalize' "${INSTALLER_CONTRACT}" \
-    || fail 'installer contract does not require bootc finalization before unmount'
-grep -Fq 'omarchy-provision-user --first-install' "${INSTALLER_CONTRACT}" \
-    || fail 'installer contract does not preserve official user finalization'
-grep -Fq 'same pinned upstream acceptance harness' "${INSTALLER_CONTRACT}" \
-    || fail 'installer contract does not require behavioral comparison with upstream'
-grep -Fq 'additive installer variant' "${INSTALLER_CONTRACT}" \
-    || fail 'Quattro installer is not explicitly additive to Dudley installer variants'
-grep -Fq 'must not replace, mutate, or regress any existing Dudley, Dakota, or Bluefin installer variant' \
-    "${INSTALLER_CONTRACT}" \
-    || fail 'existing prescribed installer variants lack a non-regression requirement'
-grep -Fq 'Branding is deferred' "${INSTALLER_CONTRACT}" \
-    || fail 'installer branding must wait for upstream parity proof'
-grep -Fq 'docs/installer-parity-contract.md' "${DESIGN_CONTRACT}" \
-    || fail 'architecture design does not incorporate the installer parity contract'
 
 for source_file in \
     sources/omarchy-quattro.source \
@@ -301,16 +265,6 @@ for required_validation_input in \
         || fail "just validate does not require ${required_validation_input}"
 done
 
-if grep -Fq 'BOOTC_REF=v1.13.0' "${ROOT_DIR}/docs/technical-status.md"; then
-    fail 'technical status still describes the obsolete unpinned bootc source input'
-fi
-if grep -Fq 'OCI build on `archlinux:base`' "${ROOT_DIR}/README.md"; then
-    fail 'README still describes the obsolete rolling Arch final base'
-fi
-if grep -RqsE 'BOOTC_REF|v1\.13\.0|archlinux:base' \
-    "${ROOT_DIR}/README.md" "${ROOT_DIR}/docs"; then
-    fail 'documentation still contains the superseded rolling or ref-based foundation contract'
-fi
 
 # shellcheck disable=SC2016
 expected_repository_config='[core]

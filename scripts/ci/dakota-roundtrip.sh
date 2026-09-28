@@ -7,6 +7,8 @@ set -euo pipefail
 # repository metadata is never used as a substitute for that evidence.
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=scripts/ci/lib/dakota-receipt.sh
+source "${ROOT_DIR}/scripts/ci/lib/dakota-receipt.sh"
 ARTIFACT_DIR="${CI_ARTIFACT_DIR:-${RUNNER_TEMP:-/tmp}/omarchy-bootc-dakota-roundtrip}"
 WORK_ROOT="${ROOT_DIR}/output/gate4-dakota"
 DISK_SIZE="${DISK_SIZE:-32G}"
@@ -63,11 +65,12 @@ valid_digest() {
 }
 
 valid_immutable_ref() {
-    [[ "$1" =~ ^[^/@[:space:]]+/.+@sha256:[[:xdigit:]]{64}$ ]]
+    [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*@sha256:[[:xdigit:]]{64}$ ]]
 }
 
 valid_tracking_ref() {
-    [[ "$1" =~ ^[^/@[:space:]]+/.+:[^/@[:space:]]+$ && "$1" != *@sha256:* ]]
+    [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*:[A-Za-z0-9][A-Za-z0-9._-]*$ &&
+       "$1" != *@sha256:* ]]
 }
 
 if [[ -z "${QUATTRO_IMAGE_REF}" ]]; then
@@ -77,6 +80,9 @@ valid_immutable_ref "${DAKOTA_IMAGE_REF}" || die "Dakota input is not immutable:
 valid_immutable_ref "${QUATTRO_IMAGE_REF}" || die "Quattro input is not immutable: ${QUATTRO_IMAGE_REF}"
 valid_tracking_ref "${DAKOTA_TRACKING_REF}" || die "Dakota tracking ref is not mutable: ${DAKOTA_TRACKING_REF}"
 valid_tracking_ref "${QUATTRO_TRACKING_REF}" || die "Quattro tracking ref is not mutable: ${QUATTRO_TRACKING_REF}"
+DAKOTA_EXPECTED_REF="ghcr.io/projectbluefin/dakota@${DAKOTA_EXPECTED_DIGEST}"
+[[ "${DAKOTA_IMAGE_REF}" == "${DAKOTA_EXPECTED_REF}" ]] ||
+    die 'Dakota image ref does not match the repository-owned current release'
 [[ "${DAKOTA_IMAGE_REF##*@}" == "${DAKOTA_EXPECTED_DIGEST}" ]] ||
     die 'Dakota image ref does not match the repository-owned current release digest'
 QUATTRO_EXPECTED_DIGEST="${QUATTRO_IMAGE_REF##*@}"
@@ -86,6 +92,7 @@ valid_digest "${QUATTRO_EXPECTED_DIGEST}" || die 'Quattro ref has no valid immut
 
 mkdir -p "${ARTIFACT_DIR}" "${WORK_ROOT}"
 rm -rf "${DAKOTA_OVERLAY_OCI}" "${OVERLAY_CONTEXT}" "${RAW_PATH}" "${QCOW_PATH}"
+mkdir -p "${OVERLAY_CONTEXT}"
 
 if [[ "$(id -u)" == 0 ]]; then
     PODMAN=(podman)
@@ -193,7 +200,7 @@ reboot_guest() {
 
 record_backend() {
     local status_file="$1" label="$2" backend
-    backend="$(jq -er '.status.booted.image.store // empty' "${status_file}")" ||
+    backend="$(jq -er -f "${ROOT_DIR}/scripts/ci/bootc-backend.jq" "${status_file}")" ||
         fail "${label} bootc status did not expose a booted image backend"
     printf '%s\n' "${backend}" >"${ARTIFACT_DIR}/${label}-backend.txt"
     printf '%s\n' "${backend}"
@@ -255,6 +262,7 @@ if ! id omarchy >/dev/null 2>&1; then
     useradd --uid 1000 --create-home --home-dir /var/home/omarchy \
         --groups wheel --shell /bin/bash omarchy
 fi
+usermod --append --groups wheel omarchy
 printf 'omarchy:omarchy\n' | chpasswd
 install -d -m 0755 -o omarchy -g omarchy /var/home/omarchy
 printf 'dakota-source-marker\n' > /var/home/omarchy/.gate4-dakota-marker
@@ -299,8 +307,9 @@ podman_cmd run --rm --privileged --pid=host --pull=never \
     bootc install to-disk \
         --source-imgref oci:/data/gate4/dakota-overlay-oci \
         --target-imgref "${DAKOTA_IMAGE_REF}" \
-        --composefs-backend --via-loopback /data/gate4/dakota-roundtrip.raw \
+        --composefs-backend --via-loopback \
         --filesystem btrfs --wipe --bootloader systemd \
+        /data/gate4/dakota-roundtrip.raw \
     2>&1 | tee "${ARTIFACT_DIR}/dakota-install-to-disk.log"
 qemu-img convert -O qcow2 "${RAW_PATH}" "${QCOW_PATH}"
 
@@ -328,10 +337,11 @@ run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/dakota-source-s
 record_backend "${ARTIFACT_DIR}/dakota-source-status.json" dakota-source
 source_configured_ref="$(jq -er '.spec.image.image // empty' "${ARTIFACT_DIR}/dakota-source-status.json")" ||
     fail 'Dakota source status has no configured image reference'
-[[ "${source_configured_ref}" == *"@${DAKOTA_EXPECTED_DIGEST}"* ]] ||
-    fail "Dakota source status configured ref is not the frozen Dakota digest: ${source_configured_ref}"
+[[ "${source_configured_ref}" == "${DAKOTA_IMAGE_REF}" ]] ||
+    fail "Dakota source status configured ref is not the frozen Dakota image: ${source_configured_ref}"
 jq -er '.status.booted.image.imageDigest // empty' "${ARTIFACT_DIR}/dakota-source-status.json" \
     >"${ARTIFACT_DIR}/dakota-overlay-booted-digest.txt" || fail 'Dakota source status has no booted digest'
+assert_status_digest "${ARTIFACT_DIR}/dakota-source-status.json" "${DAKOTA_EXPECTED_DIGEST}" dakota-source
 run_guest 'id -u omarchy && id -g omarchy && test -f /var/home/omarchy/.gate4-dakota-marker' \
     >"${ARTIFACT_DIR}/dakota-source-account.txt" || fail 'Dakota disposable account did not initialize'
 run_guest 'sudo -n true && getent hosts github.com' \
@@ -434,26 +444,10 @@ run_guest 'sudo -n true && getent hosts github.com' \
 source_backend="$(<"${ARTIFACT_DIR}/dakota-source-backend.txt")"
 quattro_backend="$(<"${ARTIFACT_DIR}/quattro-booted-backend.txt")"
 reverse_backend="$(<"${ARTIFACT_DIR}/dakota-reverse-backend.txt")"
-jq -n \
-    --arg dakota_ref "${DAKOTA_IMAGE_REF}" \
-    --arg dakota_tracking_ref "${DAKOTA_TRACKING_REF}" \
-    --arg dakota_digest "${DAKOTA_EXPECTED_DIGEST}" \
-    --arg dakota_overlay_digest "${overlay_digest}" \
-    --arg quattro_ref "${QUATTRO_IMAGE_REF}" \
-    --arg quattro_tracking_ref "${QUATTRO_TRACKING_REF}" \
-    --arg quattro_digest "${QUATTRO_EXPECTED_DIGEST}" \
-    --arg source_sha "${QUATTRO_SOURCE_SHA}" \
-    --arg source_backend "${source_backend}" \
-    --arg quattro_backend "${quattro_backend}" \
-    --arg reverse_backend "${reverse_backend}" \
-    '{schema:"omarchy-bootc.gate4-dakota-roundtrip/v1",gate:4,result:"passed",
-      runtime_proven:true,hardware_scope:"x86_64 UEFI QEMU; no physical hardware claim",
-      source:{immutable_ref:$dakota_ref,tracking_ref:$dakota_tracking_ref,digest:$dakota_digest,
-        acceptance_overlay_digest:$dakota_overlay_digest,booted_backend:$source_backend},
-      forward:{accepted_ref:$quattro_ref,tracking_ref:$quattro_tracking_ref,digest:$quattro_digest,
-        booted_backend:$quattro_backend,adoption:"complete"},
-      reverse:{tracking_ref:$dakota_tracking_ref,digest:$dakota_digest,booted_backend:$reverse_backend,
-        user_home_preserved:true},
-      source_sha:$source_sha,adoption_recovery_contract:"passed"}' \
-    >"${ARTIFACT_DIR}/gate4-dakota-roundtrip.receipt.json"
+write_gate4_receipt \
+    "${ARTIFACT_DIR}/gate4-dakota-roundtrip.receipt.json" \
+    "${DAKOTA_IMAGE_REF}" "${DAKOTA_TRACKING_REF}" "${DAKOTA_EXPECTED_DIGEST}" \
+    "${overlay_digest}" "${QUATTRO_IMAGE_REF}" "${QUATTRO_TRACKING_REF}" \
+    "${QUATTRO_EXPECTED_DIGEST}" "${QUATTRO_SOURCE_SHA}" \
+    "${source_backend}" "${quattro_backend}" "${reverse_backend}"
 printf 'GATE4_RESULT=passed\nreceipt=%s\n' "${ARTIFACT_DIR}/gate4-dakota-roundtrip.receipt.json"

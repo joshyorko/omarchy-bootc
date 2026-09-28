@@ -44,7 +44,9 @@ jobs:
           fetch-depth: 1
 
       - name: Validate Gate 4 contract
-        run: bash tests/test-dakota-roundtrip-contract.sh
+        run: |
+          bash tests/test-dakota-roundtrip-contract.sh
+          bash tests/test-bootc-backend.sh
 
       - name: Install hosted VM dependencies
         run: |

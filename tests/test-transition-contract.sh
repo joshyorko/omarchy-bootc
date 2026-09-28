@@ -56,6 +56,14 @@ grep -Fq 'status=ready' <<<"$preflight_output" || fail 'preflight did not report
 if env "${common_env[@]}" bash "$TRANSITION" preflight ghcr.io/joshyorko/omarchy-bootc@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; then
     fail 'digest-only target was accepted without a tracking ref'
 fi
+for bad_ref in \
+    'ghcr.io/example/os:tag;touch' \
+    'ghcr.io/example/os:tag$(id)' \
+    'ghcr.io/example/os:tag|touch' ; do
+    if env "${common_env[@]}" bash "$TRANSITION" preflight "$bad_ref"; then
+        fail "shell-metacharacter tracking ref was accepted: $bad_ref"
+    fi
+done
 
 sed -i -e 's/^ID=.*/ID=unknown/' -e 's/^NAME=.*/NAME="Unknown"/' "$fixture_dir/usr/lib/os-release"
 if env "${common_env[@]}" bash "$TRANSITION" preflight ghcr.io/joshyorko/omarchy-bootc:testing; then

@@ -1,6 +1,6 @@
 # Technical status: Omarchy Quattro bootc
 
-_Last updated: 2026-09-20_
+_Last updated: 2026-09-28_
 
 ## Architecture of record
 
@@ -11,7 +11,7 @@ The final image is an Omarchy-stable empty-root build. A digest-pinned current A
 - Local build and qcow2/run flows are defined in `Justfile`; legacy bootc-image-builder fallbacks remain available.
 - Installer ISO generation is Dagger-owned and remains an explicit/manual path.
 - Rootful/rootless image handoff is explicit for the native disk-image and VM smoke paths.
-- A concrete VM login path is configured with `greetd` + `agreety` launching Hyprland.
+- The official SDDM session starts the packaged Quattro Hyprland/Quickshell desktop.
 
 Bootcrew's published Arch image is not the final base and is not package authority. Bootcrew mono commit `5f048fa65a94daefc814d3cdd941d8d1e113c09e` is the source reference for pacman relocation, dracut, composefs, `/usr`/`/var`, tmpfiles, and bootc filesystem construction. Bootc is built from exact commit `fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60`; an unpinned clone is forbidden.
 
@@ -30,17 +30,22 @@ The frozen Omarchy package set is stable `4.0.4-1`, paired with upstream Omarchy
 - One named `/usr/local` bootc projection exception for the package-owned session file, with byte-identity proof.
 - Five observed Limine/mkinitcpio hooks shadowed and three observed snapshot units masked; `kernel-modules-hook` remains enabled and audited.
 - Final dracut verification requires the bootc v1.16.13 `ostree` and `bootc` modules and both root-setup payloads; the correction is layered above the unmodified Bootcrew snapshot.
-- Separate publishable and acceptance targets. The publishable image has no baked test account or passwordless sudo rule.
+- Separate publishable and acceptance targets. The publishable image has no baked test account or unrestricted passwordless sudo rule; upstream command-scoped policies remain intact.
 - Acceptance first boot invokes official `omarchy-provision-user --first-install`; local provisioning reimplementations remain forbidden.
 - Cross-distro switching now uses structured strongest-to-weakest source evidence, persists the tracking ref and resolved digest, re-resolves immediately before `bootc switch`, and provides exact post-boot verification; the target adoption service retains independent mutable-state rollback.
 - `omarchy update` and the update indicator now use the bootc-native `upgrade --check`/`upgrade` bridge; migrations are deferred to the first login after exact-digest verification.
+- The upstream graphical PATH keeps `/usr/share/omarchy/bin` first; its three
+  public update entry points (`omarchy`, `omarchy-update`, and
+  `omarchy-update-available`) project to immutable bootc wrappers, while
+  package-owned `/usr/bin` payloads remain intact.
+- Privileged update state uses fixed image-owned `/run` and `/var/lib` paths; Gate 5 tracing is accepted only through a root-owned mode-0755 hook, so caller-controlled environment paths cannot redirect bootc or transaction writes.
 - A scheduled/manual upstream Quattro tracker records drift as one advisory issue without repinning or publishing.
 
 ## Required publication evidence
 
 - bootc lifecycle checks (upgrade/rebase/rollback) on this Arch-based image.
-- End-to-end confirmation of the rootful-image handoff fix in GitHub Actions when `run_vm_smoke` is manually enabled.
-- Reliability of `bootc install --composefs-backend --via-loopback` across host/container runtimes; qcow2 conversion relies on host `qemu-img`.
+- Exact candidate and disposable overlay dependency checks execute before installation; native desktop, real registry A→B updater, finalization, and rollback remain hosted VM gates.
+- Reliability of `bootc install to-disk --composefs-backend --via-loopback` across host/container runtimes; qcow2 conversion relies on host `qemu-img`.
 - End-to-end VM reliability across host environments.
 - End-to-end validation of the existing ISO installer flow, especially the Bluefin live rootfs -> omarchy target handoff.
 - Dagger Go SDK regeneration and full `just build-iso-local` execution on a host with Docker/Dagger engine access.

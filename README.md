@@ -74,9 +74,11 @@ just run-vm
 
 ## Publishable and acceptance images
 
-The publishable `final` target contains no default user, known password, or passwordless sudo rule. Test credentials exist only in the non-publishable `acceptance` target. On the installed VM, its first-boot fixture creates the user after official `/etc/skel` exists and invokes package-owned `omarchy-provision-user --first-install`.
+The publishable `final` target contains no default user, known password, or unrestricted passwordless sudo rule. It installs `sudo` for normal-user image updates, with password-required wheel access; upstream command-scoped sudo policies remain package-owned. Test credentials exist only in the non-publishable acceptance fixture. On the installed VM, its first-boot service creates the user after official `/etc/skel` exists and invokes package-owned `omarchy-provision-user --first-install`.
 
 No release claim is made until the OCI passes fatal `bootc container lint`, installs to disk, reaches official SDDM and the official Quattro Hyprland/Quickshell session, passes desktop behavior checks, and completes a two-image bootc upgrade and rollback cycle.
+
+Before disk installation, the actual final image and disposable overlay execute `build/acceptance-dependencies.sh`. Its guest phase checks provisioned-only state separately. The runtime harness runs as the runner, escalating only container/image operations; receipt cleanup preserves the primary failure and makes the bounded artifact tree uploadable.
 
 ## Cross-distro bootc switch
 
@@ -99,4 +101,9 @@ Existing Dudley, Dakota, and Bluefin installer variants remain independent and k
 That adapter preserves the official configurator, storage/encryption UX, dashboard, provisioning, SDDM setup, and upstream acceptance harness. It replaces only pacstrap/Limine/mutable-root deployment with `bootc install to-filesystem` and bootc finalization. See [the installer parity contract](docs/installer-parity-contract.md).
 ## Update boundary
 
-`omarchy update` and `omarchy-update-available` use `bootc upgrade --check` and `bootc upgrade` against `ghcr.io/joshyorko/omarchy-bootc:testing`; they never run live `pacman -Syu`. The update is staged, then the rebooted deployment verifies its exact digest before running `omarchy-migrate` and the post-update hook. No `:stable` stream is published by this repository.
+`omarchy update` and `omarchy-update-available` use `bootc upgrade --check` and `bootc upgrade` against the configured image stream; production uses `ghcr.io/joshyorko/omarchy-bootc:testing`. They never run live `pacman -Syu`. Because pinned composefs bootc does not populate `cachedUpdate`, candidate identity is resolved from the real tracking image with Skopeo, then checked against the staged digest. The rebooted deployment verifies that exact digest before running `omarchy-migrate` and the post-update hook. The VM gate uses a disposable registry stream to require the real updater to discover and stage B, boot it, and roll back to A. No `:stable` stream is published by this repository.
+
+The graphical Omarchy session keeps its upstream `/usr/share/omarchy/bin`
+precedence; the image projects `omarchy`, `omarchy-update`, and
+`omarchy-update-available` through bootc wrappers at that dispatch boundary,
+leaving the package-owned `/usr/bin` implementations unchanged.

@@ -18,7 +18,7 @@ require_elf() {
     fi
 }
 
-for command in bootc chcon ostree podman skopeo zstd setpriv systemctl pacman dracut systemd-sysusers mkcomposefs; do
+for command in bootc chcon ostree podman skopeo zstd setpriv systemctl pacman dracut systemd-sysusers mkcomposefs sudo visudo; do
     require_command "$command"
 done
 
@@ -35,6 +35,9 @@ for path in \
     /usr/lib/bootc/initramfs-setup; do
     require_elf "$path"
 done
+
+visudo -cf /etc/sudoers.d/10-omarchy-wheel
+visudo -c
 
 bootc_version="$(bootc --version 2>&1)"
 grep -Eq '(^|[[:space:]])1\.16\.13([[:space:]]|$)' <<<"${bootc_version}" \

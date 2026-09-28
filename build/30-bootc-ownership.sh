@@ -14,6 +14,10 @@ BOOTC_CONFLICTING_UNITS=(
 export OMARCHY_PATH=/usr/share/omarchy
 export OMARCHY_INSTALL=/usr/share/omarchy/install
 bash "${OMARCHY_INSTALL}/config/enable-services.sh"
+# Upstream writes UFW configuration and enables its unit without activating the
+# build host's firewall. Product policy keeps incoming SSH closed.
+grep -Fxq ENABLED=no /etc/ufw/ufw.conf
+bash "${OMARCHY_INSTALL}/config/firewall.sh"
 bash "${OMARCHY_INSTALL}/login/sddm.sh"
 
 for unit in "${BOOTC_CONFLICTING_UNITS[@]}"; do
@@ -36,11 +40,23 @@ install -D -m 0644 /dev/stdin \
 add_dracutmodules+=" ostree bootc "
 EOF
 
-latest_kver="$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -n 1)"
-dracut --force "/usr/lib/modules/${latest_kver}/initramfs.img"
-lsinitrd -m "/usr/lib/modules/${latest_kver}/initramfs.img" \
+# Select the image's declared kernel, never the build host's running kernel or
+# an unrelated modules directory introduced by an optional package.
+kernel_package="$(cat /usr/share/omarchy-bootc/kernel-package)"
+kernel_dirs=()
+for module_dir in /usr/lib/modules/*; do
+    [[ -f "${module_dir}/pkgbase" ]] || continue
+    if [[ "$(cat "${module_dir}/pkgbase")" == "${kernel_package}" ]]; then
+        kernel_dirs+=("${module_dir}")
+    fi
+done
+[[ ${#kernel_dirs[@]} -eq 1 ]]
+kernel_release="${kernel_dirs[0]##*/}"
+[[ -s "${kernel_dirs[0]}/vmlinuz" ]]
+dracut --force --kver "${kernel_release}" "${kernel_dirs[0]}/initramfs.img"
+lsinitrd -m "/usr/lib/modules/${kernel_release}/initramfs.img" \
     > /usr/share/omarchy-bootc/initramfs-modules.txt
-lsinitrd "/usr/lib/modules/${latest_kver}/initramfs.img" \
+lsinitrd "/usr/lib/modules/${kernel_release}/initramfs.img" \
     > /usr/share/omarchy-bootc/initramfs-contents.txt
 verify_bootc_initramfs_reports \
     /usr/share/omarchy-bootc/initramfs-modules.txt \

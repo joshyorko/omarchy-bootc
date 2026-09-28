@@ -1,0 +1,13 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+# The only passwordless bootc operation exposed to desktop wheel users.
+# Reject arguments and discard caller-controlled command/library/auth paths.
+(( EUID == 0 && $# == 0 )) || {
+    echo 'The image availability check requires root and accepts no arguments' >&2
+    exit 2
+}
+exec /usr/bin/env -i \
+    PATH=/usr/bin:/usr/local/bin HOME=/root USER=root LOGNAME=root \
+    /usr/bin/bash --noprofile --norc \
+    /usr/lib/omarchy-bootc/omarchy-bootc-update-available

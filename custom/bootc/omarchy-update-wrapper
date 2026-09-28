@@ -1,3 +1,9 @@
 #!/usr/bin/env bash
+
+# omarchy:summary=Stage the next bootc image and reboot to apply it.
+# omarchy:args=[-y]
+# omarchy:examples=omarchy update | omarchy update -y
+# omarchy:requires-sudo=true
+
 set -euo pipefail
 exec /usr/lib/omarchy-bootc/omarchy-bootc-update "$@"

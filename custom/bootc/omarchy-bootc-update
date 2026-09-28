@@ -5,8 +5,18 @@ set -euo pipefail
 # entry point. It stages an image only; migrations are intentionally deferred
 # The concrete commands are `bootc upgrade --check` and `bootc upgrade`.
 # until the first login on the deployment that booted the staged digest.
-# shellcheck disable=SC1090
-source "${OMARCHY_BOOTC_COMMON_LIB:-/usr/lib/omarchy-bootc/update-common.sh}"
+source /usr/lib/omarchy-bootc/update-common.sh
+export OMARCHY_BOOTC_BIN=/usr/bin/bootc
+export OMARCHY_BOOTC_STATUS_FILE=
+export OMARCHY_BOOTC_STATE_ROOT=/var/lib/omarchy-bootc/updates
+export OMARCHY_BOOTC_UPDATE_LOCK_FILE=/run/lock/omarchy-update.lock
+export OMARCHY_BOOTC_TRANSACTION_MARKER=/var/lib/omarchy-bootc/updates/pending-update
+if [[ -x /run/omarchy-bootc-update-trace/bootc ]] &&
+   [[ "$(/usr/bin/stat -c '%u:%a' /run/omarchy-bootc-update-trace)" == 0:755 ]] &&
+   [[ "$(/usr/bin/stat -c '%u:%a' /run/omarchy-bootc-update-trace/bootc)" == 0:755 ]]; then
+    # The VM harness may provide this root-owned, mode-0755 trace shim.
+    OMARCHY_BOOTC_BIN=/run/omarchy-bootc-update-trace/bootc
+fi
 
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then
     cat <<'EOF'
@@ -28,8 +38,37 @@ done
 # One root-owned lock covers every login. /tmp and per-user runtime dirs are
 # deliberately excluded: they allow concurrent staging or require chmods.
 lock_file="${OMARCHY_BOOTC_UPDATE_LOCK_FILE:-/run/lock/omarchy-update.lock}"
-run_as_root install -d -m 0755 "$(dirname "$lock_file")"
-run_as_root sh -c 'umask 000; : >> "$1"' sh "$lock_file"
+lock_group=wheel
+if ! getent group "$lock_group" >/dev/null; then
+    lock_user="${SUDO_USER:-$(id -un)}"
+    lock_group="$(id -gn "$lock_user")"
+fi
+lock_dir="$(dirname "$lock_file")"
+[[ ! -L "$lock_dir" ]] || {
+    echo 'Refusing a symlinked Omarchy update lock directory.' >&2
+    exit 1
+}
+run_as_root install -d -m 0755 "$lock_dir"
+[[ ! -L "$lock_file" ]] || {
+    echo 'Refusing a symlinked Omarchy update lock.' >&2
+    exit 1
+}
+if [[ -e "$lock_file" && ! -f "$lock_file" ]]; then
+    echo 'Refusing a non-regular Omarchy update lock.' >&2
+    exit 1
+fi
+if ! run_as_root sh -c 'umask 007; set -C; : > "$1"' sh "$lock_file"; then
+    [[ -e "$lock_file" ]] || {
+        echo 'Could not create the Omarchy update lock.' >&2
+        exit 1
+    }
+fi
+[[ ! -L "$lock_file" ]] || {
+    echo 'Refusing a symlinked Omarchy update lock.' >&2
+    exit 1
+}
+run_as_root chown "root:${lock_group}" "$lock_file"
+run_as_root chmod 0660 "$lock_file"
 exec 9>>"$lock_file"
 flock -n 9 || {
     echo 'Another Omarchy update is already running.' >&2
@@ -51,10 +90,6 @@ staged="$(status_staged_digest)" || {
     echo 'bootc status is malformed or uses an unsupported schema' >&2
     exit 1
 }
-candidate="$(status_cached_digest)" || {
-    echo 'bootc status is malformed or uses an unsupported schema' >&2
-    exit 1
-}
 tracking_ref="$(status_tracking_ref)" || {
     echo 'bootc status is missing a valid configured image ref' >&2
     exit 1
@@ -63,18 +98,26 @@ already_staged=0
 if [[ -n "$staged" && "$staged" != "$booted" ]]; then
     expected="$staged"
     already_staged=1
-elif [[ -n "$candidate" && "$candidate" != "$booted" ]]; then
-    expected="$candidate"
 else
-    echo 'bootc check succeeded but status has no candidate update digest' >&2
-    exit 1
+    expected="$(status_candidate_digest)" || {
+        echo 'Cannot resolve the configured bootc update candidate; no update was staged.' >&2
+        exit 1
+    }
+    if [[ "$expected" == "$booted" ]]; then
+        echo 'Omarchy image is up to date'
+        exit 0
+    fi
 fi
 [[ "$expected" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
     echo 'bootc update candidate does not have an exact digest' >&2
     exit 1
 }
 
-marker_user="${SUDO_USER:-$(id -un)}"
+if (( EUID == 0 )) && [[ -n "${SUDO_USER:-}" ]]; then
+    marker_user="$SUDO_USER"
+else
+    marker_user="$(id -un)"
+fi
 marker_record="$(getent passwd "$marker_user")" || {
     echo 'cannot determine the initiating user for the update marker' >&2
     exit 1
@@ -82,21 +125,86 @@ marker_record="$(getent passwd "$marker_user")" || {
 marker_uid="$(cut -d: -f3 <<<"$marker_record")"
 marker_gid="$(cut -d: -f4 <<<"$marker_record")"
 user_home="$(cut -d: -f6 <<<"$marker_record")"
-state_home="${XDG_STATE_HOME:-${user_home}/.local/state}"
-if [[ -n "${SUDO_USER:-}" ]]; then state_home="${user_home}/.local/state"; fi
+user_local="${user_home}/.local"
+state_home="${user_home}/.local/state"
 pending_dir="${state_home}/omarchy-bootc"
-run_as_root install -d -m 0700 -o "$marker_uid" -g "$marker_gid" "$pending_dir"
-[[ ! -L "$pending_dir" ]] || { echo 'refusing a symlinked update marker directory' >&2; exit 1; }
-root_marker="${OMARCHY_BOOTC_TRANSACTION_MARKER:-${OMARCHY_BOOTC_STATE_ROOT}/pending-update}"
-run_as_root install -d -m 0755 "$(dirname "$root_marker")"
-marker_tmp="$(mktemp)"
-trap 'rm -f -- "$marker_tmp"' EXIT
-printf 'status=intent\nuser=%s\nuid=%s\ngid=%s\nhome=%s\nstate_home=%s\ntracking_ref=%s\nexpected_digest=%s\n' \
-    "$marker_user" "$marker_uid" "$marker_gid" "$user_home" "$state_home" "$tracking_ref" "$expected" >"$marker_tmp"
-run_as_root install -m 0600 -o "$marker_uid" -g "$marker_gid" "$marker_tmp" "${pending_dir}/pending-update"
-if ! run_as_root install -m 0600 "$marker_tmp" "$root_marker"; then
-    run_as_root rm -f -- "${pending_dir}/pending-update" || true
+run_as_marker_user() {
+    if (( EUID == marker_uid )); then
+        "$@"
+    else
+        run_as_root runuser -u "$marker_user" -- "$@"
+    fi
+}
+[[ ! -L "$user_local" && ! -L "$state_home" ]] || {
+    echo 'refusing a symlinked user state directory' >&2
+    exit 1
+}
+[[ ! -L "$pending_dir" ]] || {
+    echo 'refusing a symlinked update marker directory' >&2
+    exit 1
+}
+run_as_marker_user install -d -m 0700 "$pending_dir"
+pending_marker="${pending_dir}/pending-update"
+[[ ! -L "$pending_marker" ]] || {
+    echo 'refusing a symlinked update marker' >&2
+    exit 1
+}
+if [[ -e "$pending_marker" && ! -f "$pending_marker" ]]; then
+    echo 'refusing a non-regular update marker' >&2
+    exit 1
+fi
+root_marker="$OMARCHY_BOOTC_TRANSACTION_MARKER"
+root_marker_dir="$(dirname "$root_marker")"
+[[ ! -L "$root_marker_dir" ]] || {
+    echo 'refusing a symlinked root update marker directory' >&2
+    exit 1
+}
+[[ ! -L "$root_marker" ]] || {
+    echo 'refusing a symlinked root update marker' >&2
+    exit 1
+}
+run_as_root install -d -m 0755 "$root_marker_dir"
+[[ ! -L "$root_marker" ]] || {
+    echo 'refusing a symlinked root update marker' >&2
+    exit 1
+}
+if [[ -e "$root_marker" && ! -f "$root_marker" ]]; then
+    echo 'refusing a non-regular root update marker' >&2
+    exit 1
+fi
+marker_contents() {
+    printf 'status=intent\nuser=%s\nuid=%s\ngid=%s\nhome=%s\nstate_home=%s\ntracking_ref=%s\nexpected_digest=%s\n' \
+        "$marker_user" "$marker_uid" "$marker_gid" "$user_home" "$state_home" "$tracking_ref" "$expected"
+}
+cleanup_markers() {
+    run_as_marker_user rm -f -- "$pending_marker" || run_as_root rm -f -- "$pending_marker" || true
+    run_as_root rm -f -- "$root_marker" || true
+}
+if ! marker_contents | run_as_marker_user tee "$pending_marker" >/dev/null; then
+    cleanup_markers
+    echo 'Could not persist the user update transaction marker; no image was staged.' >&2
+    exit 1
+fi
+if ! run_as_marker_user chmod 0600 "$pending_marker"; then
+    cleanup_markers
+    echo 'Could not secure the user update transaction marker; no image was staged.' >&2
+    exit 1
+fi
+if [[ "$(run_as_root stat -c '%u:%a' "$pending_marker")" != "${marker_uid}:600" ]]; then
+    cleanup_markers
+    echo 'User update transaction marker has the wrong owner or mode; no image was staged.' >&2
+    exit 1
+fi
+if ! marker_contents | run_as_root tee "$root_marker" >/dev/null; then
+    cleanup_markers
     echo 'Could not persist the root update transaction marker; no image was staged.' >&2
+    exit 1
+fi
+if ! run_as_root chown root:root "$root_marker" ||
+   ! run_as_root chmod 0600 "$root_marker" ||
+   [[ "$(run_as_root stat -c '%u:%a' "$root_marker")" != 0:600 ]]; then
+    cleanup_markers
+    echo 'Could not secure the root update transaction marker; no image was staged.' >&2
     exit 1
 fi
 

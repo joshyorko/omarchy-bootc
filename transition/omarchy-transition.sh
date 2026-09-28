@@ -153,8 +153,9 @@ require_source() {
 
 require_tracking_ref() {
     local ref="$1"
-    [[ "$ref" != *@sha256:* && "$ref" =~ ^[^/@[:space:]]+/.+:[^/@[:space:]]+$ ]] ||
-        DIE 'target must be a mutable registry tracking ref such as ghcr.io/joshyorko/omarchy-bootc:testing'
+    [[ "$ref" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*:[A-Za-z0-9][A-Za-z0-9._-]*$ &&
+       "$ref" != *@sha256:* ]] ||
+        DIE 'target must be a safe mutable registry tracking ref such as ghcr.io/joshyorko/omarchy-bootc:testing'
 }
 
 resolve_digest() {

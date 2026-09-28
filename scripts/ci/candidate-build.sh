@@ -40,9 +40,9 @@ capture_failure_state() {
 on_exit() {
     local status="$?"
     if ((status != 0)); then
-        capture_failure_state
+        capture_failure_state || true
     fi
-    trim_logs
+    trim_logs || true
     exit "${status}"
 }
 trap on_exit EXIT
@@ -63,9 +63,18 @@ run_logged() {
     } | tee "${log_file}"
     set +e
     "$@" 2>&1 | tee -a "${log_file}"
-    local command_status="${PIPESTATUS[0]}"
+    local statuses=("${PIPESTATUS[@]}")
     set -e
-    return "${command_status}"
+    ((statuses[0] == 0)) || return "${statuses[0]}"
+    return "${statuses[1]}"
+}
+
+# The runner opens the archive; rootful Podman never owns upload inputs.
+export_archive() {
+    local archive="$1" image="$2"
+    # The runner owns the upload file; sudo only elevates Podman.
+    # shellcheck disable=SC2024
+    sudo -n podman save --format=oci-archive "${image}" >"${archive}"
 }
 
 read_pin() {
@@ -164,8 +173,7 @@ export_stage() {
         || die "${target} image ID is not immutable: ${image_id}"
     archive_path="${ARTIFACT_DIR}/${archive_stem}.oci.tar"
     receipt_path="${ARTIFACT_DIR}/${archive_stem}.receipt.json"
-    run_logged "${target}-export" sudo -n podman save --format=oci-archive \
-        --output "${archive_path}" "${image_ref}"
+    run_logged "${target}-export" export_archive "${archive_path}" "${image_ref}"
     archive_sha256="$(sha256sum "${archive_path}" | awk '{print $1}')"
     manifest_digest="$(tar -xOf "${archive_path}" index.json | jq -er '.manifests[0].digest')"
     [[ "${manifest_digest}" =~ ^sha256:[[:xdigit:]]{64}$ ]] \
@@ -364,6 +372,8 @@ build_candidate() {
         "${ROOT_DIR}"
 
     run_logged fatal-lint sudo -n podman run --rm --pull=never --privileged "${IMAGE_REF}" bootc container lint --fatal-warnings
+    run_logged candidate-dependencies sudo -n podman run --rm --pull=never \
+        "${IMAGE_REF}" /usr/lib/omarchy-bootc/acceptance-dependencies.sh final
 
     image_id="$(sudo -n podman image inspect "${IMAGE_REF}" --format '{{.Id}}')"
     [[ "${image_id}" =~ ^(sha256:)?[[:xdigit:]]{64}$ ]] || die "image ID is not immutable: ${image_id}"
@@ -371,7 +381,7 @@ build_candidate() {
     candidate_stem="omarchy-bootc-candidate-head-${head_sha}-quattro-${quattro_revision:0:12}-iso-${iso_revision:0:12}-bootcrew-${bootcrew_revision:0:12}-bootc-${bootc_revision:0:12}"
     archive_path="${ARTIFACT_DIR}/${candidate_stem}.oci.tar"
     receipt_path="${ARTIFACT_DIR}/${candidate_stem}.receipt.json"
-    run_logged export sudo -n podman save --format=oci-archive --output "${archive_path}" "${IMAGE_REF}"
+    run_logged export export_archive "${archive_path}" "${IMAGE_REF}"
     archive_sha256="$(sha256sum "${archive_path}" | awk '{print $1}')"
     manifest_digest="$(tar -xOf "${archive_path}" index.json | jq -er '.manifests[0].digest')"
     [[ "${manifest_digest}" =~ ^sha256:[[:xdigit:]]{64}$ ]] || die "OCI archive has no immutable manifest digest"

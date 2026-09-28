@@ -8,6 +8,13 @@ COPY build/acceptance-firstboot.service /ctx/build/acceptance-firstboot.service
 COPY build/stage-acceptance-node.sh /ctx/build/stage-acceptance-node.sh
 COPY build/25-quattro-user.sh /ctx/build/25-quattro-user.sh
 
+# Only this disposable layer permits the SSH harness through product UFW.
+# Offline rule writing must not apply the rules to the build host's firewall.
+RUN grep -Fxq ENABLED=yes /etc/ufw/ufw.conf && \
+    sed -i 's/^ENABLED=yes$/ENABLED=no/' /etc/ufw/ufw.conf && \
+    ufw allow 22/tcp comment 'disposable acceptance SSH' && \
+    sed -i 's/^ENABLED=no$/ENABLED=yes/' /etc/ufw/ufw.conf
+
 RUN --mount=type=tmpfs,dst=/tmp \
     bash /ctx/build/stage-acceptance-node.sh && \
     bash /ctx/build/25-quattro-user.sh && \

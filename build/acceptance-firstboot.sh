@@ -15,10 +15,14 @@ if ! id omarchy >/dev/null 2>&1; then
 fi
 
 printf 'omarchy:omarchy\n' | chpasswd
+install -d -m 0755 /etc/sudoers.d
 cat >/etc/sudoers.d/90-omarchy-acceptance <<'EOF'
 omarchy ALL=(ALL:ALL) NOPASSWD: ALL
 EOF
 chmod 0440 /etc/sudoers.d/90-omarchy-acceptance
+visudo -cf /etc/sudoers.d/90-omarchy-acceptance
+visudo -c
+runuser -u omarchy -- sudo -n true
 
 install -d -m 0755 /var/lib/omarchy/provisioning/packages
 cp -a /usr/lib/omarchy-acceptance/packages/. /var/lib/omarchy/provisioning/packages/

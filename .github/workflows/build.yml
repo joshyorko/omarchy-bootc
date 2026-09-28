@@ -67,11 +67,10 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Validate contracts
         run: |
-          bash tests/test-quattro-source-contract.sh
-          bash tests/test-transition-contract.sh
-          bash tests/test-published-image-trust.sh
-          bash tests/test-foundation-contract.sh
-          bash tests/test-update-dispatch-contract.sh
+          set -euo pipefail
+          for test in tests/test-*.sh; do
+            bash "$test"
+          done
 
       # Free up space on the runner — Arch images can be large.
       # Uncomment if builds exceed runner disk limits.
@@ -91,7 +90,7 @@ jobs:
       - name: Get current date
         id: date
         run: |
-          echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
       - name: Image Metadata
         uses: docker/metadata-action@v5
@@ -169,14 +168,27 @@ jobs:
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ovmf qemu-system-x86 qemu-utils sshpass systemd-container
+          sudo apt-get install -y ovmf qemu-system-x86 qemu-utils sshpass skopeo
 
-      - name: VM acceptance (headless UEFI QEMU + SSH)
+      - name: Accept the exact publishable image through a disposable overlay
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         env:
           CI_ARTIFACT_DIR: ${{ runner.temp }}/vm-smoke-artifacts
         run: |
-          ./scripts/ci/vm-smoke.sh "${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}"
+          set -euo pipefail
+          candidate_dir="$RUNNER_TEMP/publish-candidate"
+          mkdir -p "$candidate_dir"
+          image="${IMAGE_NAME}:${DEFAULT_TAG}"
+          podman save --format=oci-archive "$image" > "$candidate_dir/candidate.oci.tar"
+          image_id="$(podman image inspect "$image" --format '{{.Id}}')"
+          digest="$(tar -xOf "$candidate_dir/candidate.oci.tar" index.json | jq -er '.manifests[0].digest')"
+          checksum="$(sha256sum "$candidate_dir/candidate.oci.tar" | cut -d' ' -f1)"
+          jq -n --arg head "$(git rev-parse HEAD)" --arg id "$image_id" \
+            --arg digest "$digest" --arg checksum "sha256:$checksum" \
+            '{source_head:$head, image_id:$id, archive:"candidate.oci.tar",
+              manifest_digest:$digest, archive_sha256:$checksum}' \
+            > "$candidate_dir/candidate.receipt.json"
+          bash scripts/ci/candidate-runtime.sh "$candidate_dir"
 
       - name: Upload VM acceptance artifacts
         if: always() && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
