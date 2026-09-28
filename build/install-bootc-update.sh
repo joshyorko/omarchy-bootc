@@ -11,7 +11,7 @@ on_error() {
 }
 trap 'on_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 install -d -m 0755 "$lib" /usr/libexec /usr/local/bin /usr/lib/systemd/user /etc/systemd/user/graphical-session.target.wants /etc/profile.d
-printf '%s\n' 'export PATH=/usr/local/bin:$PATH' > /etc/profile.d/omarchy-bootc-path.sh
+printf '%s\n' "export PATH=/usr/local/bin:\$PATH" > /etc/profile.d/omarchy-bootc-path.sh
 chmod 0644 /etc/profile.d/omarchy-bootc-path.sh
 
 for file in omarchy-bootc-common.sh omarchy-bootc-update omarchy-bootc-update-available; do
