@@ -317,7 +317,7 @@ mkdir -p output
 rm -rf output/qcow2 output/raw "${SOURCE_OCI_DIR}"
 
 echo "::group::Preflight bootc image state"
-IMAGE_ID="$(podman inspect image "${IMAGE_REF}" --format '{{.Id}}')"
+IMAGE_ID="$(podman image inspect "${IMAGE_REF}" --format '{{.Id}}')"
 echo "Resolved image ref: ${IMAGE_REF}" | tee "${ARTIFACT_DIR}/image-ref.txt"
 echo "Resolved image ID: ${IMAGE_ID}" | tee "${ARTIFACT_DIR}/image-id.txt"
 
