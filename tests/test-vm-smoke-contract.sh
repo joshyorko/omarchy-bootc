@@ -30,7 +30,7 @@ for required in \
     OMARCHY_EXPECTED_TRACKING_REF \
     OMARCHY_ASSERT_TESTING_REF \
     target-imgref \
-    switch --in-place \
+    switch --mutate-in-place \
     registry-mirror.conf \
     podman push; do
     grep -Fq -- "$required" "${SCRIPT}" || fail "vm lifecycle harness is missing ${required}"

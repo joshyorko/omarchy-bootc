@@ -379,7 +379,7 @@ run_lifecycle_acceptance() {
     # Restore the production tracking origin without staging anything. Gate 3's
     # archive switch intentionally changes the origin; --in-place repairs only
     # that mutable reference before Gate 5.
-    run_guest "sudo -n bootc switch --in-place '${OMARCHY_DEFAULT_TRACKING_REF}'"
+    run_guest "sudo -n bootc switch --mutate-in-place '${OMARCHY_DEFAULT_TRACKING_REF}'"
     run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/lifecycle-a-restored-origin-status.json"
     record_configured_tracking_ref lifecycle-a-restored-origin "${ARTIFACT_DIR}/lifecycle-a-restored-origin-status.json" 1
     jq -e '.status.staged == null' "${ARTIFACT_DIR}/lifecycle-a-restored-origin-status.json" >/dev/null \
