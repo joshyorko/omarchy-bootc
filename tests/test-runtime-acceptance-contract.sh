@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Contract needles intentionally preserve local and guest-side expansions.
-# shellcheck disable=SC2016
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -49,18 +47,26 @@ assert_order() {
 
 # The runtime runner must execute the exact adapted tree it fetched and pass
 # that tree into the VM harness; a receipt-only adapter test is insufficient.
+# These assertions preserve the exact remote/guest command strings.
+# shellcheck disable=SC2016
 assert_order "${RUNTIME}" 'candidate runtime acceptance handoff' \
     'git -C "${upstream_tests}" archive FETCH_HEAD test/acceptance test/acceptance.d' \
     'python3 scripts/ci/adapt-upstream-acceptance.py' \
     '"UPSTREAM_ACCEPTANCE_DIR=${upstream_tests}"' \
     'bash scripts/ci/vm-smoke.sh "${overlay}"'
+# This contract needle is literal shell syntax.
+# shellcheck disable=SC2016
 grep -Fq '"CI_ARTIFACT_DIR=${artifact_dir}"' "${RUNTIME}" ||
     fail 'candidate runtime does not pass its receipt directory to VM smoke'
+# This contract needle is literal shell syntax.
+# shellcheck disable=SC2016
 grep -Fq '"UPSTREAM_ACCEPTANCE_DIR=${upstream_tests}"' "${RUNTIME}" ||
     fail 'candidate runtime does not pass the adapted suite to VM smoke'
 
 # The helper must transfer the adapted tests, execute the real acceptance
 # entrypoint, retain output, and return failure to the VM harness.
+# These commands are literal remote command text.
+# shellcheck disable=SC2016
 assert_order "${HELPER}" 'upstream acceptance execution' \
     '"${upstream_dir}/test"' \
     'mkdir -p "$HOME/upstream-acceptance/test"' \

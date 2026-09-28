@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# The image-installed helper is resolved only after installation.
-# shellcheck disable=SC1091
 set -euo pipefail
 
 # bootc performs the authoritative check; digest resolution also supports
 # composefs status, which has no cachedUpdate. Never scrape human bootc output.
+# The image-installed helper is resolved only after installation.
+# shellcheck disable=SC1091
 source /usr/lib/omarchy-bootc/update-common.sh
 export OMARCHY_BOOTC_BIN=/usr/bin/bootc
 export OMARCHY_BOOTC_STATUS_FILE=

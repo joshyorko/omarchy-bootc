@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# The image-installed helper is resolved only after installation; the remote
-# shell snippet intentionally defers its positional-parameter expansion.
-# shellcheck disable=SC1091,SC2016
 set -euo pipefail
 
 # This is the bootc replacement for upstream's pacman-backed omarchy update
 # entry point. It stages an image only; migrations are intentionally deferred
 # The concrete commands are `bootc upgrade --check` and `bootc upgrade`.
 # until the first login on the deployment that booted the staged digest.
+# The image-installed helper is resolved only after installation.
+# shellcheck disable=SC1091
 source /usr/lib/omarchy-bootc/update-common.sh
 export OMARCHY_BOOTC_BIN=/usr/bin/bootc
 export OMARCHY_BOOTC_STATUS_FILE=
@@ -61,6 +60,8 @@ if [[ -e "$lock_file" && ! -f "$lock_file" ]]; then
     echo 'Refusing a non-regular Omarchy update lock.' >&2
     exit 1
 fi
+# The shell fragment runs under `sh -c`; keep its positional expansion remote.
+# shellcheck disable=SC2016
 if ! run_as_root sh -c 'umask 007; set -C; : > "$1"' sh "$lock_file"; then
     [[ -e "$lock_file" ]] || {
         echo 'Could not create the Omarchy update lock.' >&2

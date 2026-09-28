@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Fixture strings intentionally preserve literal sudoers and shell syntax.
-# shellcheck disable=SC1003,SC2016
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,6 +33,8 @@ grep -Fq 'missing command: sudo' "$fixture/output"
 printf '#!/bin/sh\nexit 0\n' >"$fixture/bin/sudo"
 expect_failure 'missing executable:' require_executable "$fixture/bin/sudo"
 chmod 0755 "$fixture/bin/sudo"
+# This fragment runs under `bash -c`; preserve the remote expansion boundary.
+# shellcheck disable=SC2016
 expect_failure 'command is not image-owned:' env \
     PATH="$fixture/bin:$host_path" bash -c 'source "$1"; require_immutable_command sudo' \
     bash "$root_dir/build/acceptance-dependencies.sh"
@@ -52,6 +52,8 @@ EOF
 require_bounded_sudo_policy "$fixture/sudoers"
 printf '%s\n' '%wheel ALL=(ALL:ALL) NOPASSWD: ALL' >"$fixture/sudoers"
 expect_failure 'unrestricted passwordless sudo' require_bounded_sudo_policy "$fixture/sudoers"
+# This fixture deliberately contains a literal backslash-quote sequence.
+# shellcheck disable=SC1003
 printf '%s\n' 'omarchy ALL=(root) NOPASSWD: /usr/bin/true, \' ' ALL' >"$fixture/sudoers"
 expect_failure 'unrestricted passwordless sudo' require_bounded_sudo_policy "$fixture/sudoers"
 printf '%s\n' \

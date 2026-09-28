@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# jq assignment filters intentionally preserve their literal variables.
-# shellcheck disable=SC2016
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -57,6 +55,8 @@ change_status() {
     mv "$tmp/next.json" "$OMARCHY_BOOTC_STATUS_FILE"
 }
 write_status "{\"image\":{\"imageDigest\":\"$b\"}}"
+# jq receives this filter; `$c` must not expand in the shell.
+# shellcheck disable=SC2016
 change_status --arg c "$c" '.status.rollback = {image:{imageDigest:$c}}'
 [[ "$(status_booted_digest)" == "$a" ]] || fail 'booted identity confused with another slot'
 [[ "$(status_rollback_digest)" == "$c" ]] || fail 'rollback identity was not parsed'
@@ -67,6 +67,8 @@ write_status null "{\"imageDigest\":\"$b\"}"
 write_status
 [[ -z "$(status_staged_digest)" && -z "$(status_cached_digest)" ]] || fail 'null slots were not empty'
 [[ "$(status_update_available)" == "$resolved" ]] || fail 'null cachedUpdate did not resolve the registry candidate'
+# jq receives this filter; `$digest` must not expand in the shell.
+# shellcheck disable=SC2016
 change_status --arg digest "$resolved" '.status.booted.image.imageDigest = $digest'
 if status_update_available; then fail 'same registry digest reported an update'; else rc=$?; fi
 [[ "$rc" == 1 ]] || fail 'same digest was treated as an error'
@@ -83,6 +85,8 @@ write_status "{\"image\":{\"imageDigest\":\"$a\"}}"
 for transport in registry oci oci-archive docker-archive containers-storage dir; do
     ref='example/os:testing'
     if [[ "$transport" == registry ]]; then ref='10.0.2.2:5000/omarchy:acceptance'; fi
+# jq receives this filter; `$transport` and `$ref` must not expand in the shell.
+# shellcheck disable=SC2016
     change_status --arg transport "$transport" --arg ref "$ref" '.spec.image.transport=$transport | .spec.image.image=$ref'
     RESOLVER_REF="${transport}:${ref}"
     if [[ "$transport" == registry ]]; then RESOLVER_REF="docker://${ref}"; fi

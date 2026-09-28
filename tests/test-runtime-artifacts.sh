@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Runtime helper paths are resolved from ROOT_DIR at execution time.
-# shellcheck disable=SC1091
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -76,6 +74,7 @@ if (( EUID == 0 )); then
             echo 'FAIL: root-created fixture was already runner-readable' >&2
             exit 1
         fi
+# shellcheck disable=SC1091
         # shellcheck source=scripts/ci/lib/runtime-artifacts.sh
         source "${ROOT_DIR}/scripts/ci/lib/runtime-artifacts.sh"
         normalize_runtime_artifacts "$tmp/receipts" "$target_uid" "$target_gid"
@@ -93,6 +92,7 @@ elif command -v sudo >/dev/null && sudo -n true 2>/dev/null; then
         echo 'FAIL: root-created fixture was already runner-readable' >&2
         exit 1
     fi
+# shellcheck disable=SC1091
     # shellcheck source=scripts/ci/lib/runtime-artifacts.sh
     source "${ROOT_DIR}/scripts/ci/lib/runtime-artifacts.sh"
     normalize_runtime_artifacts "$tmp/receipts"

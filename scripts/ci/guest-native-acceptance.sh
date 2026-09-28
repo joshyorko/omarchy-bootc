@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# jq filters and EXIT trap helpers intentionally use deferred expansions.
-# shellcheck disable=SC2016,SC2317
 set -euo pipefail
 
 phase="${1:-}"
@@ -195,6 +193,8 @@ QML
 
     shell_before=$(pgrep -u "$(id -u)" -x quickshell)
     omarchy restart shell >"$ARTIFACTS/shell-restart.log" 2>&1 || fail "native shell restart failed"
+# The jq variable must expand in jq, not in the shell.
+# shellcheck disable=SC2016
     wait_for_plugins "$ARTIFACTS/list-json.restarted.json" \
         'any(.[]; .id == $id and .firstParty == false and .enabled == true)' --arg id "$clock_id" ||
         fail "clone state did not survive shell restart"
@@ -205,6 +205,8 @@ QML
     if [[ -e "$HOME/.local/bin/omp" || -L "$HOME/.local/bin/omp" ]]; then
         mv "$HOME/.local/bin/omp" "$ARTIFACTS/omp-original"
     fi
+# This cleanup function is called indirectly by the EXIT trap.
+# shellcheck disable=SC2317
     restore_omp() {
         rm -f "$HOME/.local/bin/omp"
         if [[ -e "$ARTIFACTS/omp-original" || -L "$ARTIFACTS/omp-original" ]]; then
@@ -250,6 +252,8 @@ clock_dir=$(jq -er .clock_clone_dir "$ARTIFACTS/native-acceptance.state.json")
 find "$clock_dir" -type f ! -path '*/.git/*' -print0 | sort -z | xargs -0 sha256sum >"$ARTIFACTS/clock-clone.datahash.after"
 after_hash=$(sha256sum "$ARTIFACTS/clock-clone.datahash.after" | awk '{print $1}')
 [[ $after_hash == "$(jq -er .clock_clone_datahash "$ARTIFACTS/native-acceptance.state.json")" ]] || fail "clock clone data hash changed across reboot"
+# The jq variable must expand in jq, not in the shell.
+# shellcheck disable=SC2016
 wait_for_plugins "$ARTIFACTS/list-json.verify.json" \
     'any(.[]; .id == $id and .firstParty == false and .enabled == true)' --arg id "$clock_id" ||
     fail "clock clone is not enabled after reboot"

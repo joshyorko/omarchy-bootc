@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Contract needles intentionally preserve workflow expressions literally.
-# shellcheck disable=SC2016
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,6 +10,8 @@ grep -Fq 'https://github.com/joshyorko/omarchy-bootc/.github/workflows/build.yml
 grep -Fq 'https://token.actions.githubusercontent.com' "${verifier}"
 grep -Fq 'cosign sign --yes' "${workflow}"
 grep -Fq 'cosign attest --yes' "${workflow}"
+# The workflow expression is asserted literally.
+# shellcheck disable=SC2016
 grep -Fq 'acceptance_overlay:"not-applied"' "${workflow}" ||
     grep -Fq 'acceptance_overlay:$acceptance_overlay' "${workflow}"
 if grep -Eiq 'SigLevel[[:space:]]*=[[:space:]]*(Optional|Never)|TrustAll' "${repositories}"; then

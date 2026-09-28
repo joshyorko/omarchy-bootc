@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Adversarial ref fixtures intentionally preserve literal shell metacharacters.
-# shellcheck disable=SC2016
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -58,6 +56,8 @@ grep -Fq 'status=ready' <<<"$preflight_output" || fail 'preflight did not report
 if env "${common_env[@]}" bash "$TRANSITION" preflight ghcr.io/joshyorko/omarchy-bootc@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; then
     fail 'digest-only target was accepted without a tracking ref'
 fi
+# The malicious ref is a literal adversarial fixture.
+# shellcheck disable=SC2016
 for bad_ref in \
     'ghcr.io/example/os:tag;touch' \
     'ghcr.io/example/os:tag$(id)' \

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Sed replacement expressions intentionally preserve literal variables.
-# shellcheck disable=SC2016
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -75,6 +73,8 @@ export STAGE_DIGEST="$b"
 unset SUDO_USER
 make_test_script() {
     local input="$1" output="$2"
+# These sed expressions are literal replacement source, not shell expansions.
+# shellcheck disable=SC2016
     sed \
         -e "s|^source /usr/lib/omarchy-bootc/update-common.sh$|source \"${ROOT_DIR}/custom/bootc/omarchy-bootc-common.sh\"|" \
         -e 's|^export OMARCHY_BOOTC_BIN=/usr/bin/bootc$|export OMARCHY_BOOTC_BIN="${OMARCHY_BOOTC_TEST_BIN:?}"|' \

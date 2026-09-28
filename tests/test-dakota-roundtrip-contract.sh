@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Contract needles intentionally preserve shell syntax and literal expansions.
-# shellcheck disable=SC1003,SC2016
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,6 +41,8 @@ expect_refusal 'Dakota image ref does not match the repository-owned current rel
 [[ -x "${SCRIPT}" ]] || fail 'Dakota round-trip runner is missing or not executable'
 [[ -f "${WORKFLOW}" ]] || fail 'Dakota round-trip workflow is missing'
 [[ -x "${RECEIPT_HELPER}" ]] || fail 'Gate 4 receipt helper is missing or not executable'
+# This contract needle is a literal source statement, not a shell command.
+# shellcheck disable=SC2016
 grep -Fq 'source "${ROOT_DIR}/scripts/ci/lib/dakota-receipt.sh"' "${SCRIPT}" ||
     fail 'Gate 4 runner does not load its receipt helper'
 # Execute receipt construction and validate the consumer-visible identity fields.
@@ -86,14 +86,22 @@ assert_order() {
 }
 # The disposable overlay context is removed before each run and must be
 # recreated before its Containerfile is written.
+# These strings are literal remote/command-line contract statements.
+# shellcheck disable=SC1003,SC2016
 assert_order 'Dakota overlay context' \
     'rm -rf "${DAKOTA_OVERLAY_OCI}" "${OVERLAY_CONTEXT}" "${RAW_PATH}" "${QCOW_PATH}"' \
     'mkdir -p "${OVERLAY_CONTEXT}"' \
     'cat >"${OVERLAY_CONTEXT}/Containerfile"'
+# This contract needle is a literal shell statement.
+# shellcheck disable=SC2016
 grep -Fq 'source_configured_ref}" == "${DAKOTA_IMAGE_REF}"' "${SCRIPT}" ||
     fail 'Gate 4 does not bind live Dakota configuration to the frozen source ref'
+# This contract needle is a literal shell statement.
+# shellcheck disable=SC2016
 grep -Fq 'assert_status_digest "${ARTIFACT_DIR}/dakota-source-status.json" "${DAKOTA_EXPECTED_DIGEST}"' "${SCRIPT}" ||
     fail 'Gate 4 does not verify the booted Dakota source digest'
+# These install arguments are literal command-line contract text.
+# shellcheck disable=SC1003,SC2016
 assert_order 'Dakota install target syntax' \
     '--composefs-backend --via-loopback \' \
     '--bootloader systemd \' \
@@ -105,6 +113,8 @@ assert_order 'Dakota install target syntax' \
 # Gate 4 is a real forward/reverse boot operation, not merely an input and
 # publication contract. Keep the immutable source, exact staged/booted
 # digests, preserved user state, and receipt assertions visible in sequence.
+# These strings are literal remote/command-line contract statements.
+# shellcheck disable=SC2016
 assert_order 'Dakota forward round-trip' \
     'source_transition_env=(' \
     'transition.sh inspect-source' \
@@ -117,6 +127,8 @@ assert_order 'Dakota forward round-trip' \
     'quattro-booted-status.json' \
     'assert_status_digest "${ARTIFACT_DIR}/quattro-booted-status.json"' \
     'quattro-user-state.txt'
+# These reverse commands are literal remote command text.
+# shellcheck disable=SC2016
 assert_order 'Dakota reverse round-trip' \
     'reverse_env=(' \
     '${reverse_env[*]} /home/omarchy/transition/omarchy-transition.sh inspect-source' \
@@ -130,12 +142,20 @@ assert_order 'Dakota reverse round-trip' \
     'dakota-reverse-user-state.txt'
 grep -Fq 'result:"passed"' "${RECEIPT_HELPER}" ||
     fail 'Gate 4 receipt does not record a passed result'
+# These receipt expressions are literal jq source statements.
+# shellcheck disable=SC2016
 grep -Fq 'source:{immutable_ref:$dakota_ref' "${RECEIPT_HELPER}" ||
     fail 'Gate 4 receipt omits the immutable source identity'
+# This receipt expression is literal jq source text.
+# shellcheck disable=SC2016
 grep -Fq 'forward:{accepted_ref:$quattro_ref' "${RECEIPT_HELPER}" ||
     fail 'Gate 4 receipt omits the forward candidate identity'
+# This receipt expression is literal jq source text.
+# shellcheck disable=SC2016
 grep -Fq 'reverse:{tracking_ref:$dakota_tracking_ref' "${RECEIPT_HELPER}" ||
     fail 'Gate 4 receipt omits the reverse identity'
+# This receipt expression is literal jq source text.
+# shellcheck disable=SC2016
 grep -Fq 'user_home_preserved:true' "${RECEIPT_HELPER}" ||
     fail 'Gate 4 receipt omits user-state preservation'
 

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Contract needles and fixture callbacks intentionally preserve literal syntax.
-# shellcheck disable=SC2016,SC2317
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -75,25 +73,38 @@ fi
 [[ -f "${BOOTCREW_CHECKSUMS}" ]] || fail 'vendored Bootcrew source checksums are missing'
 (cd "${ROOT_DIR}/vendor/bootcrew" && sha256sum --check --status SHA256SUMS) \
     || fail 'vendored Bootcrew construction differs from the pinned source snapshot'
+# This source-contract needle is literal shell syntax.
 # shellcheck disable=SC2016
 grep -Fq 'BOOTC_REVISION="${BOOTC_REVISION:?}"' "${ROOT_DIR}/vendor/bootcrew/shared/build.sh" \
     || fail 'Bootcrew build does not require an explicit bootc revision'
+# This source-contract needle is literal shell syntax.
+# shellcheck disable=SC2016
 grep -Fq 'BOOTC_SOURCE="${BOOTC_SOURCE:?}"' "${ROOT_DIR}/vendor/bootcrew/shared/build.sh" \
     || fail 'Bootcrew build does not require an explicit bootc source'
 if grep -Eq 'git[[:space:]]+clone' "${ROOT_DIR}/vendor/bootcrew/shared/build.sh"; then
     fail 'bootc source must not use an unpinned git clone'
 fi
+# This source-contract needle is literal shell syntax.
+# shellcheck disable=SC2016
 grep -Fq 'git remote add origin "${BOOTC_SOURCE}"' "${ROOT_DIR}/vendor/bootcrew/shared/build.sh" \
     || fail 'bootc fetch does not consume the recorded source URL'
+# This source-contract needle is literal shell syntax.
+# shellcheck disable=SC2016
 grep -Fq '[[ "$(git rev-parse HEAD)" == "${BOOTC_REVISION}" ]]' \
     "${ROOT_DIR}/vendor/bootcrew/shared/build.sh" \
     || fail 'bootc checkout does not verify the fetched commit exactly'
+# This source-contract needle is literal shell syntax.
+# shellcheck disable=SC2016
 grep -Fq 'org.opencontainers.image.bootcrew.revision="${BOOTCREW_MONO_REVISION}"' "${CONTAINERFILE}" \
     || fail 'final image does not record the Bootcrew source revision'
 grep -Fq 'org.opencontainers.image.bootc.revision' "${CONTAINERFILE}" \
     || fail 'final image does not record the bootc source revision'
+# This source-contract needle is literal shell syntax.
+# shellcheck disable=SC2016
 grep -Fq 'test "$(cat /ctx/REVISION)" = "${BOOTCREW_MONO_REVISION}"' "${CONTAINERFILE}" \
     || fail 'build does not bind the Bootcrew revision record to the construction argument'
+# This source-contract needle is literal shell syntax.
+# shellcheck disable=SC2016
 grep -Fq 'test "$(cat /ctx/BOOTC_REVISION)" = "${BOOTC_REVISION}"' "${CONTAINERFILE}" \
     || fail 'build does not bind the bootc revision record to the construction argument'
 [[ -f "${REPOSITORY_CONFIGURATOR}" ]] || fail 'repository topology configurator is missing'
@@ -102,12 +113,16 @@ if grep -Eiq 'SigLevel[[:space:]]*=[[:space:]]*(Optional|Never)|TrustAll|Include
 fi
 grep -Fq 'SigLevel = Required DatabaseOptional' "${REPOSITORY_CONFIG}" \
     || fail 'Omarchy packages are not signature-required'
+# This source-contract needle is literal shell syntax.
+# shellcheck disable=SC2016
 grep -Fq 'stable-mirror.omarchy.org/$repo/os/$arch' "${REPOSITORY_CONFIG}" \
     || fail 'Quattro repositories do not use the stable Omarchy mirror'
 
 [[ -f "${QUATTRO_BUILD}" ]] || fail 'build/20-quattro.sh is missing'
 [[ -f "${BOOT_OWNERSHIP}" ]] || fail 'build/30-bootc-ownership.sh is missing'
 
+# This source-contract needle is literal shell syntax.
+# shellcheck disable=SC2016
 grep -Fq 'OMARCHY_VERSION="${OMARCHY_VERSION:-4.0.4-1}"' "${QUATTRO_BUILD}" \
     || fail 'official Omarchy package version is not pinned to current 4.0.4-1'
 grep -Fq 'c668141e9c42b13c80c9ca4ea108e11708c5e8a5' "${QUATTRO_BUILD}" \
@@ -192,6 +207,8 @@ grep -Fq 'Requires=omarchy-adopt-existing-user.service' "${ROOT_DIR}/Containerfi
 if grep -Fq 'ConditionPathExists=' "${ADOPTION_SERVICE}"; then
     fail 'adoption completion gate is weakened by a conditional service'
 fi
+# The adoption surface names are literal source statements.
+# shellcheck disable=SC2016
 for adoption_surface in \
     'find "$HOME_ROOT"' \
     'systemd-ask-password' \
@@ -206,6 +223,8 @@ grep -Fq 'rollback-current' "${ADOPTION_ROLLBACK}" ||
     || fail 'adoption rollback does not preserve post-adoption changes'
 grep -Fq 'omarchy-adoption-rollback' "${ADOPTION_ROLLBACK}" \
     || fail 'adoption rollback command identity is missing'
+# The forbidden adoption statement is asserted literally.
+# shellcheck disable=SC2016
 if grep -Fq 'cp -a -n /usr/share/omarchy/skel' "${ADOPTION_SCRIPT}" ||
     grep -Fq 'rm -rf "${HYPR_CONF_DIR}"' "${ADOPTION_SCRIPT}"; then
     fail 'cross-distro adoption still blindly replays image skeleton state'
@@ -352,7 +371,11 @@ verify_optional_resolution_report "${fixture_dir}/optional-resolution" \
 
 # A corrupt archived payload must never reach the native package resolver.
 (
+# These fixture functions are called indirectly by the resolver.
+# shellcheck disable=SC2317
     curl() { printf 'corrupt archive\n' >"${@: -1}"; }
+# This fixture function is called indirectly by the resolver.
+# shellcheck disable=SC2317
     pacman() { touch "${fixture_dir}/unexpected-archive-resolution"; }
     if resolve_archived_apple_firmware "${OPTIONAL_REPOSITORY_CONFIG}" \
         "${ROOT_DIR}/sources" "${fixture_dir}/archives" 2>"${fixture_dir}/archive-error"; then

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Contract needles intentionally preserve literal shell syntax.
-# shellcheck disable=SC2016
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "$0")/.." && pwd)"
@@ -8,9 +6,15 @@ install_script="${root_dir}/build/install-bootc-update.sh"
 wrapper="${root_dir}/custom/bootc/omarchy-wrapper"
 assembly="${root_dir}/build/20-quattro.sh"
 
+# These assertions preserve literal source syntax.
+# shellcheck disable=SC2016
 grep -Fq 'ln -sfn "$lib/omarchy-wrapper" /usr/local/bin/omarchy' "${install_script}"
 grep -Fq 'PATH=/usr/local/bin:/usr/bin:/bin command -v omarchy' "${install_script}"
+# This assertion preserves literal source syntax.
+# shellcheck disable=SC2016
 grep -Fq 'export PATH=/usr/local/bin:$PATH' "${install_script}"
+# This assertion preserves literal source syntax.
+# shellcheck disable=SC2016
 grep -Fq 'var/usrlocal/bin/$stale' "${install_script}"
 grep -Fq 'update|up)' "${wrapper}"
 grep -Fq 'exec /usr/lib/omarchy-bootc/omarchy-bootc-update' "${wrapper}"
@@ -31,8 +35,12 @@ grep -Fq '/run/omarchy-bootc-update-trace/bootc' \
     "${root_dir}/custom/bootc/omarchy-bootc-update"
 grep -Fq "/usr/bin/stat -c '%u:%a'" \
     "${root_dir}/custom/bootc/omarchy-bootc-update"
+# This assertion preserves literal source syntax.
+# shellcheck disable=SC2016
 grep -Fq 'state_home="${user_home}/.local/state"' \
     "${root_dir}/custom/bootc/omarchy-bootc-update"
+# This assertion preserves literal source syntax.
+# shellcheck disable=SC2016
 grep -Fq 'pending="${HOME}/.local/state/omarchy-bootc/pending-update"' \
     "${root_dir}/custom/bootc/omarchy-bootc-finalize"
 grep -Fq 'OMARCHY_BOOTC_STATUS_HELPER=/usr/libexec/omarchy-bootc-status' \
@@ -45,13 +53,21 @@ grep -Fq '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-clear-transacti
     "${install_script}"
 grep -Fq '/usr/bin/bootc status --format=json' \
     "${root_dir}/custom/bootc/omarchy-bootc-status"
+# This assertion preserves literal source syntax.
+# shellcheck disable=SC2016
 grep -Fq 'readlink -f "${omarchy_command}"' "${assembly}"
 grep -Fq '!= /var/usrlocal/*' "${assembly}"
 grep -Fq 'rm -f /var/usrlocal/bin/omarchy' "${install_script}"
+# This assertion preserves literal source syntax.
+# shellcheck disable=SC2016
 grep -Fq 'dispatch_path="/usr/share/omarchy/bin/${command_name}"' "${install_script}"
 grep -Fq 'for command_name in omarchy omarchy-update omarchy-update-available' \
     "${install_script}"
+# This assertion preserves literal source syntax.
+# shellcheck disable=SC2016
 grep -Fq 'readlink "$dispatch_path")" == "/usr/bin/${command_name}"' "${install_script}"
+# This assertion preserves literal source syntax.
+# shellcheck disable=SC2016
 grep -Fq 'readlink "$dispatch_path")" == "/usr/local/bin/${command_name}"' "${install_script}"
 grep -Fq 'omarchy:summary=Stage the next bootc image' \
     "${root_dir}/custom/bootc/omarchy-update-wrapper"
