@@ -34,5 +34,5 @@ while IFS= read -r package; do
     resolve_quattro_optional_package /etc/pacman.conf "${package}" "${report}" \
         /ctx/sources /tmp/optional-archives
 done < <(read_quattro_package_manifest /tmp/omarchy-other.packages)
-grep -E '^(resolvable|resolvable-archive|unresolved|archive) ' "${report}"
+grep -E '^(resolvable|resolvable-archive|unresolved|archive|not-applicable-architecture) ' "${report}"
 verify_optional_resolution_report "${report}"

@@ -36,6 +36,16 @@ closure, reproducible image, or proven runtime compatibility.
 
 ## Upgrade and visual acceptance gap
 
+The 4.5 optional manifest includes `asus-proart-p14-speaker-firmware`, but
+upstream packaging commit `b8130965da4c88f94a836d2f647517466e90201e` renamed it
+to `asus-proart-p14-audio` with `arch=('aarch64')`, providing/replacing the old
+name for NVIDIA N1x hardware. On x86_64 only, an exact target-not-found result
+is recorded as `not-applicable-architecture`, never `resolvable` or a hardware
+test PASS. Native ARM resolution and unrelated failures remain fatal. The
+package-owned manifest stays intact; no repository or replacement is injected.
+Candidate run `44314946741` exposed this mismatch before foundation. Its signed
+4.5 package verification passed; no image lint or installed-OS evidence ran.
+
 The 4.5 suite retains every upstream file and adds real input-method/composition
 and monitor-overlay tests. Only the existing root-filesystem and declared-kernel
 assertions are adapted. The complete original suite is checksum guarded at the

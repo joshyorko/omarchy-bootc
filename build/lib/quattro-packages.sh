@@ -64,6 +64,14 @@ resolve_quattro_optional_package() {
     local resolution archived
     if resolution="$(LC_ALL=C pacman --config "${config}" -Sp --print-format '%n %v' "${package}" 2>&1)"; then
         printf 'resolvable %s\n%s\n' "${package}" "${resolution}" >>"${report}"
+    elif [[ "${package}" == asus-proart-p14-speaker-firmware ]] &&
+        grep -Fxq "error: target not found: ${package}" <<<"${resolution}" &&
+        [[ "$(pacman-conf --config "${config}" Architecture)" == x86_64 ]]; then
+        # Upstream renamed this N1x-only payload to asus-proart-p14-audio,
+        # arch=('aarch64'), with provides/replaces for the old name. Do not
+        # claim it resolves in the x86_64 universe or install ARM firmware.
+        printf 'not-applicable-architecture %s target=x86_64 package=aarch64 evidence=https://github.com/omacom/omarchy-pkgs/blob/b8130965da4c88f94a836d2f647517466e90201e/pkgbuilds/asus-proart-p14-audio/PKGBUILD\n' \
+            "${package}" >>"${report}"
     elif [[ "${package}" == apple-bcm-firmware ]] &&
         grep -Fxq 'error: target not found: apple-bcm-firmware' <<<"${resolution}"; then
         if archived="$(resolve_archived_apple_firmware "${config}" "${sources}" "${workdir}" 2>&1)"; then
