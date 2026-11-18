@@ -15,7 +15,7 @@ if ! id omarchy >/dev/null 2>&1; then
 fi
 
 printf 'omarchy:omarchy\n' | chpasswd
-install -d -m 0755 /etc/sudoers.d
+install -d -m 0750 /etc/sudoers.d
 cat >/etc/sudoers.d/90-omarchy-acceptance <<'EOF'
 omarchy ALL=(ALL:ALL) NOPASSWD: ALL
 EOF

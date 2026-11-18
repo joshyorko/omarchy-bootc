@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - feat/quattro-daily-driver
   workflow_dispatch:
 
 concurrency:

@@ -206,7 +206,7 @@ QML
         mv "$HOME/.local/bin/omp" "$ARTIFACTS/omp-original"
     fi
 # This cleanup function is called indirectly by the EXIT trap.
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
     restore_omp() {
         rm -f "$HOME/.local/bin/omp"
         if [[ -e "$ARTIFACTS/omp-original" || -L "$ARTIFACTS/omp-original" ]]; then

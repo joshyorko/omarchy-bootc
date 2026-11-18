@@ -155,7 +155,7 @@ RUN pacman -Sy --noconfirm \
 RUN getent group wheel >/dev/null || groupadd wheel
 
 # Product updates elevate through sudo; only disposable acceptance uses NOPASSWD.
-RUN install -d -m 0755 /etc/sudoers.d && \
+RUN install -d -m 0750 /etc/sudoers.d && \
     printf '%s\n' '%wheel ALL=(ALL:ALL) PASSWD: ALL' \
         > /etc/sudoers.d/10-omarchy-wheel && \
     chmod 0440 /etc/sudoers.d/10-omarchy-wheel && \

@@ -372,10 +372,10 @@ verify_optional_resolution_report "${fixture_dir}/optional-resolution" \
 # A corrupt archived payload must never reach the native package resolver.
 (
 # These fixture functions are called indirectly by the resolver.
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
     curl() { printf 'corrupt archive\n' >"${@: -1}"; }
 # This fixture function is called indirectly by the resolver.
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
     pacman() { touch "${fixture_dir}/unexpected-archive-resolution"; }
     if resolve_archived_apple_firmware "${OPTIONAL_REPOSITORY_CONFIG}" \
         "${ROOT_DIR}/sources" "${fixture_dir}/archives" 2>"${fixture_dir}/archive-error"; then

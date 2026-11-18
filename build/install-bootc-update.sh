@@ -23,7 +23,7 @@ install -m 0755 "$ctx/omarchy-bootc-finalize" /usr/libexec/omarchy-bootc-finaliz
 install -m 0755 "$ctx/omarchy-bootc-status" /usr/libexec/omarchy-bootc-status
 install -m 0755 "$ctx/omarchy-bootc-clear-transaction" /usr/libexec/omarchy-bootc-clear-transaction
 install -m 0755 "$ctx/omarchy-bootc-check" /usr/libexec/omarchy-bootc-check
-install -d -m 0755 /etc/sudoers.d
+install -d -m 0750 /etc/sudoers.d
 printf '%s\n' \
     '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-check ""' \
     '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-status ""' \
