@@ -163,7 +163,6 @@ jobs:
       contents: read
       actions: read
     env:
-      CI_ARTIFACT_DIR: ${{ runner.temp }}/runtime-receipts
       CANDIDATE_SOURCE_HEAD: ${{ inputs.candidate_source_head || github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact pull request head
@@ -173,6 +172,7 @@ jobs:
       - name: Validate harness and reused candidate source
         run: |
           set -euo pipefail
+          echo "CI_ARTIFACT_DIR=${RUNNER_TEMP}/runtime-receipts" >> "$GITHUB_ENV"
           git fetch --depth=1 origin "$CANDIDATE_SOURCE_HEAD"
           bash scripts/ci/verify-candidate-reuse.sh "$CANDIDATE_SOURCE_HEAD" HEAD
           bash tests/test-candidate-reuse.sh
