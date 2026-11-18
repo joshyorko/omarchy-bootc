@@ -65,7 +65,7 @@ vm_env=(
   "UPSTREAM_ACCEPTANCE_DIR=${upstream_tests}"
 )
 env "${vm_env[@]}" \
-    timeout --signal=TERM --kill-after=30s 90m \
+    timeout --signal=TERM --kill-after=30s 150m \
     bash scripts/ci/vm-smoke.sh "${overlay}" \
     2>&1 | tee "${artifact_dir}/vm-smoke.log"
 

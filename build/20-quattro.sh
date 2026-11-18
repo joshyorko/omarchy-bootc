@@ -7,8 +7,8 @@ trap 'status=$?; printf "Quattro assembly failed (status %s, phase %s, line %s):
 # shellcheck disable=SC1091
 source /ctx/build/lib/quattro-packages.sh
 
-OMARCHY_VERSION="${OMARCHY_VERSION:-4.0.4-1}"
-OMARCHY_QUATTRO_REVISION="${OMARCHY_QUATTRO_REVISION:-c668141e9c42b13c80c9ca4ea108e11708c5e8a5}"
+OMARCHY_VERSION="${OMARCHY_VERSION:-4.5.0-3}"
+OMARCHY_QUATTRO_REVISION="${OMARCHY_QUATTRO_REVISION:-ac2690cd7be4f47e4a255f5e2e78d904d436b068}"
 OMARCHY_SOURCE="/ctx/sources/omarchy-quattro.source"
 OMARCHY_REVISION_FILE="/ctx/sources/omarchy-quattro.revision"
 OMARCHY_VERSION_FILE="/ctx/sources/omarchy-quattro-version"

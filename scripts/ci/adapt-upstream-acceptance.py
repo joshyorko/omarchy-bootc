@@ -7,18 +7,22 @@ import hashlib
 import json
 from pathlib import Path
 
-REVISION = "c668141e9c42b13c80c9ca4ea108e11708c5e8a5"
+REVISION = "ac2690cd7be4f47e4a255f5e2e78d904d436b068"
 # Full-suite guards deliberately require review on ANY upstream acceptance drift.
 UPSTREAM_SHA256 = {
     "test/acceptance": "08773f0771e24d72687941063d4968de10a16ef81a22b554c46b785420d2fd86",
     "test/acceptance.d/apps-test.sh": "f2b4250a9f4e4d47cc08a449b8e89de8f9942a5bad54607a2159f8f53ab637ad",
-    "test/acceptance.d/base-test.sh": "c74718f9ac4e322a53f172db91a5a09a7cfa615ce2c08b7c6e9e9a2c7f6f7ef8",
+    "test/acceptance.d/base-test.sh": "66177a7ba966eb6a552fb76f3e600442ff07988757d7db5a12c193b945679aaa",
     "test/acceptance.d/cups-test.sh": "98cc07d62d8720c2c5b0990f192fac654b96a0bc4d22d003901e62f3b452a184",
-    "test/acceptance.d/menu-test.sh": "8a181890b195de41a7830adc5ceeb23bc8863fc18cd7ff73be7fc7dcdabef98d",
+    "test/acceptance.d/input-method-notifications.py": "d715f84284c594396eceb1f7c4a02ebbb2e730fbbaede11375d33297d67a3c9a",
+    "test/acceptance.d/input-method-state.py": "19510ad3263efdaea02c9b7a6a2a6ea266e3ad8fd2368187714d9d22ff39a0c6",
+    "test/acceptance.d/input-methods-test.sh": "4bd143706dc5db76c310ad8e03979adc235c67b9fd8e72c3d57c2bc3377b3734",
+    "test/acceptance.d/menu-test.sh": "90113adc1702ed96d7af22b1a290388c3a9f79566bab7f86f394fa96157cc225",
+    "test/acceptance.d/overlay-monitor-test.sh": "bfc109915e7de1ce3428cb724a301105c4f1b3a5f465a38312ba55f9a014e26f",
     "test/acceptance.d/panels-test.sh": "1bc77bebb339a01a5c9fbacdba2e27bba1a3722b2855c051440baeafe17acc94",
     "test/acceptance.d/security-test.sh": "f1a899620c84ce45e39fc5860fbddbd26dec34e9c35c29e3518fe83f478c9400",
     "test/acceptance.d/session-test.sh": "f04af8cf2cd6e77ec8192b9eb16c8ef08967096cef1723a8e906a2cabbec4b5e",
-    "test/acceptance.d/shell-surfaces-test.sh": "3d6f95297057fe7cbe7786fa073760d2d9e7a27006674fc800128b6b5717f4aa",
+    "test/acceptance.d/shell-surfaces-test.sh": "2d7fb57ae0b5682473ecb7c1420cfde08c1d5f622993d093671ebd00715f1b97",
     "test/acceptance.d/system-test.sh": "ba02d03388c9084de57f7e7d55f666041fba16cc6c8847ab93328ed9c77965b1",
 }
 HELPER_PATH = "test/acceptance.d/bootc-acceptance-helper.sh"

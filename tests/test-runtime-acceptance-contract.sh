@@ -96,7 +96,9 @@ export PATH="${fixture}/bin:${PATH}"
 # shellcheck disable=SC1090
 source "${HELPER}"
 run_guest() {
-    if [[ "$*" == *'timeout 20m bash'* ]]; then
+    # Match the literal guest command, preserving its remote HOME expansion.
+    # shellcheck disable=SC2016
+    if [[ "$*" == *'bash "$HOME/upstream-acceptance/test/acceptance"'* ]]; then
         printf 'acceptance fixture status %s\n' "${FAKE_ACCEPTANCE_STATUS}"
         return "${FAKE_ACCEPTANCE_STATUS}"
     fi

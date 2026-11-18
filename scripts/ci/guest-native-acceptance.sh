@@ -19,7 +19,7 @@ fail() {
 }
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "required command is missing: $1"; }
-for command_name in jq git pacman sha256sum stat journalctl hyprctl omarchy omarchy-shell quickshell qs inotifywait busctl; do
+for command_name in jq git pacman sha256sum stat journalctl hyprctl omarchy omarchy-shell quickshell qs inotifywait busctl grim foot setsid; do
     require_cmd "$command_name"
 done
 
@@ -110,6 +110,23 @@ snapshot_omp_state() {
             find "$dir" -type f -print0 | sort -z | xargs -0 -r sha256sum
         fi
     done
+}
+
+capture_native_screen() {
+    local deadline=$((SECONDS + 30)) address
+    setsid -f foot --app-id=org.omarchy.bootc-evidence --title='Omarchy bootc acceptance' \
+        bash -c 'omarchy-version; pacman -Q omarchy omarchy-settings; sudo -n bootc status --format=json; omarchy default agent; omarchy plugin list --json; sleep 60' \
+        >"$ARTIFACTS/visual-terminal.log" 2>&1
+    while ((SECONDS < deadline)); do
+        address=$(hyprctl -j clients | jq -r '.[] | select(.class == "org.omarchy.bootc-evidence") | .address' | head -1)
+        [[ -z $address ]] || break
+        sleep 1
+    done
+    [[ -n $address ]] || fail 'evidence terminal did not open'
+    sleep 1
+    grim "$ARTIFACTS/$phase-version-plugins-omp.png" || fail 'native PNG capture failed'
+    hyprctl dispatch "hl.dsp.window.close({ window = \"address:$address\" })" >/dev/null 2>&1 ||
+        hyprctl dispatch closewindow "address:$address" >/dev/null
 }
 
 verify_skills() {
@@ -238,6 +255,7 @@ STUB
     cmp -s "$ARTIFACTS/omp-state.before" "$ARTIFACTS/omp-state.after" || fail "agent selection changed OMP credential/config state"
     verify_skills
     compare_package_files
+    capture_native_screen
     echo "ok - native prepare passed; owner must reboot and invoke verify"
     exit 0
 fi
@@ -261,4 +279,5 @@ omarchy-shell shell ping >/dev/null || fail "native Quickshell IPC is not reacha
 [[ $(omarchy default agent) == omp ]] || fail "OMP selection did not survive reboot"
 verify_skills
 compare_package_files
+capture_native_screen
 echo "ok - native verify passed; clock clone and package-owned hashes/owners persisted"

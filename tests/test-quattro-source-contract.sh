@@ -123,9 +123,9 @@ grep -Fq 'stable-mirror.omarchy.org/$repo/os/$arch' "${REPOSITORY_CONFIG}" \
 
 # This source-contract needle is literal shell syntax.
 # shellcheck disable=SC2016
-grep -Fq 'OMARCHY_VERSION="${OMARCHY_VERSION:-4.0.4-1}"' "${QUATTRO_BUILD}" \
-    || fail 'official Omarchy package version is not pinned to current 4.0.4-1'
-grep -Fq 'c668141e9c42b13c80c9ca4ea108e11708c5e8a5' "${QUATTRO_BUILD}" \
+grep -Fq 'OMARCHY_VERSION="${OMARCHY_VERSION:-4.5.0-3}"' "${QUATTRO_BUILD}" \
+    || fail 'official Omarchy package version is not pinned to current 4.5.0-3'
+grep -Fq 'ac2690cd7be4f47e4a255f5e2e78d904d436b068' "${QUATTRO_BUILD}" \
     || fail 'current Omarchy Quattro source revision is not recorded'
 grep -Fq '/usr/share/omarchy/install/omarchy-base.packages' "${QUATTRO_BUILD}" \
     || fail 'Quattro base package manifest is not consumed from the official package'
@@ -243,11 +243,11 @@ for source_file in \
     sources/omarchy-iso-quattro.revision; do
     [[ -f "${ROOT_DIR}/${source_file}" ]] || fail "source record missing: ${source_file}"
 done
-[[ "$(<"${ROOT_DIR}/sources/omarchy-quattro.revision")" == 'c668141e9c42b13c80c9ca4ea108e11708c5e8a5' ]] ||
-    fail 'Omarchy source record is not the v4.0.4 release commit'
-[[ "$(<"${ROOT_DIR}/sources/omarchy-iso-quattro.revision")" == '86c07785cb0f63be78edb1349843d5817b5c0e66' ]] ||
+[[ "$(<"${ROOT_DIR}/sources/omarchy-quattro.revision")" == 'ac2690cd7be4f47e4a255f5e2e78d904d436b068' ]] ||
+    fail 'Omarchy source record is not the v4.5.0 release commit'
+[[ "$(<"${ROOT_DIR}/sources/omarchy-iso-quattro.revision")" == '2d0b3ecdec2dd40c82cb8c3d6034b2ac5ab3ae92' ]] ||
     fail 'Omarchy ISO Quattro reference does not match the live upstream pin'
-[[ "$(<"${ROOT_DIR}/sources/omarchy-quattro-version")" == '4.0.4-1' ]] \
+[[ "$(<"${ROOT_DIR}/sources/omarchy-quattro-version")" == '4.5.0-3' ]] \
     || fail 'frozen Omarchy package version does not match the published stable release'
 [[ "$(<"${ROOT_DIR}/sources/omarchy-package-signing-key.fingerprint")" == '40DFB630FF42BCFFB047046CF0134EE680CAC571' ]] \
     || fail 'Omarchy signing key fingerprint changed'

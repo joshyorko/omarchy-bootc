@@ -18,7 +18,7 @@ run_upstream_acceptance() {
     if ! run_guest 'mkdir -p "$HOME/upstream-acceptance/test"; cp -a "$HOME/upstream-acceptance-test/." "$HOME/upstream-acceptance/test/"'; then
         return 1
     fi
-    if ! run_guest 'env OMARCHY_ACCEPTANCE_DIR="$HOME/acceptance-receipts/upstream" OMARCHY_ACCEPTANCE_TEST_TIMEOUT=120 timeout 20m bash "$HOME/upstream-acceptance/test/acceptance"' \
+    if ! run_guest 'env OMARCHY_ACCEPTANCE_DIR="$HOME/acceptance-receipts/upstream" OMARCHY_ACCEPTANCE_TEST_TIMEOUT=420 timeout 90m bash "$HOME/upstream-acceptance/test/acceptance"' \
         2>&1 | tee "${artifact_dir}/upstream-acceptance.log"; then
         acceptance_status=1
     fi

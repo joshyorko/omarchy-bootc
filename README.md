@@ -17,8 +17,8 @@ The build never inherits Bootcrew's published rolling image and never downgrades
 - Disposable Arch bootstrap tool: `docker.io/archlinux/archlinux:latest@sha256:0de35fe2ee793494ccfc99b202f6b30215b078baf2b082e9ccb027840c534fc1`
 - Bootcrew mono: `5f048fa65a94daefc814d3cdd941d8d1e113c09e`
 - bootc source: `fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60`
-- Omarchy Quattro `4.0.4-1`: `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`
-- Omarchy ISO Quattro reference: `86c07785cb0f63be78edb1349843d5817b5c0e66`
+- Omarchy Quattro `4.5.0-3`: `ac2690cd7be4f47e4a255f5e2e78d904d436b068`
+- Omarchy ISO Quattro reference: `2d0b3ecdec2dd40c82cb8c3d6034b2ac5ab3ae92`
 
 The source files under `sources/` are copied into the image provenance. A scheduled/manual tracker compares the pinned Omarchy Quattro revision with the live canonical `quattro` ref and opens one advisory issue; it never repins or publishes an image automatically.
 
@@ -107,3 +107,16 @@ The graphical Omarchy session keeps its upstream `/usr/share/omarchy/bin`
 precedence; the image projects `omarchy`, `omarchy-update`, and
 `omarchy-update-available` through bootc wrappers at that dispatch boundary,
 leaving the package-owned `/usr/bin` implementations unchanged.
+
+### Update visibility
+
+An OS image update is staged until one reboot boots the new image, kernel and
+base OS; per-user finalization follows that boot. Flatpaks, user-owned tools,
+Omarchy themes/plugin configuration and devcontainers can update live through
+their own mechanisms without an OS reboot. The image-owned root stays immutable;
+there is no live host `pacman -Syu` update path.
+
+Runtime artifacts must show the actual bootc guest, with exact digests/status
+JSON and PNGs from first boot, desktop, plugin/OMP and A→B→A acceptance.
+Installer visuals and disposable Dakota round-trip evidence are separate gates;
+upstream ISO/qcow2 images are comparison baselines only.
