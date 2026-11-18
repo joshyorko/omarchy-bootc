@@ -24,9 +24,9 @@ if [[ -e "$output/disk.qcow2" || -e "$output/source.oci.tar" ]]; then
     exit 1
 fi
 work="$(mktemp -d "$output/.install.XXXXXXXX")"
-docker_tag=
+docker_import=
 cleanup() {
-    if [[ -n "$docker_tag" ]]; then docker image rm "$docker_tag" >/dev/null || true; fi
+    if [[ -n "$docker_import" ]]; then docker image rm "$docker_import" >/dev/null || true; fi
     rm -rf -- "$work"
 }
 trap cleanup EXIT
@@ -47,25 +47,25 @@ jq -e --arg id "$image_id" '.config.digest == $id' "$work/manifest.json" >/dev/n
 # The runtime image only supplies the installer executable. Bootc always
 # deploys the exact, separately verified OCI archive mounted read-only.
 if [[ "$engine" == docker ]]; then
-    tag="localhost/omarchy-bootc-install:${work##*.install.}"
-    if docker image inspect "$tag" >/dev/null 2>&1; then
-        echo "Docker installer tag already exists: $tag" >&2
-        exit 1
+    # Docker's containerd store identifies imported OCI images by manifest.
+    install_id="$manifest_digest"
+    if ! docker image inspect "$install_id" >/dev/null 2>&1; then
+        docker_import="$install_id"
+        docker load --input "$work/source.oci.tar"
     fi
-    docker_tag="$tag"
-    skopeo copy "oci-archive:$work/source.oci.tar" "docker-daemon:$docker_tag"
 else
+    install_id="$image_id"
     "${installer[@]}" load --input "$work/source.oci.tar"
 fi
-loaded_id="$("${installer[@]}" image inspect --format '{{.Id}}' "${docker_tag:-$image_id}")"
-[[ "sha256:${loaded_id#sha256:}" == "$image_id" ]]
+loaded_id="$("${installer[@]}" image inspect --format '{{.Id}}' "$install_id")"
+[[ "sha256:${loaded_id#sha256:}" == "$install_id" ]]
 
 truncate -s "$size" "$work/disk.raw"
 "${installer[@]}" run --rm --privileged --pull=never \
     --security-opt label=disable \
     --mount "type=bind,source=$work/source.oci.tar,target=/input.oci.tar,readonly" \
     --mount "type=bind,source=$work/disk.raw,target=/disk.raw" \
-    "$image_id" bootc install to-disk --source-imgref oci-archive:/input.oci.tar \
+    "$install_id" bootc install to-disk --source-imgref oci-archive:/input.oci.tar \
     --composefs-backend --via-loopback --filesystem "$filesystem" --wipe --bootloader systemd /disk.raw \
     2>&1 | tee "$output/bootc-install.log"
 qemu-img convert -f raw -O qcow2 "$work/disk.raw" "$work/disk.qcow2"

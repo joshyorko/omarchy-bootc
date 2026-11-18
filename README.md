@@ -81,14 +81,14 @@ The recipe retains earlier ISO outputs.
 
 ```bash
 just build-iso-local testing "ghcr.io/joshyorko/omarchy-bootc@sha256:${ACCEPTED_DIGEST}" "$ACCEPTED_SOURCE_SHA"
-OMARCHY_VM_DISPLAY=gtk just run-installer-iso output/iso/build.EXAMPLE/installer.iso
+OMARCHY_VM_DRIVER=native OMARCHY_VM_DISPLAY=gtk just run-installer-iso output/iso/build.EXAMPLE/installer.iso
 ```
 
-The ISO run prints a QMP path for installer captures and records the ISO
+The native ISO run prints a QMP path for installer captures and records the ISO
 checksum. It creates a fresh QCOW2 for installation and preserves that disk
 across guest reboot. The same path can be opened with the native runner after
-the first session ends. Set `OMARCHY_VM_DRIVER=qemux` to choose the alternate
-browser UI on KVM hosts. For Quattro installer parity, use the separate Dudley
+the first session ends. The default ISO launcher uses the qemux browser UI
+on KVM hosts. For Quattro installer parity, use the separate Dudley
 ISO workflow and its signed-image gate. A locally built unsigned OCI can be
 used for direct disk tests.
 

@@ -29,7 +29,7 @@ help:
     echo "  - dagger-develop regenerates the Go SDK files for the Dagger module."
     echo "  - validate-dagger runs repo syntax checks inside the Dagger pipeline."
     echo "  - build-iso-local builds installer media through the Dagger pipeline."
-    echo "  - run-installer-iso boots disposable media with native QEMU. Set OMARCHY_VM_DRIVER=qemux for the KVM browser UI."
+    echo "  - run-installer-iso uses the KVM browser UI when available. Set OMARCHY_VM_DRIVER=native for QMP capture."
     echo "  - Native QEMU selects KVM when accessible, otherwise TCG. Use capture-vm-screen for PNGs."
     echo "  - validate checks tool availability and required repo files before long builds."
 
@@ -446,7 +446,7 @@ run-installer-iso iso_path="" ram="4G" disk_size="32G":
     fi
     iso_file="$(realpath "${iso_file}")"
 
-    if [[ "${OMARCHY_VM_DRIVER:-native}" != qemux || ! -c /dev/kvm || ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+    if [[ "${OMARCHY_VM_DRIVER:-qemux}" != qemux || ! -c /dev/kvm || ! -r /dev/kvm || ! -w /dev/kvm ]]; then
         exec bash scripts/ci/local-qemu.sh iso "$iso_file" "{{ ram }}" "{{ disk_size }}"
     fi
 
