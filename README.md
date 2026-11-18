@@ -43,34 +43,54 @@ docs/transition-contract.md          cross-distro switch and mutable-state contr
 
 Run repository-native checks on the Bluefin host; the image build itself runs in Podman and does not layer development packages onto the host.
 
-Required tools for the local paths include `podman`, `just`, and `jq`; `machinectl`, `dagger`, `sudo`, `qemu-img`, and `/dev/kvm` are needed only for their respective disk-image, installer, or VM paths.
-
-Run `just validate` before a build. Run `just test-contract` and `just test-transition` for the source and transition contracts. Run `just validate-dagger` when Dagger validation is requested.
-
-For local installer testing, keep the disk-image and installer flows separate. After Dagger SDK setup, run:
+Build and install a local image from a clean checkout of the desired commit:
 
 ```bash
-just dagger-develop
-just build-iso-local
-just run-installer-iso
-```
-
-```bash
-just test-contract
-just test-transition
 just validate
-just lint
-just build
+just build localhost/omarchy-bootc quattro-local
+just build-qcow2 localhost/omarchy-bootc quattro-local
+just run-vm-qcow2 localhost/omarchy-bootc quattro-local
 ```
 
-For the legacy direct disk-image path:
+The QCOW2 recipe reuses the local image and retains the exact OCI archive,
+source SHA, manifest digest, archive checksum, and install log under
+`output/qcow2/`. Set `OMARCHY_LOCAL_DISK_DIR` to a fresh directory for another
+build. Set the same value when launching that disk. Disk creation needs
+noninteractive rootful Podman or an already accessible local Docker daemon
+with `OMARCHY_DISK_INSTALL_ENGINE=docker`. Only the disposable disk file is
+writable by the installer container. QEMU snapshots protect the input disk.
+
+The default local launcher uses KVM when accessible and falls back to TCG.
+`OMARCHY_VM_ACCEL=tcg` forces emulation. Use `OMARCHY_VM_DISPLAY=gtk` for
+a local window, or the default private VNC socket in the guest artifact
+directory. While the VM is running, use the paths printed at startup:
 
 ```bash
-just build-qcow2
-just run-vm
+just capture-vm-screen output/local-vm/vm.EXAMPLE/qmp.sock output/local-vm/sddm.png
+just capture-vm-screen output/local-vm/vm.EXAMPLE/qmp.sock output/local-vm/desktop.png
 ```
 
-`just validate` reports whether KVM is available. Software emulation is possible but is not equivalent evidence for final desktop acceptance.
+A direct disk built from the final image has no fixture account. Use the
+disposable acceptance overlay or an installer that provisions a user for the
+graphical acceptance steps.
+
+The separate Dagger ISO recipe uses the legacy Anaconda builder. Supply an
+accepted, signed immutable image reference and matching source SHA. Set
+`OMARCHY_DAGGER_RUNNER` to a resource-limited Dagger launcher on Dakota.
+The recipe retains earlier ISO outputs.
+
+```bash
+just build-iso-local testing "ghcr.io/joshyorko/omarchy-bootc@sha256:${ACCEPTED_DIGEST}" "$ACCEPTED_SOURCE_SHA"
+OMARCHY_VM_DISPLAY=gtk just run-installer-iso output/iso/build.EXAMPLE/installer.iso
+```
+
+The ISO run prints a QMP path for installer captures and records the ISO
+checksum. It creates a fresh QCOW2 for installation and preserves that disk
+across guest reboot. The same path can be opened with the native runner after
+the first session ends. Set `OMARCHY_VM_DRIVER=qemux` to choose the alternate
+browser UI on KVM hosts. For Quattro installer parity, use the separate Dudley
+ISO workflow and its signed-image gate. A locally built unsigned OCI can be
+used for direct disk tests.
 
 ## Publishable and acceptance images
 

@@ -29,8 +29,8 @@ help:
     echo "  - dagger-develop regenerates the Go SDK files for the Dagger module."
     echo "  - validate-dagger runs repo syntax checks inside the Dagger pipeline."
     echo "  - build-iso-local builds installer media through the Dagger pipeline."
-    echo "  - run-installer-iso boots output/*.iso through the same browser VM UI as run-vm."
-    echo "  - run-vm-* requires /dev/kvm and a local container runtime capable of --privileged."
+    echo "  - run-installer-iso boots disposable media with native QEMU. Set OMARCHY_VM_DRIVER=qemux for the KVM browser UI."
+    echo "  - Native QEMU selects KVM when accessible, otherwise TCG. Use capture-vm-screen for PNGs."
     echo "  - validate checks tool availability and required repo files before long builds."
 
 # ── Syntax helpers ────────────────────────────────────────────────────────────
@@ -157,7 +157,7 @@ validate:
     done
 
     if [[ ! -e /dev/kvm ]]; then
-        echo "WARN: /dev/kvm not present. VM run recipes will be slow or may fail."
+        echo "WARN: /dev/kvm not present. Native QEMU uses software emulation."
     fi
 
     echo "Validation complete."
@@ -249,8 +249,10 @@ build $target_image=local_image $tag=default_tag: validate
     set -eoux pipefail
 
     BUILD_ARGS=()
-    if [[ -z "$(git status -s)" ]]; then
-        BUILD_ARGS+=("--build-arg" "SHA_HEAD_SHORT=$(git rev-parse --short HEAD)")
+    if [[ -z "$(git status --porcelain)" ]]; then
+        head="$(git rev-parse HEAD)"
+        BUILD_ARGS+=("--build-arg" "SHA_HEAD_SHORT=${head:0:7}")
+        BUILD_ARGS+=("--label" "org.opencontainers.image.revision=$head")
     fi
 
     podman build \
@@ -341,42 +343,16 @@ _rebuild-bib $target_image $tag $type $config: (build target_image tag) && (_bui
 
 # Build a qcow2 VM image via bootc install-to-disk (default)
 [group('Build Virtual Machine Image')]
-build-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="20G": validate && (build target_image tag)
+build-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="32G": validate
     #!/usr/bin/env bash
     set -euo pipefail
 
-    just _rootful_load_image "{{ target_image }}" "{{ tag }}"
-    source_oci_dir="output/source-oci"
-    source_imgref="oci:/data/${source_oci_dir}"
-    just _export_bootc_source_oci "{{ target_image }}" "{{ tag }}" "${source_oci_dir}"
-
-    raw_path="output/raw/disk.raw"
-    mkdir -p "$(dirname "${raw_path}")"
-    if [[ ! -f "${raw_path}" ]]; then
-        if command -v fallocate >/dev/null 2>&1; then
-            fallocate -l "{{ size }}" "${raw_path}"
-        else
-            truncate -s "{{ size }}" "${raw_path}"
-        fi
+    if ! podman image exists "${target_image}:${tag}"; then
+        # An unavailable store must not look like a missing image.
+        podman info >/dev/null
+        just build "${target_image}" "${tag}"
     fi
-
-    sudo podman run \
-        --rm --privileged --pid=host \
-        --pull=newer \
-        -v /dev:/dev \
-        -v /var/lib/containers:/var/lib/containers \
-        -v /etc/containers:/etc/containers \
-        -v "$(pwd):/data" \
-        "{{ target_image }}:{{ tag }}" \
-        bootc install to-disk --source-imgref "${source_imgref}" --composefs-backend --via-loopback --filesystem "{{ filesystem }}" --wipe --bootloader systemd "/data/${raw_path}"
-
-    if ! command -v qemu-img >/dev/null 2>&1; then
-        echo "ERROR: qemu-img not found; install qemu-img or use build-raw. Raw image available at ${raw_path}."
-        exit 1
-    fi
-
-    mkdir -p output/qcow2
-    qemu-img convert -O qcow2 "${raw_path}" output/qcow2/disk.qcow2
+    bash scripts/ci/local-install-disk.sh "${target_image}:${tag}" "{{ filesystem }}" "{{ size }}"
 
 # Build a raw VM image via bootc install-to-disk
 [group('Build Virtual Machine Image')]
@@ -411,7 +387,7 @@ build-raw $target_image=local_image $tag=default_tag size="20G": validate && (bu
 
 # Rebuild (OCI + qcow2) in one step using bootc install-to-disk
 [group('Build Virtual Machine Image')]
-rebuild-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="20G": validate
+rebuild-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="32G": (build target_image tag)
     #!/usr/bin/env bash
     set -euo pipefail
     just build-qcow2 "{{ target_image }}" "{{ tag }}" "{{ filesystem }}" "{{ size }}"
@@ -431,40 +407,48 @@ rebuild-qcow2-bib $target_image=local_image $tag=default_tag: validate && (_rebu
 
 # Build the installer ISO locally through Dagger.
 [group('Installer ISO')]
-build-iso-local $tag=default_tag $install_image_ref="":
+build-iso-local $tag=default_tag $install_image_ref="" $install_source_sha="":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if ! command -v dagger >/dev/null 2>&1; then
-        echo "ERROR: dagger is required for local ISO builds."
-        echo "Install it, then retry: just build-iso-local {{ tag }}"
+    if [[ ! "$install_image_ref" =~ ^ghcr\.io/joshyorko/omarchy-bootc@sha256:[a-f0-9]{64}$ || ! "$install_source_sha" =~ ^[a-f0-9]{40}$ ]]; then
+        echo "Usage: just build-iso-local TAG ghcr.io/joshyorko/omarchy-bootc@sha256:DIGEST SOURCE_SHA" >&2
+        echo "Use a signed accepted image and its source SHA. Local unsigned OCI is not a release ISO input." >&2
         exit 1
     fi
-
-    rm -rf output/iso
-    dagger call build-iso \
-        --image-tag "{{ tag }}" \
-        --install-image-ref "{{ install_image_ref }}" \
-        export --path=output/iso
+    bash scripts/ci/verify-published-image-trust.sh "$install_image_ref" "$install_source_sha"
+    runner="${OMARCHY_DAGGER_RUNNER:-dagger}"
+    command -v "$runner" >/dev/null || { echo "Dagger runner unavailable: $runner" >&2; exit 1; }
+    mkdir -p output/iso
+    destination="$(mktemp -d output/iso/build.XXXXXXXX)"
+    "$runner" call build-iso \
+        --image-tag "$tag" \
+        --install-image-ref "$install_image_ref" \
+        export --path="$destination"
+    printf 'Installer artifacts: %s\n' "$destination"
 
 # Run an installer ISO locally through the qemux/qemu browser VM UI.
 [group('Installer ISO')]
-run-installer-iso iso_path="" ram="8G" disk_size="64G":
+run-installer-iso iso_path="" ram="4G" disk_size="32G":
     #!/usr/bin/env bash
     set -euo pipefail
 
     iso_file="{{ iso_path }}"
     if [[ -z "${iso_file}" ]]; then
-        iso_file="$(find output -maxdepth 2 -type f -name '*.iso' | sort | tail -n 1)"
+        iso_file="$(find output -maxdepth 3 -type f -name '*.iso' | sort | tail -n 1)"
     fi
 
     if [[ -z "${iso_file}" || ! -f "${iso_file}" ]]; then
         echo "ERROR: installer ISO not found."
-        echo "Build one first with: just build-iso-local"
+        echo "Build one first with: just build-iso-local TAG IMAGE@DIGEST SOURCE_SHA"
         echo "Or pass a path: just run-installer-iso path/to/installer.iso"
         exit 1
     fi
     iso_file="$(realpath "${iso_file}")"
+
+    if [[ "${OMARCHY_VM_DRIVER:-native}" != qemux || ! -c /dev/kvm || ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+        exec bash scripts/ci/local-qemu.sh iso "$iso_file" "{{ ram }}" "{{ disk_size }}"
+    fi
 
     if ! command -v ss >/dev/null 2>&1; then
         echo "ERROR: 'ss' command not found (install iproute2)."
@@ -503,47 +487,28 @@ _run-vm $target_image $tag $type $config:
     #!/usr/bin/bash
     set -eoux pipefail
 
-    image_file="output/${type}/disk.${type}"
+    image_dir="output/${type}"
+    if [[ "${type}" == qcow2 ]]; then image_dir="${OMARCHY_LOCAL_DISK_DIR:-$image_dir}"; fi
+    image_file="$image_dir/disk.${type}"
 
     if [[ ! -f "${image_file}" ]]; then
         just "build-${type}" "${target_image}" "${tag}"
     fi
 
-    if ! command -v ss >/dev/null 2>&1; then
-        echo "ERROR: 'ss' command not found (install iproute2)."
-        exit 1
-    fi
+    exec bash scripts/ci/local-qemu.sh "{{ type }}" "$image_file"
 
-    port=8006
-    while grep -q ":${port}" <<< "$(ss -tunalp)"; do
-        port=$(( port + 1 ))
-    done
-    echo "Using port: ${port}"
-    echo "Connect to: http://localhost:${port}"
-
-    run_args=(
-        --rm --privileged
-        --pull=newer
-        --publish "127.0.0.1:${port}:8006"
-        --env "CPU_CORES=4"
-        --env "RAM_SIZE=8G"
-        --env "DISK_SIZE=64G"
-        --env "TPM=Y"
-        --env "GPU=Y"
-        --device=/dev/kvm
-        --volume "${PWD}/${image_file}:/boot.${type}"
-    )
-
-    (sleep 30 && xdg-open "http://localhost:${port}") &
-    podman run "${run_args[@]}" docker.io/qemux/qemu
+# Capture the currently visible display of a disposable native QEMU guest.
+[group('Run Virtual Machine')]
+capture-vm-screen qmp png:
+    python3 scripts/ci/capture-vm-screen.py {{ quote(qmp) }} {{ quote(png) }}
 
 # Run the qcow2 VM locally
 [group('Run Virtual Machine')]
-run-vm-qcow2 $target_image=local_image $tag=default_tag: validate && (_run-vm target_image tag "qcow2" "image/disk.toml")
+run-vm-qcow2 $target_image=local_image $tag=default_tag: (_run-vm target_image tag "qcow2" "image/disk.toml")
 
 # Run the raw VM locally
 [group('Run Virtual Machine')]
-run-vm-raw $target_image=local_image $tag=default_tag: validate && (_run-vm target_image tag "raw" "image/disk.toml")
+run-vm-raw $target_image=local_image $tag=default_tag: (_run-vm target_image tag "raw" "image/disk.toml")
 
 # Spawn a VM with systemd-vmspawn (alternative to qemux)
 [group('Run Virtual Machine')]
