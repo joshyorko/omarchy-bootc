@@ -23,17 +23,8 @@ pacman-key --add "${omarchy_key_file}"
 pacman-key --lsign-key "${omarchy_key_fingerprint}"
 pacman -Sy --noconfirm
 expected_version="$(cat /ctx/sources/omarchy-quattro-version)"
-published_version="$(pacman -Sddp --print-format '%v' omarchy)"
-[[ "${published_version}" == "${expected_version}" ]] || {
-    printf 'Expected Omarchy %s, repository has %s\n' "${expected_version}" "${published_version}" >&2
-    exit 1
-}
-mkdir -p /tmp/omarchy-package
-pacman -Swdd --noconfirm --cachedir /tmp/omarchy-package omarchy
-mapfile -t packages < <(find /tmp/omarchy-package -type f ! -name '*.sig')
-[[ ${#packages[@]} == 1 ]]
-sha256sum "${packages[0]}"
-tar -xOf "${packages[0]}" usr/share/omarchy/install/omarchy-other.packages \
+fetch_frozen_quattro_packages /ctx/sources /tmp/omarchy-package
+tar -xOf "/tmp/omarchy-package/omarchy-${expected_version}-x86_64.pkg.tar.zst" usr/share/omarchy/install/omarchy-other.packages \
     >/tmp/omarchy-other.packages
 sha256sum /tmp/omarchy-other.packages
 

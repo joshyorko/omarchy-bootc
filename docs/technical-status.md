@@ -1,6 +1,6 @@
 # Technical status: Omarchy Quattro bootc
 
-_Last updated: 2026-09-28_
+_Last updated: 2026-11-18_
 
 ## Architecture of record
 
@@ -16,6 +16,18 @@ The final image is an Omarchy-stable empty-root build. A digest-pinned current A
 Bootcrew's published Arch image is not the final base and is not package authority. Bootcrew mono commit `5f048fa65a94daefc814d3cdd941d8d1e113c09e` is the source reference for pacman relocation, dracut, composefs, `/usr`/`/var`, tmpfiles, and bootc filesystem construction. Bootc is built from exact commit `fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60`; an unpinned clone is forbidden.
 
 The frozen Omarchy package set is stable `4.0.4-1`, paired with upstream Omarchy tag commit `c668141e9c42b13c80c9ca4ea108e11708c5e8a5` and Omarchy ISO Quattro commit `86c07785cb0f63be78edb1349843d5817b5c0e66`. The moving Omarchy Quattro head is tracked as drift only. Images record exact installed package versions, package repository fields, repository database checksums, and repository configuration. Stable core repositories use the Omarchy stable mirror only; missing packages fail resolution instead of falling through to rolling Arch mirrors. Omarchy packages require signatures from the pinned `40DFB630FF42BCFFB047046CF0134EE680CAC571` key.
+
+Candidate run `44307915565` passed hosted source checks, then stopped before
+foundation because the mutable Omarchy index served `4.5.0-3`. The official
+stable endpoint still retains both x86_64 `4.0.4-1` package archives and their
+signatures. Both signatures were verified with the pinned key before recording
+their hashes in `sources/omarchy-packages.sha256`. Preflight and assembly now
+fetch those exact archives, require both checksums and signatures, and verify
+package name/version/architecture before use. Assembly installs the pair in one
+native pacman transaction. There is no fallback to a newer Omarchy release.
+The wider dependency closure still resolves against live stable databases;
+pinning these two archives does not freeze that closure or prove compatibility
+with its newer libraries. Exact-image and runtime acceptance remain required.
 
 ## Implemented in the current branch
 

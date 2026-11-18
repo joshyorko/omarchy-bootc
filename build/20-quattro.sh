@@ -81,7 +81,12 @@ rm /usr/local
 install -d -m 0755 /usr/local
 
 phase=install-quattro-packages
-pacman -S --noconfirm --needed omarchy-settings omarchy
+fetch_frozen_quattro_packages /ctx/sources /tmp/omarchy-package
+install -D -m 0644 /ctx/sources/omarchy-packages.sha256 \
+    /usr/share/omarchy-bootc/sources/omarchy-packages.sha256
+pacman -U --noconfirm --needed \
+    "/tmp/omarchy-package/omarchy-settings-${OMARCHY_VERSION}-x86_64.pkg.tar.zst" \
+    "/tmp/omarchy-package/omarchy-${OMARCHY_VERSION}-x86_64.pkg.tar.zst"
 
 while IFS= read -r hook_name; do
     [[ -f "${BOOTC_HOOK_DIR}/${hook_name}" ]]
