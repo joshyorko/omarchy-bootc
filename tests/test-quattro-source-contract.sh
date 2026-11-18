@@ -334,6 +334,25 @@ declare -F remove_optional_repository_database >/dev/null \
 
 fixture_dir="$(mktemp -d)"
 trap 'rm -rf "${fixture_dir}"' EXIT
+
+opt_fixture="${fixture_dir}/opt-root"
+install -d "${opt_fixture}/var/opt"
+printf 'shared state\n' >"${opt_fixture}/var/opt/fixture"
+ln -s var/opt "${opt_fixture}/opt"
+materialize_quattro_opt "${opt_fixture}"
+[[ -d "${opt_fixture}/opt" && ! -L "${opt_fixture}/opt" ]]
+[[ "$(cat "${opt_fixture}/var/opt/fixture")" == 'shared state' ]]
+[[ ! -e "${opt_fixture}/opt/fixture" ]]
+if materialize_quattro_opt "${opt_fixture}" 2>/dev/null; then
+    fail 'an existing /opt directory was replaced'
+fi
+rmdir "${opt_fixture}/opt"
+ln -s unexpected "${opt_fixture}/opt"
+if materialize_quattro_opt "${opt_fixture}" 2>/dev/null; then
+    fail 'an unrelated /opt symlink was replaced'
+fi
+[[ "$(readlink "${opt_fixture}/opt")" == unexpected ]]
+
 printf '%s\n' \
     '# upstream comment' \
     '' \

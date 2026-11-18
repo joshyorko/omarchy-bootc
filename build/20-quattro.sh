@@ -105,9 +105,7 @@ mapfile -t other_packages < <(read_quattro_package_manifest "${OMARCHY_OTHER_MAN
 phase=install-base-closure
 # Superwhisper ships a package-owned /opt/superwhisper tree. Keep it in
 # the immutable deployment instead of writing into Bootcrew's mutable /var.
-[[ -L /opt && "$(readlink /opt)" == "var/opt" ]]
-rm /opt
-install -d -m 0755 /opt
+materialize_quattro_opt
 # PulseAudio compatibility is required by the desktop acceptance contract even
 # though upstream lists it alongside optional, mutually exclusive hardware.
 pacman -S --noconfirm --needed "${base_packages[@]}" pipewire-pulse

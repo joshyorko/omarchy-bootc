@@ -38,6 +38,18 @@ read_quattro_package_manifest() {
     ' "${manifest}"
 }
 
+# The Quattro package set ships application payload in /opt. Native composefs
+# keeps that directory with the deployment, while /var is shared across boots.
+materialize_quattro_opt() {
+    local root="${1:-/}" opt
+    opt="${root%/}/opt"
+    if [[ ! -L "$opt" || "$(readlink -- "$opt")" != var/opt ]]; then
+        printf 'Refusing to replace unexpected /opt at %s\n' "$opt" >&2
+        return 1
+    fi
+    rm -- "$opt" && install -d -m 0755 -- "$opt"
+}
+
 resolve_archived_apple_firmware() {
     local config="$1" sources="$2" workdir="$3"
     local url checksum filename metadata
