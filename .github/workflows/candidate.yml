@@ -6,6 +6,15 @@ on:
       - main
       - feat/quattro-daily-driver
   workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: 'Existing candidate workflow run (empty builds a new candidate)'
+        type: string
+        default: ''
+      candidate_source_head:
+        description: 'Full source SHA of the existing candidate (harness-only differences allowed)'
+        type: string
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -14,6 +23,7 @@ concurrency:
 jobs:
   candidate:
     name: Build exact-head candidate
+    if: ${{ !inputs.candidate_run_id }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:
@@ -146,15 +156,29 @@ jobs:
   runtime:
     name: Boot the accepted candidate with a disposable acceptance overlay
     needs: candidate
+    if: ${{ always() && (needs.candidate.result == 'success' || (needs.candidate.result == 'skipped' && inputs.candidate_run_id != '')) }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     permissions:
       contents: read
+      actions: read
+    env:
+      CI_ARTIFACT_DIR: ${{ runner.temp }}/runtime-receipts
+      CANDIDATE_SOURCE_HEAD: ${{ inputs.candidate_source_head || github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact pull request head
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Validate harness and reused candidate source
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CANDIDATE_SOURCE_HEAD"
+          bash scripts/ci/verify-candidate-reuse.sh "$CANDIDATE_SOURCE_HEAD" HEAD
+          bash tests/test-candidate-reuse.sh
+          bash tests/test-runtime-acceptance-contract.sh
+          bash -n scripts/ci/candidate-runtime.sh
+          shellcheck scripts/ci/candidate-runtime.sh scripts/ci/verify-candidate-reuse.sh
       - name: Prepare storage for the archive, imported image, and VM disk
         uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140 # main
         continue-on-error: true
@@ -164,16 +188,46 @@ jobs:
       - name: Download the one built candidate
         uses: actions/download-artifact@v4
         with:
-          name: omarchy-bootc-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          name: omarchy-bootc-candidate-${{ env.CANDIDATE_SOURCE_HEAD }}
+          run-id: ${{ inputs.candidate_run_id || github.run_id }}
+          github-token: ${{ github.token }}
           path: ${{ runner.temp }}/candidate
       - name: Install hosted VM dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ovmf qemu-system-x86 qemu-utils sshpass skopeo
-      - name: Verify artifact identity and boot
-        env:
-          CI_ARTIFACT_DIR: ${{ runner.temp }}/runtime-receipts
-        run: bash scripts/ci/candidate-runtime.sh "$RUNNER_TEMP/candidate"
+      - name: Verify archive identity and import candidate
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          mkdir -p "$CI_ARTIFACT_DIR"
+          df -h > "$CI_ARTIFACT_DIR/host-disk-before.txt"
+          free -h > "$CI_ARTIFACT_DIR/host-memory-before.txt"
+          bash -x scripts/ci/candidate-runtime.sh "$RUNNER_TEMP/candidate" import 2>&1 | tee "$CI_ARTIFACT_DIR/import.log"
+      - name: Retain import evidence before overlay
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-import-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runtime-receipts
+          if-no-files-found: warn
+      - name: Build and check disposable overlay
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          bash -x scripts/ci/candidate-runtime.sh "$RUNNER_TEMP/candidate" overlay 2>&1 | tee "$CI_ARTIFACT_DIR/overlay.log"
+      - name: Retain overlay evidence before VM
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-overlay-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runtime-receipts
+          if-no-files-found: warn
+      - name: Install boot and exercise candidate
+        timeout-minutes: 155
+        run: |
+          set -euo pipefail
+          bash -x scripts/ci/candidate-runtime.sh "$RUNNER_TEMP/candidate" boot 2>&1 | tee "$CI_ARTIFACT_DIR/boot.log"
       - name: Upload runtime receipts
         if: always()
         uses: actions/upload-artifact@v4
