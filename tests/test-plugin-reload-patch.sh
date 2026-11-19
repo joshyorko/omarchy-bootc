@@ -33,5 +33,15 @@ with tempfile.TemporaryDirectory(prefix='plugin-reload-patch-') as tmp:
         result = subprocess.run([sys.executable, script, str(qml), str(receipt)], capture_output=True)
         assert result.returncode != 0 and qml.read_bytes() == drift and not receipt.exists()
         receipt.write_text('fixture')
+    clone = Path(tmp)/'clone.sh'
+    clone.write_text('new_id="${USER:-$(id -un)}.${source_id#omarchy.}"\nprintf "%s" "$new_id"\n')
+    subprocess.run([sys.executable, script, str(clone), str(receipt), 'clone'], check=True)
+    for user, source, expected in [('omarchy', 'omarchy.clock', 'omarchy.local.clock'),
+                                    ('alice', 'omarchy.clock', 'alice.clock'),
+                                    ('omarchy', 'omarchy.audio', 'omarchy.local.audio')]:
+        result = subprocess.run(['bash', '-euc', 'USER="$1"; source_id="$2"; source "$3"',
+                                 'fixture', user, source, str(clone)], capture_output=True, text=True, check=True)
+        assert result.stdout == expected
+        assert result.stdout != source
 print('PASS: targeted plugin reload patch, provenance hashes, and drift refusal')
 PY

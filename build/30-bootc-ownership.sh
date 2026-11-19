@@ -30,6 +30,10 @@ install -o root -g cups -m 0640 \
 python3 /ctx/build/patch-quattro-plugin-reload.py \
     /usr/share/omarchy/shell/shell.qml \
     /usr/share/omarchy-bootc/plugin-reload-patch.json
+[[ "$(pacman -Qqo /usr/bin/omarchy-plugin-clone)" == omarchy ]]
+python3 /ctx/build/patch-quattro-plugin-reload.py \
+    /usr/bin/omarchy-plugin-clone \
+    /usr/share/omarchy-bootc/plugin-clone-patch.json clone
 
 for unit in "${BOOTC_CONFLICTING_UNITS[@]}"; do
     systemctl disable "${unit}" >/dev/null 2>&1 || true

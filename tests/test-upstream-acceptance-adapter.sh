@@ -54,6 +54,11 @@ with tempfile.TemporaryDirectory() as temporary:
     assert receipt["patch_sha256"] == adapter.sha256((artifacts / receipt["patch"]).read_bytes())
     assert receipt["status"] == "adapted-not-executed"
     assert len(receipt["changes"]) == 3 and receipt["skipped_tests"] == []
+    menu_before = fixture["test/acceptance.d/menu-test.sh"].decode().splitlines()
+    menu_after = (target / "test/acceptance.d/menu-test.sh").read_text().splitlines()
+    def gates(lines):
+        return [line for line in lines if line.strip().startswith(('wait_until ', 'pass ', 'fail ', 'screenshot '))]
+    assert gates(menu_before) == gates(menu_after), "menu correction removed or changed a gate"
     # Enforce the consumer-visible boundary: every original byte outside the three
     # selected assertion spans survives, and runner discovery includes every gate.
     for name, before in fixture.items():

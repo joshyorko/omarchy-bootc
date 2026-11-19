@@ -28,15 +28,44 @@ UPSTREAM_SHA256 = {
 HELPER_PATH = "test/acceptance.d/bootc-acceptance-helper.sh"
 REPLACEMENTS = {
     # The pinned menu has Apps, Learn, Appearance, Trigger. Three Down keys
-    # select Trigger, not Appearance. Retain every subsequent assertion.
+    # select Trigger, not Appearance. Menu Bar is the fourth appearance item;
+    # Position follows Hide/Show Bar. Preserve every assertion and screenshot.
     "test/acceptance.d/menu-test.sh": (
         b'''wtype -k Down -k Down -k Down
 sleep 1
 screenshot "success-menu-02-style-selected"
+wtype -k Return
+
+wait_until "style submenu is visible" 15 screen_contains "Theme"
+screenshot "success-menu-03-style-submenu"
+
+wtype -k Down -k Down -k Down -k Down -k Return
+sleep 1
+screenshot "success-menu-04-menu-bar-submenu"
+
+wtype -k Return
+sleep 1
+screenshot "success-menu-05-position-submenu"
+
+wtype -k Down -k Down -k Return
 ''',
         b'''wtype -k Down -k Down
 sleep 1
 screenshot "success-menu-02-style-selected"
+wtype -k Return
+
+wait_until "style submenu is visible" 15 screen_contains "Theme"
+screenshot "success-menu-03-style-submenu"
+
+wtype -k Down -k Down -k Down -k Return
+sleep 1
+screenshot "success-menu-04-menu-bar-submenu"
+
+wtype -k Down -k Return
+sleep 1
+screenshot "success-menu-05-position-submenu"
+
+wtype -k Down -k Down -k Return
 ''',
     ),
     "test/acceptance.d/session-test.sh": (
