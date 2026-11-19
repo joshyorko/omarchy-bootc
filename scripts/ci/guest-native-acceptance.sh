@@ -185,7 +185,10 @@ QML
     marker="OMARCHY_ACCEPTANCE_NATIVE_PLUGIN ${run_token}-v1"
     wait_for_journal_marker "$marker" || fail "native plugin load had no observable journal marker"
 
-    sed -i "s/${run_token}-v1/${run_token}-v2/" "$HOME/.config/omarchy/plugins/acceptance.native/Service.qml"
+    # Write the existing file in place. sed -i exposes a temporary file's
+    # close_write before rename, making the watcher reload the old QML first.
+    changed_service="$(sed "s/${run_token}-v1/${run_token}-v2/" "$HOME/.config/omarchy/plugins/acceptance.native/Service.qml")"
+    printf '%s\n' "$changed_service" >"$HOME/.config/omarchy/plugins/acceptance.native/Service.qml"
     changed_marker="OMARCHY_ACCEPTANCE_NATIVE_PLUGIN ${run_token}-v2"
     wait_for_journal_marker "$changed_marker" || fail "native hot reload is unproved: changed fixture marker was absent"
     printf '%s\n' passed >"$ARTIFACTS/plugin-hot-reload.receipt"

@@ -15,6 +15,19 @@ expect_failure() {
     grep -Fq -- "$expected" "$fixture/output"
 }
 
+mkdir -p "$fixture/cups-root/usr/share/omarchy/etc-overrides" "$fixture/cups-root/etc/cups"
+sudo() {
+    [[ "$1" == -n && "$2" == cmp ]] || return 2
+    shift
+    "$@"
+}
+printf 'SystemGroup cups-browsed sys root\nPeerCred on\n' >"$fixture/cups-root/usr/share/omarchy/etc-overrides/cups-cups-files.conf"
+printf 'SystemGroup sys root wheel\nPeerCred on\n' >"$fixture/cups-root/etc/cups/cups-files.conf"
+expect_failure 'CUPS authorization differs' require_cups_policy "$fixture/cups-root"
+cp "$fixture/cups-root/usr/share/omarchy/etc-overrides/cups-cups-files.conf" "$fixture/cups-root/etc/cups/cups-files.conf"
+require_cups_policy "$fixture/cups-root"
+unset -f sudo
+
 expect_failure 'Usage:' main
 expect_failure 'Usage:' main unknown
 expect_failure 'Usage:' main final extra

@@ -20,6 +20,12 @@ grep -Fxq ENABLED=no /etc/ufw/ufw.conf
 bash "${OMARCHY_INSTALL}/config/firewall.sh"
 bash "${OMARCHY_INSTALL}/login/sddm.sh"
 
+# The base CUPS configuration grants wheel local peer-credential administration.
+# Apply the signed settings package's policy, as the Quattro installer does.
+[[ "$(pacman -Qqo /usr/share/omarchy/etc-overrides/cups-cups-files.conf)" == omarchy-settings ]]
+install -o root -g cups -m 0640 \
+    /usr/share/omarchy/etc-overrides/cups-cups-files.conf /etc/cups/cups-files.conf
+
 for unit in "${BOOTC_CONFLICTING_UNITS[@]}"; do
     systemctl disable "${unit}" >/dev/null 2>&1 || true
     systemctl mask "${unit}"

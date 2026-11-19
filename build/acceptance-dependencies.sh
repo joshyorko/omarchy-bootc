@@ -10,6 +10,12 @@ require_executable() {
     [[ -f "$1" && -x "$1" ]] || fail "missing executable: $1"
 }
 
+require_cups_policy() {
+    local root="${1:-}"
+    sudo -n cmp -s "$root/usr/share/omarchy/etc-overrides/cups-cups-files.conf" \
+        "$root/etc/cups/cups-files.conf" || fail 'CUPS authorization differs from package-owned Quattro policy'
+}
+
 require_scoped_sudo_command() {
     local command="$1" sudoers_dir="${2:-/etc/sudoers.d}"
     sudo -n grep -R -F -xq -- "%wheel ALL=(root) NOPASSWD: ${command} \"\"" "$sudoers_dir" \
@@ -237,6 +243,7 @@ main() {
         /usr/share/wayland-sessions/omarchy.desktop || fail 'session projection differs from upstream'
     require_kernel_headers /usr/share/omarchy-bootc/kernel-package /usr/lib/modules
     require_desktop_services /
+    require_cups_policy
     perl -MEncode -MJSON::PP -e 1 || fail 'clipboard Perl modules missing'
 
     # These help probes execute the actual pinned binary without staging an
