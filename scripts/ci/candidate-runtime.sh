@@ -84,8 +84,8 @@ boot_candidate() {
         bash scripts/ci/vm-smoke.sh "${overlay}" \
         2>&1 | tee "${artifact_dir}/vm-smoke.log"
 
-    # Success proves every retained upstream/native gate plus the two explicitly
-    # adapted bootc filesystem/kernel invariants. The adaptation receipt is part
+    # Success proves every retained upstream/native gate with the recorded
+    # filesystem/kernel and pinned-navigation corrections. The receipt is part
     # of this evidence; the disposable overlay is not the publishable image.
     jq -n \
         --arg source_sha "${head}" \
@@ -103,7 +103,7 @@ boot_candidate() {
             oci_manifest_digest:$candidate_oci_manifest_digest,
             local_image_id:$candidate_local_image_id},
           acceptance:{status:"passed", upstream_revision:$upstream_acceptance_revision,
-            upstream_suite:"passed-with-bootc-filesystem-kernel-adapter",
+            upstream_suite:"passed-with-recorded-upstream-adapter",
             upstream_adaptation:$adaptation[0],
             overlay_image_id:$acceptance_overlay_image_id,
             overlay_scope:"disposable-test-fixture-only"},

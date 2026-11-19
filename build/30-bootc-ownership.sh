@@ -26,6 +26,11 @@ bash "${OMARCHY_INSTALL}/login/sddm.sh"
 install -o root -g cups -m 0640 \
     /usr/share/omarchy/etc-overrides/cups-cups-files.conf /etc/cups/cups-files.conf
 
+[[ "$(pacman -Qqo /usr/share/omarchy/shell/shell.qml)" == omarchy ]]
+python3 /ctx/build/patch-quattro-plugin-reload.py \
+    /usr/share/omarchy/shell/shell.qml \
+    /usr/share/omarchy-bootc/plugin-reload-patch.json
+
 for unit in "${BOOTC_CONFLICTING_UNITS[@]}"; do
     systemctl disable "${unit}" >/dev/null 2>&1 || true
     systemctl mask "${unit}"

@@ -53,8 +53,8 @@ with tempfile.TemporaryDirectory() as temporary:
     receipt = json.loads((artifacts / "upstream-acceptance-adaptation.json").read_bytes())
     assert receipt["patch_sha256"] == adapter.sha256((artifacts / receipt["patch"]).read_bytes())
     assert receipt["status"] == "adapted-not-executed"
-    assert len(receipt["changes"]) == 2 and receipt["skipped_tests"] == []
-    # Enforce the consumer-visible boundary: every original byte outside the two
+    assert len(receipt["changes"]) == 3 and receipt["skipped_tests"] == []
+    # Enforce the consumer-visible boundary: every original byte outside the three
     # selected assertion spans survives, and runner discovery includes every gate.
     for name, before in fixture.items():
         after = (target / name).read_bytes()
@@ -153,5 +153,5 @@ with tempfile.TemporaryDirectory() as temporary:
         assert not validate(root_mount, backing, invalid)
     assert not validate({"filesystems": []}, backing, status)
     assert not validate({"filesystems": root_mount["filesystems"] * 2}, backing, status)
-print("PASS: exact two-assertion adaptation, preserved gates, drift refusal, and root parser boundaries (not a VM pass)")
+print("PASS: bounded three-span adaptation, preserved gates, drift refusal, and root parser boundaries (not a VM pass)")
 PY

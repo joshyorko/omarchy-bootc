@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Adapt exactly two installer premises; never waive an upstream acceptance gate."""
+"""Adapt two installer premises and pinned menu navigation; never waive a gate."""
 
 import argparse
 import difflib
@@ -27,6 +27,18 @@ UPSTREAM_SHA256 = {
 }
 HELPER_PATH = "test/acceptance.d/bootc-acceptance-helper.sh"
 REPLACEMENTS = {
+    # The pinned menu has Apps, Learn, Appearance, Trigger. Three Down keys
+    # select Trigger, not Appearance. Retain every subsequent assertion.
+    "test/acceptance.d/menu-test.sh": (
+        b'''wtype -k Down -k Down -k Down
+sleep 1
+screenshot "success-menu-02-style-selected"
+''',
+        b'''wtype -k Down -k Down
+sleep 1
+screenshot "success-menu-02-style-selected"
+''',
+    ),
     "test/acceptance.d/session-test.sh": (
         b'''# Root filesystem is btrfs as installed
 [[ $(findmnt -no FSTYPE /) == "btrfs" ]] || fail "root filesystem is btrfs"
@@ -114,7 +126,7 @@ def adapt(root, revision, artifacts):
         "schema": "omarchy-bootc.upstream-acceptance-adaptation/v1",
         "upstream_revision": revision,
         "status": "adapted-not-executed",
-        "scope": "root-filesystem-and-declared-kernel-only",
+        "scope": "root-filesystem-declared-kernel-and-pinned-menu-navigation",
         "changes": changes,
         "helper": {"path": HELPER_PATH, "sha256": sha256(helper)},
         "patch": patch_name,
@@ -141,7 +153,7 @@ def main():
         receipt = adapt(args.upstream_root, args.revision, args.artifacts)
     except (OSError, ValueError) as error:
         parser.exit(1, f"acceptance adaptation refused: {error}\n")
-    print(f"Adapted exactly two assertions; patch {receipt['patch_sha256']}")
+    print(f"Adapted {len(receipt['changes'])} recorded spans; patch {receipt['patch_sha256']}")
 
 
 if __name__ == "__main__":

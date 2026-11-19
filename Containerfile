@@ -239,6 +239,7 @@ COPY build/verify-quattro-payload.sh /build/verify-quattro-payload.sh
 
 FROM scratch AS boot-ownership-ctx
 COPY build/30-bootc-ownership.sh /build/30-bootc-ownership.sh
+COPY build/patch-quattro-plugin-reload.py /build/patch-quattro-plugin-reload.py
 COPY build/bootc-disabled-hooks.txt /build/bootc-disabled-hooks.txt
 COPY build/lib/bootc-initramfs.sh /build/lib/bootc-initramfs.sh
 
