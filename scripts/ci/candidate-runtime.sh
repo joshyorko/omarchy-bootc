@@ -19,10 +19,10 @@ import_candidate() {
     archive_name="$(jq -er .archive "${receipt}")"
     [[ "${archive_name}" == "$(basename "${archive_name}")" ]]
     archive="${candidate_dir}/${archive_name}"
-    checksum="$(jq -er .archive_sha256 "${receipt}")"
-    [[ "sha256:$(sha256sum "${archive}" | cut -d' ' -f1)" == "${checksum}" ]]
-    manifest="$(tar -xOf "${archive}" index.json | jq -er '.manifests[0].digest')"
-    [[ "${manifest}" == "$(jq -er .manifest_digest "${receipt}")" ]]
+    python3 scripts/ci/verify-candidate-archive.py "${receipt}" "${archive}" "${head}" \
+        >"${artifact_dir}/archive-verification.json"
+    checksum="$(jq -er .archive_sha256 "${artifact_dir}/archive-verification.json")"
+    manifest="$(jq -er .manifest_digest "${artifact_dir}/archive-verification.json")"
     cp "${receipt}" "${artifact_dir}/parent-candidate.receipt.json"
     sudo -n podman load -i "${archive}"
     parent="$(jq -er .image_id "${receipt}")"
@@ -73,8 +73,11 @@ boot_candidate() {
         --artifacts "${artifact_dir}"
     printf '%s\n' "${quattro_revision}" >"${artifact_dir}/upstream-acceptance-revision.txt"
 
+    vm_artifact_dir="$(mktemp -d "${artifact_dir}/qualification.XXXXXXXX")"
     vm_env=(
-      "CI_ARTIFACT_DIR=${artifact_dir}"
+      "CI_ARTIFACT_DIR=${vm_artifact_dir}"
+      "VM_PROFILE=omarchy"
+      "RUN_LIFECYCLE_ACCEPTANCE=1"
       "VM_PODMAN_ROOTFUL=1"
       "NATIVE_ACCEPTANCE_SCRIPT=${PWD}/scripts/ci/guest-native-acceptance.sh"
       "UPSTREAM_ACCEPTANCE_DIR=${upstream_tests}"
@@ -84,12 +87,19 @@ boot_candidate() {
         bash scripts/ci/vm-smoke.sh "${overlay}" \
         2>&1 | tee "${artifact_dir}/vm-smoke.log"
 
+    [[ "$(cat "${vm_artifact_dir}/gate-3-5.receipt")" == passed ]]
+    grep -Fq 'ok - native verify passed;' "${vm_artifact_dir}/native-after-reboot.log"
+    for evidence in first-boot-status.json after-reboot-status.json lifecycle-b-booted-status.json lifecycle-a-rollback-status.json screenshots/sddm-greeter.png screenshots/update-b-desktop.png screenshots/rollback-a-desktop.png; do
+        [[ -s "${vm_artifact_dir}/${evidence}" ]]
+    done
+
     # Success proves every retained upstream/native gate with the recorded
     # filesystem/kernel, pinned-navigation and bar-reservation corrections. The receipt is part
     # of this evidence; the disposable overlay is not the publishable image.
     jq -n \
         --arg source_sha "${head}" \
         --arg harness_sha "${harness_head}" \
+        --arg evidence_dir "${vm_artifact_dir}" \
         --arg image_archive "${archive_name}" \
         --arg archive_sha256 "${checksum}" \
         --arg candidate_oci_manifest_digest "${manifest}" \
@@ -102,7 +112,8 @@ boot_candidate() {
           candidate:{archive:$image_archive, archive_sha256:$archive_sha256,
             oci_manifest_digest:$candidate_oci_manifest_digest,
             local_image_id:$candidate_local_image_id},
-          acceptance:{status:"passed", upstream_revision:$upstream_acceptance_revision,
+          acceptance:{status:"passed", evidence_dir:$evidence_dir, lifecycle:"passed", profile:"omarchy",
+            upstream_revision:$upstream_acceptance_revision,
             upstream_suite:"passed-with-recorded-upstream-adapter",
             upstream_adaptation:$adaptation[0],
             overlay_image_id:$acceptance_overlay_image_id,

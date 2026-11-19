@@ -99,9 +99,17 @@ jobs:
           mount-opts: compress-force=zstd:2
       - name: Prepare Ubuntu host capabilities
         run: bash scripts/ci/prepare-ubuntu-runner.sh
+      - name: Verify immutable Actions producer before privileged reuse
+        id: candidate_producer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCER_RUN: ${{ inputs.candidate_run_id }}
+          PRODUCER_HEAD: ${{ inputs.candidate_source_head }}
+        run: python3 scripts/ci/verify-candidate-producer.py "$PRODUCER_RUN" "$PRODUCER_HEAD" "$RUNNER_TEMP/runtime-receipts/actions-producer.json"
       - uses: actions/download-artifact@v4
         with:
-          name: omarchy-bootc-candidate-${{ inputs.candidate_source_head }}
+          artifact-ids: ${{ steps.candidate_producer.outputs.artifact_id }}
+          merge-multiple: true
           run-id: ${{ inputs.candidate_run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/candidate

@@ -41,16 +41,16 @@ concurrency:
 
 jobs:
   build_push:
-    name: Build and push image
+    name: Build and accept image
     runs-on: ubuntu-24.04
     outputs:
       image_tag: ${{ steps.build_config.outputs.image_tag }}
-      image_digest: ${{ steps.push.outputs.digest }}
+      accepted_digest: ${{ steps.accept_vm.outputs.digest }}
+      accepted_artifact_id: ${{ steps.accepted_artifact.outputs.artifact-id }}
+      metadata_tags: ${{ steps.metadata.outputs.tags }}
 
     permissions:
       contents: read
-      packages: write
-      id-token: write
 
     steps:
       - name: Prepare environment
@@ -196,6 +196,7 @@ jobs:
           sudo apt-get install -y ovmf qemu-system-x86 qemu-utils sshpass skopeo
 
       - name: Accept the exact publishable image through a disposable overlay
+        id: accept_vm
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         env:
           CI_ARTIFACT_DIR: ${{ runner.temp }}/vm-smoke-artifacts
@@ -205,8 +206,8 @@ jobs:
           mkdir -p "$candidate_dir"
           image="${IMAGE_NAME}:${DEFAULT_TAG}"
           podman save --format=oci-archive "$image" > "$candidate_dir/candidate.oci.tar"
-          image_id="$(podman image inspect "$image" --format '{{.Id}}')"
           digest="$(tar -xOf "$candidate_dir/candidate.oci.tar" index.json | jq -er '.manifests[0].digest')"
+          image_id="$(tar -xOf "$candidate_dir/candidate.oci.tar" "blobs/sha256/${digest#sha256:}" | jq -er '.config.digest')"
           checksum="$(sha256sum "$candidate_dir/candidate.oci.tar" | cut -d' ' -f1)"
           jq -n --arg head "$(git rev-parse HEAD)" --arg id "$image_id" \
             --arg digest "$digest" --arg checksum "sha256:$checksum" \
@@ -214,6 +215,9 @@ jobs:
               manifest_digest:$digest, archive_sha256:$checksum}' \
             > "$candidate_dir/candidate.receipt.json"
           bash scripts/ci/candidate-runtime.sh "$candidate_dir"
+          jq -e --arg digest "$digest" '.candidate.oci_manifest_digest == $digest and .acceptance.status == "passed"' "$CI_ARTIFACT_DIR/accepted-candidate.receipt.json" >/dev/null
+          cp "$CI_ARTIFACT_DIR/accepted-candidate.receipt.json" "$candidate_dir/accepted-candidate.receipt.json"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Upload VM acceptance artifacts
         if: always() && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
@@ -223,36 +227,41 @@ jobs:
           path: ${{ runner.temp }}/vm-smoke-artifacts
           if-no-files-found: warn
 
-      - name: Tag for registry
+      - name: Retain exact accepted publication artifact
+        id: accepted_artifact
+        if: success() && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-publish-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/publish-candidate
+          compression-level: 0
+          if-no-files-found: error
+
+  publish:
+    name: Promote accepted manifest and sign
+    needs: build_push
+    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+      id-token: write
+    outputs:
+      image_digest: ${{ steps.promote.outputs.digest }}
+      image_tag: ${{ needs.build_push.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.build_push.outputs.accepted_artifact_id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/accepted-publication
+      - name: Install publisher transport
+        timeout-minutes: 10
         run: |
-          for tag in ${{ steps.metadata.outputs.tags }}; do
-            podman tag "${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}" \
-                       "${{ env.IMAGE_NAME }}:${tag}"
-          done
-
-      # ── OPTIONAL: Software Bill of Materials (SBOM) ─────────────────────────
-      # To enable: uncomment the two steps below AND the attestation step further
-      # down, then also enable image signing.
-      # Documentation: https://github.com/anchore/syft
-
-      # - name: Setup Syft
-      #   id: setup-syft
-      #   uses: anchore/sbom-action/download-syft@8e94d75ddd33f69f691467e42275782e4bfefe84 # v0.20.9
-      #   with:
-      #     syft-version: v1.20.0
-      #
-      # - name: Generate SBOM
-      #   id: generate-sbom
-      #   env:
-      #     IMAGE: ${{ env.IMAGE_NAME }}
-      #     DEFAULT_TAG: ${{ env.DEFAULT_TAG }}
-      #     SYFT_CMD: ${{ steps.setup-syft.outputs.cmd }}
-      #   run: |
-      #     OUTPUT_PATH="$(mktemp -d)/sbom.json"
-      #     export SYFT_PARALLELISM=$(($(nproc)*2))
-      #     $SYFT_CMD "${IMAGE}:${DEFAULT_TAG}" -o spdx-json="${OUTPUT_PATH}"
-      #     echo "OUTPUT_PATH=${OUTPUT_PATH}" >> "$GITHUB_OUTPUT"
-
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o APT::Update::Error-Mode=any update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends skopeo
       - name: Login to GitHub Container Registry
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
@@ -261,29 +270,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push to GHCR
-        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-        id: push
+      - name: Promote accepted archive without manifest conversion
+        id: promote
         env:
-          REGISTRY_USER: ${{ github.actor }}
-          REGISTRY_PASSWORD: ${{ github.token }}
-        with:
-          registry: ${{ env.IMAGE_REGISTRY }}
-          image: ${{ env.IMAGE_NAME }}
-          tags: ${{ steps.metadata.outputs.tags }}
-          username: ${{ env.REGISTRY_USER }}
-          password: ${{ env.REGISTRY_PASSWORD }}
+          EXPECTED_DIGEST: ${{ needs.build_push.outputs.accepted_digest }}
+        run: |
+          set -euo pipefail
+          candidate="$RUNNER_TEMP/accepted-publication"
+          [[ "$(jq -er .manifest_digest "$candidate/candidate.receipt.json")" == "$EXPECTED_DIGEST" ]]
+          bash scripts/ci/promote-accepted-image.sh "$candidate" "$candidate/accepted-candidate.receipt.json" \
+            "ghcr.io/${GITHUB_REPOSITORY,,}" "$GITHUB_SHA" "accepted-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+        with:
+          cosign-release: v2.6.0
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
 
       - name: Sign and attest published image digest
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         env:
           IMAGE: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
-          DIGEST: ${{ steps.push.outputs.digest }}
+          DIGEST: ${{ steps.promote.outputs.digest }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -304,6 +312,14 @@ jobs:
             --predicate "$RUNNER_TEMP/build-receipt/published-image-receipt.json" \
             "${IMAGE}@${DIGEST}"
 
+      - name: Verify signed digest and update tracking channel last
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          DIGEST: ${{ steps.promote.outputs.digest }}
+          METADATA_TAGS: ${{ needs.build_push.outputs.metadata_tags }}
+          TRACKING_CHANNEL: ${{ needs.build_push.outputs.image_tag }}
+        run: bash scripts/ci/update-accepted-channels.sh "ghcr.io/${GITHUB_REPOSITORY,,}" "$DIGEST" "$TRACKING_CHANNEL"
+
       - name: Upload signed image receipt
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         uses: actions/upload-artifact@v4
@@ -315,18 +331,16 @@ jobs:
 
   build_installer_iso:
     name: Build installer ISO
-    needs: [build_push]
+    needs: [publish]
     if: github.event_name == 'workflow_dispatch' && inputs.build_iso
 
     permissions:
       contents: read
       packages: read
-      id-token: write
 
     uses: ./.github/workflows/reusable-build-iso.yml
     with:
-      image_tag: ${{ needs.build_push.outputs.image_tag }}
+      image_tag: ${{ needs.publish.outputs.image_tag }}
       install_image_ref: ${{ inputs.install_image_ref }}
       checkout_ref: ${{ github.sha }}
       upload_artifacts: true
-    secrets: inherit

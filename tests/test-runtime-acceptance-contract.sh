@@ -56,7 +56,7 @@ assert_order "${RUNTIME}" 'candidate runtime acceptance handoff' \
     'bash scripts/ci/vm-smoke.sh "${overlay}"'
 # This contract needle is literal shell syntax.
 # shellcheck disable=SC2016
-grep -Fq '"CI_ARTIFACT_DIR=${artifact_dir}"' "${RUNTIME}" ||
+grep -Fq '"CI_ARTIFACT_DIR=${vm_artifact_dir}"' "${RUNTIME}" ||
     fail 'candidate runtime does not pass its receipt directory to VM smoke'
 # This contract needle is literal shell syntax.
 # shellcheck disable=SC2016
@@ -160,3 +160,17 @@ fail() { exit 1; }
     assert not marker.exists(), 'failed prerequisites reached lifecycle staging/reboot'
 print('PASS: failed prerequisites stop before lifecycle staging/reboot')
 PY
+
+# Execute the actual environment declaration under caller settings that would
+# skip qualification in an ordinary smoke run. No guest/Podman fixture is used.
+python3 - "$RUNTIME" <<'PYENV'
+from pathlib import Path
+import os,subprocess,sys
+text=Path(sys.argv[1]).read_text()
+block=text.split('    vm_env=(',1)[1].split('    )',1)[0]
+script='vm_artifact_dir=/fixture; upstream_tests=/fixture/tests; vm_env=(' + block + ')\n'
+script+="""env "${vm_env[@]}" bash -c '[[ $VM_PROFILE == omarchy && $RUN_LIFECYCLE_ACCEPTANCE == 1 ]]'\n"""
+result=subprocess.run(['bash','-euc',script],env=dict(os.environ,VM_PROFILE='generic',RUN_LIFECYCLE_ACCEPTANCE='0'))
+assert result.returncode==0,'caller environment bypasses required qualification'
+print('PASS: qualification profile/lifecycle override inherited smoke settings')
+PYENV

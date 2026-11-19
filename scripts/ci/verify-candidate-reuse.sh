@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Product image inputs must match; the disposable overlay is rebuilt and linted.
-# The dependency verifier is explicitly refreshed by that overlay as test code.
+# Shipped verifier inputs must match even when the overlay also copies them.
 source_head="${1:?Expected full candidate source SHA}"
 harness_head="${2:-HEAD}"
 [[ "${source_head}" =~ ^[[:xdigit:]]{40}$ ]] || {
@@ -30,7 +30,7 @@ if ! git diff --quiet "${source_head}" "${harness_head}" -- . \
     ':!scripts/ci/guest-native-acceptance.sh' \
     ':!scripts/ci/acceptance-overlay.Containerfile' \
     ':!scripts/ci/verify-candidate-reuse.sh' \
-    ':!build/acceptance-dependencies.sh' \
+    ':!scripts/ci/verify-candidate-producer.py' \
     ':!build/acceptance-firstboot.sh' \
     ':!scripts/ci/lib/upstream-acceptance.sh' \
     ':!tests/test-acceptance-dependencies.sh' \

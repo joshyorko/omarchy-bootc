@@ -27,6 +27,12 @@ mkdir -p build
 printf 'updated verifier\n' >build/acceptance-dependencies.sh
 git add .
 git commit -qm verifier
+if bash "${helper}" "${source_head}" HEAD; then
+    echo 'FAIL: shipped dependency verifier accepted as harness-only change' >&2
+    exit 1
+fi
+git rm -q build/acceptance-dependencies.sh
+git commit -qm restore-verifier
 bash "${helper}" "${source_head}" HEAD
 printf 'diagnostic adapter\n' >scripts/ci/adapt-upstream-acceptance.py
 git add .

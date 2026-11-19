@@ -41,7 +41,7 @@ cosign verify-attestation \
     --certificate-identity "${certificate_identity}" \
     --certificate-oidc-issuer "${oidc_issuer}" \
     "${image_ref}" |
-    jq -e --arg image "${expected_image}" \
+    jq -se --arg image "${expected_image}" \
         --arg digest "${expected_digest}" \
         --arg source_sha "${expected_source_sha}" '
       any(.[].payload | @base64d | fromjson | .predicate;
