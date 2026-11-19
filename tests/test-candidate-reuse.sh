@@ -19,6 +19,10 @@ printf 'diagnostic\n' >>scripts/ci/candidate-runtime.sh
 git add .
 git commit -qm harness
 bash "${helper}" "${source_head}" HEAD
+printf 'disposable overlay\n' >scripts/ci/acceptance-overlay.Containerfile
+git add .
+git commit -qm overlay
+bash "${helper}" "${source_head}" HEAD
 printf 'changed image\n' >>Containerfile
 git add .
 git commit -qm image

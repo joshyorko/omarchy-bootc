@@ -10,10 +10,12 @@ COPY build/25-quattro-user.sh /ctx/build/25-quattro-user.sh
 
 # Only this disposable layer permits the SSH harness through product UFW.
 # Offline rule writing must not apply the rules to the build host's firewall.
+# UFW releases its advisory lock but leaves the file; it is not image content.
 RUN grep -Fxq ENABLED=yes /etc/ufw/ufw.conf && \
     sed -i 's/^ENABLED=yes$/ENABLED=no/' /etc/ufw/ufw.conf && \
     ufw allow 22/tcp comment 'disposable acceptance SSH' && \
-    sed -i 's/^ENABLED=no$/ENABLED=yes/' /etc/ufw/ufw.conf
+    sed -i 's/^ENABLED=no$/ENABLED=yes/' /etc/ufw/ufw.conf && \
+    rm -f /run/ufw.lock
 
 RUN --mount=type=tmpfs,dst=/tmp \
     bash /ctx/build/stage-acceptance-node.sh && \
