@@ -37,13 +37,21 @@ case "$phase" in
         ;;
     probe)
         podman info >/out/nested-podman-info.txt
-        podman run --rm --pull=missing docker.io/library/alpine:3.21 sh -ceu 'test "$(id -u)" = 0; mount | head -n 4' >/out/nested-run.txt 2>&1
+        failed=0
+        rc=0
+        podman run --rm --pull=missing docker.io/library/alpine:3.21 sh -ceu 'test "$(id -u)" = 0; mount | head -n 4' >/out/nested-run.txt 2>&1 || rc=$?
+        printf '%s\n' "$rc" >/out/nested-run.exit-code
+        ((rc == 0)) || failed=1
         mkdir /out/probe-context
         printf 'FROM docker.io/library/alpine:3.21\nRUN printf nested-overlay >/proof\n' >/out/probe-context/Containerfile
         for pass in cold warm; do
-            /usr/bin/time -v -o "/out/probe-$pass.resources" podman build --pull=never --layers -t localhost/omarchy-nested:proof /out/probe-context >"/out/probe-$pass.log" 2>&1
+            rc=0
+            /usr/bin/time -v -o "/out/probe-$pass.resources" podman build --pull=never --layers -t localhost/omarchy-nested:proof /out/probe-context >"/out/probe-$pass.log" 2>&1 || rc=$?
+            printf '%s\n' "$rc" >"/out/probe-$pass.exit-code"
+            ((rc == 0)) || failed=1
         done
-        podman image inspect localhost/omarchy-nested:proof >/out/probe-image.json
+        podman image inspect localhost/omarchy-nested:proof >/out/probe-image.json || failed=1
+        ((failed == 0))
         ;;
     preflight|packages|foundation|assembly|integration|build)
         /usr/bin/time -v -o "/out/$phase.resources" timeout --kill-after=60s 60m bash scripts/ci/candidate-build.sh "$phase" >"/out/$phase.log" 2>&1

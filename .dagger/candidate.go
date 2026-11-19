@@ -17,7 +17,9 @@ func (m *OmarchyBootc) candidateWorker(bundle *dagger.File, head, executionID st
 apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 -o APT::Update::Error-Mode=any update
 DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 install -y --no-install-recommends podman buildah skopeo jq git sudo python3 shellcheck time util-linux btrfs-progs`}).
 		WithNewFile("/etc/containers/storage.conf", "[storage]\ndriver=\"overlay\"\ngraphroot=\"/var/lib/containers/storage\"\nrunroot=\"/run/containers/storage\"\n").
-		WithNewFile("/etc/containers/containers.conf", "[engine]\ncgroup_manager=\"cgroupfs\"\nevents_logger=\"file\"\n").
+		// The engine/VM enforce resource limits; this nested namespace has no
+		// delegated pids controller for Podman to create another cgroup below it.
+		WithNewFile("/etc/containers/containers.conf", "[containers]\ncgroups=\"disabled\"\n[engine]\ncgroup_manager=\"cgroupfs\"\nevents_logger=\"file\"\n").
 		WithMountedCache("/var/lib/containers", dag.CacheVolume("omarchy-podman-linux-amd64-v1"), dagger.ContainerWithMountedCacheOpts{Sharing: dagger.CacheSharingModeLocked}).
 		WithDirectory("/src", m.Source).
 		WithFile("/input/source.bundle", bundle).
