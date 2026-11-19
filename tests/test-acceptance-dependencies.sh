@@ -17,7 +17,7 @@ expect_failure() {
 
 mkdir -p "$fixture/cups-root/usr/share/omarchy/etc-overrides" "$fixture/cups-root/etc/cups"
 # Invoked indirectly by the sourced policy verifier.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 sudo() {
     [[ "$1" == -n && "$2" == cmp ]] || return 2
     shift
@@ -76,7 +76,7 @@ printf '%s\n' \
     '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-clear-transaction ""' \
     >"$fixture/scoped-sudoers"
 # Exercise the privilege boundary without invoking host sudo or changing policy.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 sudo() {
     [[ "$1" == -n && "$2" == grep ]] || return 2
     printf '%s\n' "$*" >"$fixture/sudo-read"
