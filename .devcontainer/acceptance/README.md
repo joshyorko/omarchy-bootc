@@ -1,52 +1,51 @@
-# Harvester acceptance worker
+# Harvester development shell and shared Dagger pipeline
 
-Remote-only profile for a dedicated `omarchy-acceptance` Devsy workspace. The
-pattern follows homebrew-tools at c075a1fc82413c071e87becdb051a64bfbe508fe:
-a private worker, persistent named storage, effective resource checks and a
-single cache lock. It does not use or share homebrew-tools' Dagger engine.
+The owned Harvester VM is Ubuntu 24.04, matching the GitHub runner OS family.
+This optional shell uses `ghcr.io/ublue-os/devcontainer:latest`, matching Dudley
+OS. It is not the build runner OS. Actual Dagger workers use Ubuntu 24.04;
+privileged bootc installation and QEMU run on the Ubuntu host until nested
+capability equivalence is proven. Do not install a Bluefin desktop on the VM.
 
-Provision with the configured Harvester provider at 6 vCPU, 16 GiB RAM and
-200 GiB disk; select this profile with `--devcontainer id:acceptance`.
-The container budget is 4 CPU, 12 GiB RAM, 14 GiB RAM plus swap and 4096 PIDs.
-The privileged container is confined to the dedicated builder VM. Never use
-this profile on Dakota or mount Dakota's Docker socket into it.
+The control-plane launcher is `bash scripts/ci/devsy-dagger.sh probe` or `build`.
+It adapts the bundle transfer, private resources and engine lock from homebrew-tools
+at c075a1fc82413c071e87becdb051a64bfbe508fe. It requires a clean source checkpoint,
+uploads only Git/source snapshots, and never starts a local engine or transfers
+OCI artifacts through Dakota. `OMARCHY_MACHINE` defaults to the owned Devsy
+machine. Provisioning/SSH may use native Devsy when MCP returns `workspace source
+is missing` or `no running container found`; MCP status still reports ownership.
 
-Use Devsy MCP for workspace status/exec when available. Native fallback:
+The remote machine needs verified Dagger CLI v0.20.6 (matching dagger.json), Docker
+and the Ubuntu host prerequisites in scripts/ci/prepare-ubuntu-runner.sh. Install
+the CLI from its official release archive and verify its official checksums.
+No Dagger Cloud token is required. No images are published by this pipeline.
 
-```sh
-devsy workspace ssh omarchy-acceptance --command 'uname -a'
-```
+Dagger's persistent engine is separate from homebrew-tools. It has four CPUs
+with matching affinity, 12 GiB RAM, 14 GiB including swap and 4096 PIDs. Its state
+is under /var/lib/containers/omarchy-dagger on the dedicated 200 GiB disk. The
+launcher holds one engine lock for the entire pipeline and requires 30 GiB
+actually free. The module explicitly mounts a LOCKED Podman containers-storage
+cache; an opaque shell invocation alone would not create layer caching.
+GitHub has an independent ephemeral engine/cache, not this Harvester cache.
 
-Inside that remote container, create a clean checkout of the exact PR commit
-under `/builds`, verify its full SHA, then run:
+Probe mode proves nested rootful Podman run/build/overlay and records an immediate
+repeat build. Build mode runs the same Dagger candidate-build function twice,
+with different execution IDs to prevent Dagger result replay. Product source,
+architecture, pins and build arguments remain unchanged. Podman's content-based
+keys decide which image layers can be reused. Inspect real stage logs, compiler
+output, timings, resources and receipts before claiming a speedup. The first
+pass is not assumed to have an empty cache. A narrow source-change probe remains
+separate; the worker does not alter product files to manufacture one.
 
-```sh
-OMARCHY_REMOTE_BUILDER=harvester timeout --kill-after=60s 6h bash scripts/ci/harvester-cache-proof.sh
-```
+`dagger-parity.yml` is the migration workflow. Probe/build use the module; accept
+reuses a selected immutable OCI artifact through dagger-host-runtime.sh on the
+Ubuntu host. That script preserves existing import/manifest/archive checks,
+overlay fatal lint, boot screenshots and lifecycle gates. Existing workflows
+retain their build/runtime backstops while also invoking Dagger source contracts.
+Remove duplicate build paths only after equivalence and real acceptance pass.
 
-Keep the command's stdout/stderr in a remote log. The worker prints its retained
-`/builds/omarchy-bootc/run.<sha>.*` evidence directory. It serializes all builds
-through `engine.lock`, checks 30 GiB genuinely free before each phase and uses
-Podman's persistent overlay image store at `/builds/containers`. No automatic
-prune, cache deletion or artifact transfer to Dakota is performed.
-
-The cold/warm labels denote consecutive passes, not a guarantee the first cache
-is empty. Both use identical clean source, architecture, pins, toolchain and
-build arguments. Podman's content-based layer keys decide reuse; source SHA and
-image/archive/manifest identity are recorded separately. Read stage logs and
-`*-cache-lines.txt`, compiler output, `timings.tsv`, `*.resources` and cgroup
-receipts before claiming speedup. Exports remain remote. Each pass imports and
-verifies its exact candidate archive. Warm cache does not replace signed package,
-fatal lint, bootc, GUI screenshot or rollback gates. A narrow source-change cache
-probe is a separate measurement; this worker does not modify product source to
-manufacture one.
-
-KVM availability is recorded. Without accessible KVM, retain the build proof and
-leave graphical VM acceptance on GitHub. The repository's Dagger module currently
-builds installer ISO work; it is not the cache engine for this Podman image path.
-Do not build installer ISO artifacts until their accepted-image prerequisite.
-
-Retrieve only explicitly needed small receipts. Before stopping the workspace,
-verify the worker has exited and no owned run is active; use native Devsy stop
-protection, never force-stop a shared machine. Stopping preserves disk/cache.
-Failed runs remain for diagnosis. Do not delete another run or its cache.
+Exports and failed-run logs remain in ~/omarchy-builds/run.* on Harvester.
+CheckResult must pass after every evidence export; export success is not build
+or VM success. Retrieve only explicitly needed small receipts. Before safe Devsy
+stop, verify no worker/transfer is active. Preserve the VM disk, named shell builds
+volume and Dagger/Podman cache. Never force-stop a shared machine or prune another
+run. KVM device presence is not boot acceptance; retain actual guest evidence.

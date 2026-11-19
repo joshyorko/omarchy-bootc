@@ -12,6 +12,15 @@ harness_head="${2:-HEAD}"
 git cat-file -e "${source_head}^{commit}"
 if ! git diff --quiet "${source_head}" "${harness_head}" -- . \
     ':!.github/workflows/candidate.yml' \
+    ':!.github/workflows/build.yml' \
+    ':!.github/workflows/dagger-parity.yml' \
+    ':!.dagger/candidate.go' \
+    ':!scripts/ci/dagger-candidate.sh' \
+    ':!scripts/ci/dagger-engine.sh' \
+    ':!scripts/ci/dagger-host-runtime.sh' \
+    ':!scripts/ci/devsy-dagger.sh' \
+    ':!scripts/ci/devsy-dagger-worker.sh' \
+    ':!scripts/ci/prepare-ubuntu-runner.sh' \
     ':!.devcontainer/acceptance' \
     ':!scripts/ci/harvester-cache-proof.sh' \
     ':!scripts/ci/candidate-runtime.sh' \

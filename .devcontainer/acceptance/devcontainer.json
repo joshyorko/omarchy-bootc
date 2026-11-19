@@ -1,8 +1,5 @@
 {
   "name": "Omarchy acceptance builder",
-  "build": {
-    "dockerfile": "Dockerfile"
-  },
   "remoteUser": "root",
   "runArgs": [
     "--privileged",
@@ -19,5 +16,7 @@
   "containerEnv": {
     "CANDIDATE_MIN_FREE_GIB": "30",
     "OMARCHY_REMOTE_BUILDER": "harvester"
-  }
+  },
+  "image": "ghcr.io/ublue-os/devcontainer:latest",
+  "postCreateCommand": "sudo mkdir -p /etc/containers && printf '[storage]\\ndriver=\"overlay\"\\ngraphroot=\"/builds/containers\"\\nrunroot=\"/run/containers/storage\"\\n' | sudo tee /etc/containers/storage.conf >/dev/null && printf '[engine]\\ncgroup_manager=\"cgroupfs\"\\nevents_logger=\"file\"\\n' | sudo tee /etc/containers/containers.conf >/dev/null"
 }
