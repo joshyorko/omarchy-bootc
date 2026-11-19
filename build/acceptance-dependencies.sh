@@ -243,7 +243,7 @@ main() {
         /usr/share/wayland-sessions/omarchy.desktop || fail 'session projection differs from upstream'
     require_kernel_headers /usr/share/omarchy-bootc/kernel-package /usr/lib/modules
     require_desktop_services /
-    require_cups_policy
+    require_cups_policy /
     perl -MEncode -MJSON::PP -e 1 || fail 'clipboard Perl modules missing'
 
     # These help probes execute the actual pinned binary without staging an
