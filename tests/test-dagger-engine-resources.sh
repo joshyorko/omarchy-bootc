@@ -4,8 +4,9 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/codex-omarchy-engine-test-XXXXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 mkdir "$scratch/bin" "$scratch/cache"
-export TEST_REAL_PYTHON
+export TEST_REAL_PYTHON TEST_REAL_REALPATH
 TEST_REAL_PYTHON=$(command -v python3)
+TEST_REAL_REALPATH=$(command -v realpath)
 cat >"$scratch/bin/python3" <<'SH'
 #!/usr/bin/env bash
 if [[ $2 == *os.sched_getaffinity* ]]; then
@@ -26,10 +27,16 @@ SH
 cat >"$scratch/bin/sudo" <<'SH'
 #!/usr/bin/env bash
 [[ $1 == -n ]] && shift
-exec "$@"
+exec env TEST_VIA_SUDO=1 "$@"
+SH
+cat >"$scratch/bin/realpath" <<'SH'
+#!/usr/bin/env bash
+[[ ${TEST_VIA_SUDO:-0} == 1 ]] || { echo "realpath: ${*: -1}: Permission denied" >&2; exit 1; }
+exec "$TEST_REAL_REALPATH" "$@"
 SH
 cat >"$scratch/bin/df" <<'SH'
 #!/usr/bin/env bash
+[[ ${TEST_VIA_SUDO:-0} == 1 ]] || { echo "df: ${*: -1}: Permission denied" >&2; exit 1; }
 printf 'Filesystem 1024-blocks Used Available Capacity Mounted\ntest 200000000 1 100000000 1%% /\n'
 SH
 cat >"$scratch/bin/docker" <<'SH'

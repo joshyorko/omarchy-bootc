@@ -23,10 +23,10 @@ host_memory_kib=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
     echo 'Insufficient guest RAM for the engine plus 2 GiB host headroom' >&2; exit 1;
 }
 sudo -n mkdir -p "$root"
-root=$(realpath -- "$root")
+root=$(sudo -n realpath -- "$root")
 if ! docker image inspect "$image" >/dev/null 2>&1; then docker pull "$image" >&2; fi
 expected_image=$(docker image inspect "$image" --format '{{.Id}}')
-free=$(df -Pk "$root" | awk 'NR==2 {print $4}')
+free=$(sudo -n df -Pk "$root" | awk 'NR==2 {print $4}')
 ((free >= 30 * 1024 * 1024)) || { echo 'Need 30 GiB genuinely free for Dagger' >&2; exit 1; }
 cpu_set=$(python3 -c 'import os,sys; n=int(sys.argv[1]); cpus=sorted(os.sched_getaffinity(0)); assert len(cpus)>=n; print(",".join(map(str, cpus[:n])))' "$cpus")
 if ! docker container inspect "$engine" >/dev/null 2>&1; then
@@ -44,9 +44,16 @@ assert len(mounts)==1 and mounts[0]["Type"]=="bind" and mounts[0]["Source"]==sys
 assert engine["HostConfig"]["CgroupnsMode"]=="private", "Dagger engine cgroup namespace differs"
 ' "$root"
 limits=$(docker inspect "$engine" --format '{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}} {{.HostConfig.MemorySwap}} {{.HostConfig.PidsLimit}} {{.HostConfig.CpusetCpus}}')
-[[ $limits == "$((cpus * 1000000000)) $memory_bytes $swap_bytes 4096 $cpu_set" ]]
+expected_limits="$((cpus * 1000000000)) $memory_bytes $swap_bytes 4096 $cpu_set"
+[[ $limits == "$expected_limits" ]] || {
+    printf 'Existing Dagger engine limits differ: got=%s expected=%s\n' "$limits" "$expected_limits" >&2
+    exit 1
+}
 docker start "$engine" >/dev/null
 actual=$(docker exec "$engine" cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.swap.max /sys/fs/cgroup/cpu.max /sys/fs/cgroup/pids.max)
 expected=$(printf '%s\n%s\n%s 100000\n4096' "$memory_bytes" "$((swap_bytes - memory_bytes))" "$((cpus * 100000))")
-[[ $actual == "$expected" ]]
+[[ $actual == "$expected" ]] || {
+    printf 'Running Dagger engine cgroup limits differ:\ngot:\n%s\nexpected:\n%s\n' "$actual" "$expected" >&2
+    exit 1
+}
 printf '_EXPERIMENTAL_DAGGER_RUNNER_HOST=docker-container://%s\n' "$engine"
