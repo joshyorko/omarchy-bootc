@@ -13,11 +13,13 @@ git cat-file -e "${source_head}^{commit}"
 if ! git diff --quiet "${source_head}" "${harness_head}" -- . \
     ':!.github/workflows/candidate.yml' \
     ':!scripts/ci/candidate-runtime.sh' \
+    ':!scripts/ci/vm-smoke.sh' \
     ':!scripts/ci/acceptance-overlay.Containerfile' \
     ':!scripts/ci/verify-candidate-reuse.sh' \
     ':!build/acceptance-dependencies.sh' \
     ':!tests/test-acceptance-dependencies.sh' \
     ':!tests/test-acceptance-overlay.sh' \
+    ':!tests/test-sddm-capture.sh' \
     ':!tests/test-candidate-reuse.sh'; then
     echo 'Candidate reuse rejected: image or unchecked harness inputs differ' >&2
     exit 1

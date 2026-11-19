@@ -188,6 +188,7 @@ jobs:
           bash scripts/ci/verify-candidate-reuse.sh "$CANDIDATE_SOURCE_HEAD" HEAD
           bash tests/test-candidate-reuse.sh
           bash tests/test-acceptance-overlay.sh
+          bash tests/test-sddm-capture.sh
           bash tests/test-runtime-acceptance-contract.sh
           bash -n scripts/ci/candidate-runtime.sh
           shellcheck scripts/ci/candidate-runtime.sh scripts/ci/verify-candidate-reuse.sh
