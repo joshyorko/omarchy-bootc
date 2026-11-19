@@ -4,6 +4,25 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/codex-omarchy-engine-test-XXXXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 mkdir "$scratch/bin" "$scratch/cache"
+export TEST_REAL_PYTHON
+TEST_REAL_PYTHON=$(command -v python3)
+cat >"$scratch/bin/python3" <<'SH'
+#!/usr/bin/env bash
+if [[ $2 == *os.sched_getaffinity* ]]; then
+    count=${3:-$TEST_CPUS}
+    if [[ $count == 2 ]]; then echo 0,1; else echo 0,1,2,3; fi
+else
+    exec "$TEST_REAL_PYTHON" "$@"
+fi
+SH
+cat >"$scratch/bin/awk" <<'SH'
+#!/usr/bin/env bash
+if [[ ${2:-} == /proc/meminfo ]]; then
+    echo "${TEST_HOST_MEMORY_KIB:-33554432}"
+else
+    exec /usr/bin/awk "$@"
+fi
+SH
 cat >"$scratch/bin/sudo" <<'SH'
 #!/usr/bin/env bash
 [[ $1 == -n ]] && shift
@@ -53,4 +72,9 @@ fi
 export TEST_CPUS=4 TEST_MEMORY=12884901888 TEST_SWAP=15032385536
 env -u OMARCHY_REMOTE_BUILDER GITHUB_ACTIONS=true bash "$root/scripts/ci/dagger-engine.sh" >/dev/null
 grep -q -- '--cpus=4 .*--memory=12g --memory-swap=14g' "$TEST_CALLS"
+: >"$TEST_CALLS"
+if OMARCHY_REMOTE_BUILDER=harvester TEST_HOST_MEMORY_KIB=6291456 bash "$root/scripts/ci/dagger-engine.sh" >/dev/null 2>&1; then
+    echo 'FAIL: engine admitted without guest RAM headroom' >&2; exit 1
+fi
+[[ ! -s $TEST_CALLS ]]
 printf 'PASS: compact remote/standard hosted engine limits and oversized reuse rejection\n'
