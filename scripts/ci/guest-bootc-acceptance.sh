@@ -2,7 +2,8 @@
 # Called only at the two adapted upstream assertions. This is not a desktop-test runner.
 # Pinned bootc fa0d3f9c crates/initramfs/src/lib.rs mounts the root and sysroot clone
 # readonly. Its composefs-rs f720d6c7 crates/composefs/src/mount.rs creates overlay
-# source composefs:<SHA-512 hex>, metacopy=on, redirect_dir=on, without an upperdir.
+# source composefs:<SHA-512 hex>, without an upperdir. Kernel mount reporting
+# can expose verity=require instead of metacopy=on,redirect_dir=on.
 
 bootc_acceptance_fail() { printf 'not ok - bootc acceptance: %s\n' "$*" >&2; return 1; }
 
@@ -23,7 +24,8 @@ bootc_validate_root() {
       ($booted.image.imageDigest | test("^sha256:[0-9a-f]{64}$")) and
       ($roots[0] | .target == "/" and .fstype == "overlay" and readonly and
         .source == ("composefs:" + $booted.composefs.verity) and
-        (opts | index("metacopy=on") != null and index("redirect_dir=on") != null) and
+        (opts | index("verity=require") != null or
+          (index("metacopy=on") != null and index("redirect_dir=on") != null)) and
         (opts | all(.[]; (startswith("upperdir=") or startswith("workdir=")) | not))) and
       ($backings[0] | .target == "/sysroot" and .fstype == "btrfs" and readonly)
     ' "$root_json" "$backing_json" "$status_json" >/dev/null

@@ -749,10 +749,10 @@ if [[ "${VM_PROFILE}" == omarchy && -n "${NATIVE_ACCEPTANCE_SCRIPT:-}" ]]; then
     fi
 fi
 
+((acceptance_status == 0)) || fail "One or more graphical/native acceptance checks failed; inspect individual receipts."
 if [[ "${VM_PROFILE}" == omarchy ]]; then
     run_lifecycle_acceptance
 fi
 capture_host_diagnostics
 capture_guest_diagnostics
-((acceptance_status == 0)) || fail "One or more graphical/native acceptance checks failed; inspect individual receipts."
 echo "Requested first-boot/runtime and A/B lifecycle checks passed. Dakota round-trip remains a separate transition gate."

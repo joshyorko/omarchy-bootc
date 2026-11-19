@@ -130,6 +130,9 @@ with tempfile.TemporaryDirectory() as temporary:
                                *map(str, paths)], capture_output=True).returncode == 0
     assert validate(root_mount, backing, status)
     import copy
+    observed = copy.deepcopy(root_mount)
+    observed["filesystems"][0]["options"] = "ro,relatime,lowerdir=/proc/self/fd/5::/proc/self/fd/6,index=off,verity=require"
+    assert validate(observed, backing, status), "readonly verity-required mount from hosted guest was rejected"
     for field, value in (("fstype", "btrfs"), ("source", "overlay"),
                          ("source", "composefs:" + "c" * 128),
                          ("source", "transient:composefs=" + digest),

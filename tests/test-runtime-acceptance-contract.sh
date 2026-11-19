@@ -131,3 +131,32 @@ if grep -Fq 'docker.io/library/registry:2.8.3' "${SMOKE}"; then
 fi
 
 printf 'runtime acceptance wiring contract passed\n'
+
+# Execute the real final orchestration block with failed prerequisites. It must
+# fail before staging or rebooting another image, preserving the failing boot.
+python3 - "${SMOKE}" <<'PY'
+from pathlib import Path
+import os
+import subprocess
+import sys
+import tempfile
+
+lines = Path(sys.argv[1]).read_text().splitlines()
+call = max(i for i, line in enumerate(lines) if line.strip() == 'run_lifecycle_acceptance')
+tail = '\n'.join(lines[call - 2:])
+with tempfile.TemporaryDirectory(prefix='acceptance-prerequisites-') as tmp:
+    marker = Path(tmp) / 'lifecycle-ran'
+    prefix = '''set -euo pipefail
+VM_PROFILE=omarchy
+acceptance_status=1
+run_lifecycle_acceptance() { touch "$LIFECYCLE_MARKER"; }
+capture_host_diagnostics() { :; }
+capture_guest_diagnostics() { :; }
+fail() { exit 1; }
+'''
+    result = subprocess.run(['bash', '-c', prefix + tail],
+                            env=dict(os.environ, LIFECYCLE_MARKER=str(marker)))
+    assert result.returncode != 0, 'failed prerequisites reported success'
+    assert not marker.exists(), 'failed prerequisites reached lifecycle staging/reboot'
+print('PASS: failed prerequisites stop before lifecycle staging/reboot')
+PY

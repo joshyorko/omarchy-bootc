@@ -15,6 +15,8 @@ mkdir -p "$ARTIFACTS"
 
 fail() {
     echo "not ok - $*" | tee "$ARTIFACTS/native-acceptance.failure" >&2
+    # Preserve the failing boot's shell diagnostics before any later reboot.
+    journalctl --user -b --no-pager >"$ARTIFACTS/failure-user-journal.log" 2>&1 || true
     exit 1
 }
 
