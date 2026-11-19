@@ -19,6 +19,8 @@ if ! git diff --quiet "${source_head}" "${harness_head}" -- . \
     ':!scripts/ci/acceptance-overlay.Containerfile' \
     ':!scripts/ci/verify-candidate-reuse.sh' \
     ':!build/acceptance-dependencies.sh' \
+    ':!build/acceptance-firstboot.sh' \
+    ':!scripts/ci/lib/upstream-acceptance.sh' \
     ':!tests/test-acceptance-dependencies.sh' \
     ':!tests/test-acceptance-overlay.sh' \
     ':!tests/test-sddm-capture.sh' \

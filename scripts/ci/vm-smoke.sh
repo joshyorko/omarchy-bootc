@@ -407,6 +407,7 @@ capture_guest_diagnostics() {
 
     write_artifact guest-uname.txt run_guest 'uname -a'
     write_artifact guest-id.txt run_guest 'id'
+    write_artifact guest-cups-policy.txt run_guest 'id; sudo -n cat /etc/cups/cups-files.conf /etc/cups/cupsd.conf; LC_ALL=C timeout 10 lpinfo -v </dev/null'
     write_artifact guest-systemd-failed.txt run_guest 'systemctl --failed --no-pager --full'
     write_artifact guest-sddm-status.txt run_guest 'systemctl status sddm --no-pager --full'
     write_artifact guest-sshd-status.txt run_guest 'systemctl status sshd --no-pager --full'

@@ -10,6 +10,9 @@ phase="${1:-}"
 ARTIFACTS="${OMARCHY_ACCEPTANCE_DIR:?Set OMARCHY_ACCEPTANCE_DIR to a persistent artifact directory}"
 OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}"
 export OMARCHY_PATH
+# Software-rendered hosted guests need a larger bounded IPC budget for QML reload.
+# Do not retry mutating calls: an IPC timeout may follow a completed mutation.
+export OMARCHY_SHELL_IPC_TIMEOUT=15s
 export PATH="$OMARCHY_PATH/bin:$HOME/.local/bin:$PATH"
 mkdir -p "$ARTIFACTS"
 

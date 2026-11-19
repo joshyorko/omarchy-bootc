@@ -53,4 +53,10 @@ compgen -G "${user_home}/.local/state/omarchy/migrations/*.sh" >/dev/null
 second_run="$(runuser -u omarchy -- env HOME="${user_home}" USER=omarchy LOGNAME=omarchy PATH=/usr/share/omarchy/bin:/usr/bin /usr/bin/omarchy-provision-user)"
 grep -Fq 'User finalization already complete' <<<"${second_run}"
 
+# The disposable graphical suite tests browser windows, not Chromium onboarding.
+# Leave the product's fresh-user profile and flags unchanged outside this fixture.
+browser_flags="${user_home}/.config/chromium-flags.conf"
+grep -Fxq -- '--no-first-run' "${browser_flags}" || printf '%s\n' '--no-first-run' >>"${browser_flags}"
+chown omarchy:omarchy "${browser_flags}"
+
 touch "${ready_marker}"
