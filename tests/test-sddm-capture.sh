@@ -18,10 +18,22 @@ EOF
 cat >"$fixture/bin/systemctl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$*" == 'restart sddm' ]]
+case "$*" in
+    'reset-failed sddm') printf '0\n' >"$SDDM_START_COUNTER" ;;
+    'restart sddm')
+        starts="$(cat "$SDDM_START_COUNTER")"
+        (( starts < 3 )) || { echo 'SDDM start limit hit' >&2; exit 1; }
+        printf '%s\n' "$((starts + 1))" >"$SDDM_START_COUNTER"
+        ;;
+    *) exit 2 ;;
+esac
 EOF
 chmod +x "$fixture/bin/"*
 export PATH="$fixture/bin:$PATH"
+# Firstboot has already started SDDM; two immediate fixture restarts would
+# exceed this budget unless the harness resets it for its deliberate actions.
+export SDDM_START_COUNTER="$fixture/start-counter"
+printf '2\n' >"$SDDM_START_COUNTER"
 run_guest() {
     # SDDM reads all files in its config directory, including .disabled files.
     if [[ "$1" == pgrep* ]]; then

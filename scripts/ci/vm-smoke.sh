@@ -380,7 +380,8 @@ capture_vm_screen() {
 capture_sddm_greeter() {
     local ready=0
     # SDDM reads every file in conf.d, regardless of its extension.
-    run_guest 'sudo -n mv /etc/sddm.conf.d/90-omarchy-acceptance.conf /run/omarchy-acceptance-autologin.conf && sudo -n systemctl restart sddm'
+    # Provisioning and these deliberate restarts can exhaust the start budget.
+    run_guest 'sudo -n mv /etc/sddm.conf.d/90-omarchy-acceptance.conf /run/omarchy-acceptance-autologin.conf && sudo -n systemctl reset-failed sddm && sudo -n systemctl restart sddm'
     for _ in $(seq 1 90); do
         if run_guest 'pgrep -f "^/usr/bin/sddm-greeter" >/dev/null' 2>/dev/null; then
             ready=1
@@ -390,7 +391,7 @@ capture_sddm_greeter() {
     done
     ((ready)) || fail 'SDDM greeter did not start with fixture autologin disabled'
     capture_vm_screen sddm-greeter
-    run_guest 'sudo -n mv /run/omarchy-acceptance-autologin.conf /etc/sddm.conf.d/90-omarchy-acceptance.conf && sudo -n systemctl restart sddm'
+    run_guest 'sudo -n mv /run/omarchy-acceptance-autologin.conf /etc/sddm.conf.d/90-omarchy-acceptance.conf && sudo -n systemctl reset-failed sddm && sudo -n systemctl restart sddm'
 }
 
 write_artifact() {
