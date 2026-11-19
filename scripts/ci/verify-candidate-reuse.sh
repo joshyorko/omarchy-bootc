@@ -12,6 +12,8 @@ harness_head="${2:-HEAD}"
 git cat-file -e "${source_head}^{commit}"
 if ! git diff --quiet "${source_head}" "${harness_head}" -- . \
     ':!.github/workflows/candidate.yml' \
+    ':!.devcontainer/acceptance' \
+    ':!scripts/ci/harvester-cache-proof.sh' \
     ':!scripts/ci/candidate-runtime.sh' \
     ':!scripts/ci/adapt-upstream-acceptance.py' \
     ':!scripts/ci/vm-smoke.sh' \

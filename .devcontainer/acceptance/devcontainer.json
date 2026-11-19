@@ -1,0 +1,23 @@
+{
+  "name": "Omarchy acceptance builder",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "root",
+  "runArgs": [
+    "--privileged",
+    "--cgroupns=private",
+    "--cpus=4",
+    "--memory=12g",
+    "--memory-swap=14g",
+    "--pids-limit=4096",
+    "--cpuset-cpus=0-3"
+  ],
+  "mounts": [
+    "source=omarchy-acceptance-builds,target=/builds,type=volume"
+  ],
+  "containerEnv": {
+    "CANDIDATE_MIN_FREE_GIB": "30",
+    "OMARCHY_REMOTE_BUILDER": "harvester"
+  }
+}
