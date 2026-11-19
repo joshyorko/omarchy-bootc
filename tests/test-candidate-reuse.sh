@@ -28,6 +28,10 @@ printf 'updated verifier\n' >build/acceptance-dependencies.sh
 git add .
 git commit -qm verifier
 bash "${helper}" "${source_head}" HEAD
+printf 'diagnostic adapter\n' >scripts/ci/adapt-upstream-acceptance.py
+git add .
+git commit -qm adapter
+bash "${helper}" "${source_head}" HEAD
 printf 'changed image\n' >>Containerfile
 git add .
 git commit -qm image

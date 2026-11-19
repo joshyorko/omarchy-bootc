@@ -190,6 +190,8 @@ jobs:
           bash tests/test-acceptance-overlay.sh
           bash tests/test-sddm-capture.sh
           bash tests/test-runtime-acceptance-contract.sh
+          bash tests/test-upstream-acceptance-adapter.sh
+          bash tests/test-plugin-reload-patch.sh
           bash -n scripts/ci/candidate-runtime.sh
           shellcheck scripts/ci/candidate-runtime.sh scripts/ci/verify-candidate-reuse.sh
       - name: Prepare storage for the archive, imported image, and VM disk

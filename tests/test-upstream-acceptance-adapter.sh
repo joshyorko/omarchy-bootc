@@ -53,13 +53,44 @@ with tempfile.TemporaryDirectory() as temporary:
     receipt = json.loads((artifacts / "upstream-acceptance-adaptation.json").read_bytes())
     assert receipt["patch_sha256"] == adapter.sha256((artifacts / receipt["patch"]).read_bytes())
     assert receipt["status"] == "adapted-not-executed"
-    assert len(receipt["changes"]) == 3 and receipt["skipped_tests"] == []
+    assert len(receipt["changes"]) == 4 and receipt["skipped_tests"] == []
+    # Exercise the adapted OCR function at its external capture/recognition
+    # boundaries. Diagnostic failures must never turn an OCR miss into a pass.
+    import os
+    bin_dir = tmp / "bin"
+    bin_dir.mkdir()
+    commands = {
+        "grim": 'printf "%s" "$FRAME" >"${@: -1}"',
+        "tesseract": 'printf "%s" "$OCR_TEXT"; exit "$OCR_EXIT"',
+        "omarchy-shell": 'printf "{}"; exit 7',
+        "hyprctl": 'printf "[]"; exit 7',
+    }
+    for name, body in commands.items():
+        executable = bin_dir / name
+        executable.write_text("#!/usr/bin/env bash\n" + body + "\n")
+        executable.chmod(0o755)
+    function_file = tmp / "ocr.sh"
+    function_file.write_bytes(adapter.REPLACEMENTS["test/acceptance.d/base-test.sh"][1])
+    capture_dir = tmp / "ocr-receipts"
+    capture_dir.mkdir()
+    for index, (text, ocr_exit, expected) in enumerate([
+            ("Acceptance notification", "0", 0), ("wrong text", "0", 1),
+            ("Acceptance notification", "9", 9)]):
+        env = dict(os.environ, PATH=str(bin_dir) + ":" + os.environ["PATH"],
+                   FRAME=str(index), OCR_TEXT=text, OCR_EXIT=ocr_exit)
+        result = subprocess.run(["bash", "-c",
+            'set -uo pipefail; source "$1"; ARTIFACTS="$2"; screen_contains "Acceptance notification"',
+            "ocr-test", str(function_file), str(capture_dir)], env=env, capture_output=True)
+        assert result.returncode == expected, result.stderr
+        assert (capture_dir / "notification-ocr-first.png").read_text() == "0"
+        assert (capture_dir / "notification-ocr-latest.png").read_text() == str(index)
+        assert (capture_dir / "notification-ocr-latest.txt").read_text() == text
     menu_before = fixture["test/acceptance.d/menu-test.sh"].decode().splitlines()
     menu_after = (target / "test/acceptance.d/menu-test.sh").read_text().splitlines()
     def gates(lines):
         return [line for line in lines if line.strip().startswith(('wait_until ', 'pass ', 'fail ', 'screenshot '))]
     assert gates(menu_before) == gates(menu_after), "menu correction removed or changed a gate"
-    # Enforce the consumer-visible boundary: every original byte outside the three
+    # Enforce the consumer-visible boundary: every original byte outside the four
     # selected assertion spans survives, and runner discovery includes every gate.
     for name, before in fixture.items():
         after = (target / name).read_bytes()
@@ -181,5 +212,5 @@ with tempfile.TemporaryDirectory(prefix="bar-reservations-") as directory:
     assert not bar([28,0,0,0], "vertical", focused=False)
     assert not bar([28,0,0], "vertical")
     assert not bar(["28",0,0,0], "vertical")
-print("PASS: bounded three-span adaptation, preserved gates, drift refusal, and root parser boundaries (not a VM pass)")
+print("PASS: bounded four-span adaptation, preserved gates, drift refusal, and root parser boundaries (not a VM pass)")
 PY

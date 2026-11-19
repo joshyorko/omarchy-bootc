@@ -13,6 +13,7 @@ git cat-file -e "${source_head}^{commit}"
 if ! git diff --quiet "${source_head}" "${harness_head}" -- . \
     ':!.github/workflows/candidate.yml' \
     ':!scripts/ci/candidate-runtime.sh' \
+    ':!scripts/ci/adapt-upstream-acceptance.py' \
     ':!scripts/ci/vm-smoke.sh' \
     ':!scripts/ci/guest-bootc-acceptance.sh' \
     ':!scripts/ci/guest-native-acceptance.sh' \

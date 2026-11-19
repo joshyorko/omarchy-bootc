@@ -27,6 +27,56 @@ UPSTREAM_SHA256 = {
 }
 HELPER_PATH = "test/acceptance.d/bootc-acceptance-helper.sh"
 REPLACEMENTS = {
+    # Diagnostic capture preserves OCR matching and failure propagation.
+    "test/acceptance.d/base-test.sh": (
+        b'''screen_contains() {
+  local text="$1"
+  local snapshot="/tmp/omarchy-acceptance-ocr-$$.png"
+
+  # Capture at 2x scale: tesseract routinely drops small caption text at
+  # native resolution (the weather panel's detail labels, for one).
+  if ! timeout 10 grim -s 2 "$snapshot" 2>/dev/null; then
+    rm -f "$snapshot"
+    return 1
+  fi
+  tesseract "$snapshot" stdout --psm 11 2>/dev/null | grep -Fi -- "$text" >/dev/null
+  local status=$?
+  rm -f "$snapshot"
+  return $status
+}
+''',
+        b'''screen_contains() {
+  local text="$1"
+  local snapshot="/tmp/omarchy-acceptance-ocr-$$.png"
+
+  # Capture at 2x scale: tesseract routinely drops small caption text at
+  # native resolution (the weather panel's detail labels, for one).
+  if ! timeout 10 grim -s 2 "$snapshot" 2>/dev/null; then
+    rm -f "$snapshot"
+    return 1
+  fi
+  tesseract "$snapshot" stdout --psm 11 >"$snapshot.txt" 2>/dev/null
+  local ocr_status=$?
+  grep -Fi -- "$text" "$snapshot.txt" >/dev/null
+  local status=$?
+  ((ocr_status == 0)) || status=$ocr_status
+  if [[ $text == "Acceptance notification" ]]; then
+    # Retain the actual OCR inputs before the short-lived toast expires.
+    cp "$snapshot" "$ARTIFACTS/notification-ocr-latest.png" || true
+    cp "$snapshot.txt" "$ARTIFACTS/notification-ocr-latest.txt" || true
+    if [[ ! -f "$ARTIFACTS/notification-ocr-first.png" ]]; then
+      cp "$snapshot" "$ARTIFACTS/notification-ocr-first.png" || true
+      cp "$snapshot.txt" "$ARTIFACTS/notification-ocr-first.txt" || true
+      timeout 2 omarchy-shell notifications probe >"$ARTIFACTS/notification-first-probe.json" 2>"$ARTIFACTS/notification-first-probe.stderr" || true
+      timeout 1 hyprctl -j monitors >"$ARTIFACTS/notification-first-monitors.json" 2>&1 || true
+      timeout 1 hyprctl -j layers >"$ARTIFACTS/notification-first-layers.json" 2>&1 || true
+    fi
+  fi
+  rm -f "$snapshot" "$snapshot.txt"
+  return $status
+}
+''',
+    ),
     # The pinned menu has Apps, Learn, Appearance, Trigger. Three Down keys
     # select Trigger, not Appearance. Menu Bar is the fourth appearance item;
     # Position follows Hide/Show Bar. Preserve every assertion and screenshot.
@@ -217,7 +267,7 @@ def adapt(root, revision, artifacts):
         "schema": "omarchy-bootc.upstream-acceptance-adaptation/v1",
         "upstream_revision": revision,
         "status": "adapted-not-executed",
-        "scope": "root-filesystem-declared-kernel-menu-navigation-and-bar-reservations",
+        "scope": "root-filesystem-declared-kernel-menu-navigation-and-bar-reservations-and-ocr-evidence",
         "changes": changes,
         "helper": {"path": HELPER_PATH, "sha256": sha256(helper)},
         "patch": patch_name,

@@ -22,5 +22,8 @@ run_upstream_acceptance() {
         2>&1 | tee "${artifact_dir}/upstream-acceptance.log"; then
         acceptance_status=1
     fi
+    # Preserve the tested boot before native persistence checks reboot it.
+    run_guest 'timeout 10 journalctl --user -b --no-pager' \
+        >"${artifact_dir}/upstream-user-journal.log" 2>&1 || true
     return "${acceptance_status}"
 }
