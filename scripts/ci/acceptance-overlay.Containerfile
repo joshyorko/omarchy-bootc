@@ -22,13 +22,13 @@ RUN grep -Fxq ENABLED=yes /etc/ufw/ufw.conf && \
 RUN --mount=type=tmpfs,dst=/tmp \
     bash /ctx/build/stage-acceptance-node.sh && \
     bash /ctx/build/25-quattro-user.sh && \
-    install -d -m 0755 /etc/sddm.conf.d && \
+    install -d -m 0755 /etc/sddm.conf.d /usr/lib/omarchy-acceptance && \
     printf '%s\n' \
         '[Autologin]' \
         'User=omarchy' \
         'Session=omarchy.desktop' \
         'Relogin=true' \
-        > /etc/sddm.conf.d/90-omarchy-acceptance.conf && \
+        > /usr/lib/omarchy-acceptance/autologin.conf && \
     rm -rf /ctx
 
 LABEL containers.bootc=1 \

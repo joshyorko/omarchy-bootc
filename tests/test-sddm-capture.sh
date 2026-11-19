@@ -4,9 +4,9 @@ set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 fixture="$(mktemp -d)"
 trap 'rm -rf -- "$fixture"' EXIT
-mkdir -p "$fixture/etc/sddm.conf.d" "$fixture/run" "$fixture/bin"
-printf '[Autologin]\nUser=omarchy\n' >"$fixture/etc/sddm.conf.d/90-omarchy-acceptance.conf"
-cp "$fixture/etc/sddm.conf.d/90-omarchy-acceptance.conf" "$fixture/original"
+mkdir -p "$fixture/etc/sddm.conf.d" "$fixture/run" "$fixture/bin" "$fixture/usr/lib/omarchy-acceptance"
+printf '[Autologin]\nUser=omarchy\n' >"$fixture/usr/lib/omarchy-acceptance/autologin.conf"
+cp "$fixture/usr/lib/omarchy-acceptance/autologin.conf" "$fixture/original"
 printf '[Theme]\nCurrent=omarchy\n' >"$fixture/etc/sddm.conf.d/10-theme.conf"
 cat >"$fixture/bin/sudo" <<'EOF'
 #!/usr/bin/env bash
@@ -18,22 +18,14 @@ EOF
 cat >"$fixture/bin/systemctl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-case "$*" in
-    'reset-failed sddm') printf '0\n' >"$SDDM_START_COUNTER" ;;
-    'restart sddm')
-        starts="$(cat "$SDDM_START_COUNTER")"
-        (( starts < 3 )) || { echo 'SDDM start limit hit' >&2; exit 1; }
-        printf '%s\n' "$((starts + 1))" >"$SDDM_START_COUNTER"
-        ;;
-    *) exit 2 ;;
-esac
+[[ "$*" == 'restart sddm' ]]
+[[ -f "$SDDM_FIXTURE/captured" ]] || { echo 'SDDM restarted before greeter capture' >&2; exit 1; }
+[[ ! -f "$SDDM_FIXTURE/restarted" ]] || { echo 'SDDM restarted more than once' >&2; exit 1; }
+touch "$SDDM_FIXTURE/restarted"
 EOF
 chmod +x "$fixture/bin/"*
 export PATH="$fixture/bin:$PATH"
-# Firstboot has already started SDDM; two immediate fixture restarts would
-# exceed this budget unless the harness resets it for its deliberate actions.
-export SDDM_START_COUNTER="$fixture/start-counter"
-printf '2\n' >"$SDDM_START_COUNTER"
+export SDDM_FIXTURE="$fixture"
 run_guest() {
     # SDDM reads all files in its config directory, including .disabled files.
     if [[ "$1" == pgrep* ]]; then
@@ -43,6 +35,7 @@ run_guest() {
     local command="$1"
     command="${command//\/etc\/sddm.conf.d/$fixture/etc/sddm.conf.d}"
     command="${command//\/run\//$fixture/run/}"
+    command="${command//\/usr\/lib\/omarchy-acceptance/$fixture/usr/lib/omarchy-acceptance}"
     bash -euo pipefail -c "$command"
 }
 sleep() { :; }
@@ -57,8 +50,8 @@ definition="$(sed -n '/^capture_sddm_greeter() {$/,/^}$/p' "$root/scripts/ci/vm-
 [[ -n "$definition" ]]
 eval "$definition"
 capture_sddm_greeter
-[[ -f "$fixture/captured" ]]
+[[ -f "$fixture/captured" && -f "$fixture/restarted" ]]
 cmp "$fixture/original" "$fixture/etc/sddm.conf.d/90-omarchy-acceptance.conf"
 [[ -f "$fixture/etc/sddm.conf.d/10-theme.conf" ]]
 [[ -z "$(ls -A "$fixture/run")" ]]
-echo 'PASS: greeter capture removes autologin from all SDDM inputs and restores it afterward'
+echo 'PASS: greeter-first boot captures before enabling autologin with one restart'
