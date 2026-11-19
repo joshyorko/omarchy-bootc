@@ -36,12 +36,13 @@ with tempfile.TemporaryDirectory(prefix='plugin-reload-patch-') as tmp:
     clone = Path(tmp)/'clone.sh'
     clone.write_text('new_id="${USER:-$(id -un)}.${source_id#omarchy.}"\nprintf "%s" "$new_id"\n')
     subprocess.run([sys.executable, script, str(clone), str(receipt), 'clone'], check=True)
-    for user, source, expected in [('omarchy', 'omarchy.clock', 'omarchy.local.clock'),
+    for user, source, expected in [('omarchy', 'omarchy.clock', 'local.omarchy.clock'),
                                     ('alice', 'omarchy.clock', 'alice.clock'),
-                                    ('omarchy', 'omarchy.audio', 'omarchy.local.audio')]:
+                                    ('omarchy', 'omarchy.audio', 'local.omarchy.audio')]:
         result = subprocess.run(['bash', '-euc', 'USER="$1"; source_id="$2"; source "$3"',
                                  'fixture', user, source, str(clone)], capture_output=True, text=True, check=True)
         assert result.stdout == expected
         assert result.stdout != source
+        assert not result.stdout.startswith('omarchy.'), 'third-party clone uses reserved namespace'
 print('PASS: targeted plugin reload patch, provenance hashes, and drift refusal')
 PY

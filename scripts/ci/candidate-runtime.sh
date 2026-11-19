@@ -85,7 +85,7 @@ boot_candidate() {
         2>&1 | tee "${artifact_dir}/vm-smoke.log"
 
     # Success proves every retained upstream/native gate with the recorded
-    # filesystem/kernel and pinned-navigation corrections. The receipt is part
+    # filesystem/kernel, pinned-navigation and bar-reservation corrections. The receipt is part
     # of this evidence; the disposable overlay is not the publishable image.
     jq -n \
         --arg source_sha "${head}" \

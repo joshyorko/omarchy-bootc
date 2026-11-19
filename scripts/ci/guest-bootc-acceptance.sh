@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Called only at the two adapted upstream assertions. This is not a desktop-test runner.
+# Read-only proofs used by the bounded upstream acceptance adaptations.
 # Pinned bootc fa0d3f9c crates/initramfs/src/lib.rs mounts the root and sysroot clone
 # readonly. Its composefs-rs f720d6c7 crates/composefs/src/mount.rs creates overlay
 # source composefs:<SHA-512 hex>, without an upperdir. Kernel mount reporting
@@ -58,6 +58,30 @@ bootc_kernel_headers_path_allowed() {
     esac
 }
 
+bootc_validate_bar() {
+    local monitors="$1" layers="$2" orientation="$3"
+    jq -e -s --arg orientation "$orientation" '
+      [.[0][] | select(.focused == true)] as $m |
+      ($m | length) == 1 and
+      ($m[0].reserved | type == "array" and length == 4 and all(.[]; type == "number" and . >= 0)) and
+      ([.[1][$m[0].name] | .. | objects | select(.namespace? == "omarchy-bar")] | length) > 0 and
+      ($m[0].reserved as $r |
+        if $orientation == "vertical" then $r[0] + $r[2] > 0 and $r[1] + $r[3] == 0
+        elif $orientation == "horizontal" then $r[1] + $r[3] > 0 and $r[0] + $r[2] == 0
+        else false end)
+    ' "$monitors" "$layers" >/dev/null
+}
+
+bootc_verify_bar() {
+    local artifacts="$1" orientation="$2"
+    # The transparent bar layer spans the whole screen in either orientation.
+    # Measure its compositor-reserved edge, not the full surface aspect ratio.
+    hyprctl -j monitors >"$artifacts/bar-$orientation-monitors.json" || return 1
+    hyprctl -j layers >"$artifacts/bar-$orientation-layers.json" || return 1
+    bootc_validate_bar "$artifacts/bar-$orientation-monitors.json" \
+        "$artifacts/bar-$orientation-layers.json" "$orientation"
+}
+
 bootc_verify_kernel() {
     local artifacts="$1" kernel release modules headers kernel_version headers_version path mount_json
     # Re-prove root identity here: system-test.sh can run independently of session-test.sh.
@@ -108,7 +132,9 @@ bootc_acceptance_main() {
     case "$mode" in
         root) bootc_verify_root "$artifacts" ;;
         kernel) bootc_verify_kernel "$artifacts" ;;
-        *) bootc_acceptance_fail 'usage: bootc-acceptance-helper.sh <root|kernel>' ;;
+        bar-vertical) bootc_verify_bar "$artifacts" vertical ;;
+        bar-horizontal) bootc_verify_bar "$artifacts" horizontal ;;
+        *) bootc_acceptance_fail 'usage: bootc-acceptance-helper.sh <root|kernel|bar-vertical|bar-horizontal>' ;;
     esac
 }
 

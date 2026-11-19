@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Adapt two installer premises and pinned menu navigation; never waive a gate."""
+"""Adapt installer premises and pinned menu/bar proofs; never waive a gate."""
 
 import argparse
 import difflib
@@ -30,8 +30,47 @@ REPLACEMENTS = {
     # The pinned menu has Apps, Learn, Appearance, Trigger. Three Down keys
     # select Trigger, not Appearance. Menu Bar is the fourth appearance item;
     # Position follows Hide/Show Bar. Preserve every assertion and screenshot.
+    # Its transparent bar layer spans the screen; prove orientation by the
+    # compositor-reserved edge, with the bar present on that same monitor.
     "test/acceptance.d/menu-test.sh": (
-        b'''wtype -k Down -k Down -k Down
+        b'''bar_is_vertical() {
+  local width height
+
+  read -r width height < <(hyprctl -j layers | jq -r '
+    [.. | objects | select(.namespace? == "omarchy-bar")][0]
+    | [.w, .h] | @tsv
+  ')
+
+  [[ $width =~ ^[0-9]+$ && $height =~ ^[0-9]+$ ]] && ((width < height))
+}
+
+bar_is_horizontal() {
+  local width height
+
+  read -r width height < <(hyprctl -j layers | jq -r '
+    [.. | objects | select(.namespace? == "omarchy-bar")][0]
+    | [.w, .h] | @tsv
+  ')
+
+  [[ $width =~ ^[0-9]+$ && $height =~ ^[0-9]+$ ]] && ((width > height))
+}
+
+bar_position_is() {
+  local expected="$1"
+
+  [[ $(jq -r '.bar.position // "top"' "$CONFIG_FILE") == $expected ]]
+}
+
+source_file=$DEFAULTS_FILE
+((config_existed)) && source_file=$CONFIG_FILE
+original_position=$(jq -r '.bar.position // "top"' "$source_file")
+
+omarchy-shell shell summon omarchy.menu '{"menu":"root"}' >/dev/null
+wait_until "root menu opens" 15 layer_on_overlay "omarchy-menu"
+wait_until "root menu content is visible" 15 screen_contains "Apps"
+screenshot "success-menu-01-root"
+
+wtype -k Down -k Down -k Down
 sleep 1
 screenshot "success-menu-02-style-selected"
 wtype -k Return
@@ -49,7 +88,30 @@ screenshot "success-menu-05-position-submenu"
 
 wtype -k Down -k Down -k Return
 ''',
-        b'''wtype -k Down -k Down
+        b'''bar_is_vertical() {
+  bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helper.sh" bar-vertical
+}
+
+bar_is_horizontal() {
+  bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helper.sh" bar-horizontal
+}
+
+bar_position_is() {
+  local expected="$1"
+
+  [[ $(jq -r '.bar.position // "top"' "$CONFIG_FILE") == $expected ]]
+}
+
+source_file=$DEFAULTS_FILE
+((config_existed)) && source_file=$CONFIG_FILE
+original_position=$(jq -r '.bar.position // "top"' "$source_file")
+
+omarchy-shell shell summon omarchy.menu '{"menu":"root"}' >/dev/null
+wait_until "root menu opens" 15 layer_on_overlay "omarchy-menu"
+wait_until "root menu content is visible" 15 screen_contains "Apps"
+screenshot "success-menu-01-root"
+
+wtype -k Down -k Down
 sleep 1
 screenshot "success-menu-02-style-selected"
 wtype -k Return
@@ -155,7 +217,7 @@ def adapt(root, revision, artifacts):
         "schema": "omarchy-bootc.upstream-acceptance-adaptation/v1",
         "upstream_revision": revision,
         "status": "adapted-not-executed",
-        "scope": "root-filesystem-declared-kernel-and-pinned-menu-navigation",
+        "scope": "root-filesystem-declared-kernel-menu-navigation-and-bar-reservations",
         "changes": changes,
         "helper": {"path": HELPER_PATH, "sha256": sha256(helper)},
         "patch": patch_name,

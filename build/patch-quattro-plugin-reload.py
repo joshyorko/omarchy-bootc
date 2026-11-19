@@ -13,7 +13,7 @@ NEW = OLD.replace("shell.reloadPlugins()", "Quickshell.reload(false)")
 CLONE_OLD = 'new_id="${USER:-$(id -un)}.${source_id#omarchy.}"\n'
 CLONE_NEW = CLONE_OLD + '''# The legitimate username omarchy must not collide with a built-in id.
 if [[ $new_id == "$source_id" ]]; then
-  new_id="${USER:-$(id -un)}.local.${source_id#omarchy.}"
+  new_id="local.${USER:-$(id -un)}.${source_id#omarchy.}"
 fi
 '''
 

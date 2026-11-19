@@ -158,5 +158,28 @@ with tempfile.TemporaryDirectory() as temporary:
         assert not validate(root_mount, backing, invalid)
     assert not validate({"filesystems": []}, backing, status)
     assert not validate({"filesystems": root_mount["filesystems"] * 2}, backing, status)
+# Full-screen transparent surfaces have identical dimensions for both bar positions.
+# Acceptance must prove the actual reserved edge and a live bar on that monitor.
+with tempfile.TemporaryDirectory(prefix="bar-reservations-") as directory:
+    tmp = Path(directory)
+    monitor_path, layer_path = tmp/"monitors.json", tmp/"layers.json"
+    def bar(reserved, orientation, namespace="omarchy-bar", focused=True):
+        monitor_path.write_text(json.dumps([{"name":"Virtual-1", "focused":focused, "reserved":reserved}]))
+        layer_path.write_text(json.dumps({"Virtual-1":{"levels":{"2":[{"namespace":namespace,"w":1280,"h":800}]}}}))
+        result = subprocess.run(["bash", "-c", 'source "$1"; bootc_validate_bar "$2" "$3" "$4"',
+                                 "bar-test", str(script.with_name("guest-bootc-acceptance.sh")),
+                                 str(monitor_path), str(layer_path), orientation], capture_output=True)
+        return result.returncode == 0
+    assert bar([28,0,0,0], "vertical")
+    assert bar([0,0,28,0], "vertical")
+    assert bar([0,28,0,0], "horizontal")
+    assert bar([0,0,0,28], "horizontal")
+    assert not bar([0,28,0,0], "vertical")
+    assert not bar([28,0,0,0], "horizontal")
+    assert not bar([0,0,0,0], "vertical")
+    assert not bar([28,0,0,0], "vertical", namespace="other-panel")
+    assert not bar([28,0,0,0], "vertical", focused=False)
+    assert not bar([28,0,0], "vertical")
+    assert not bar(["28",0,0,0], "vertical")
 print("PASS: bounded three-span adaptation, preserved gates, drift refusal, and root parser boundaries (not a VM pass)")
 PY
