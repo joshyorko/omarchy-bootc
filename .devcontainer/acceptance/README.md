@@ -19,9 +19,13 @@ and the Ubuntu host prerequisites in scripts/ci/prepare-ubuntu-runner.sh. Instal
 the CLI from its official release archive and verify its official checksums.
 No Dagger Cloud token is required. No images are published by this pipeline.
 
-Dagger's persistent engine is separate from homebrew-tools. It has four CPUs
-with matching affinity, 12 GiB RAM, 14 GiB including swap and 4096 PIDs. Its state
-is under /var/lib/containers/omarchy-dagger on the dedicated 200 GiB disk. The
+Dagger's persistent engine is separate from homebrew-tools. On Harvester it has
+two CPUs with matching affinity, 5 GiB RAM, 6 GiB including swap and 4096 PIDs.
+The existing builder VM has four vCPUs, an enforced two-CPU host quota, and
+8 GiB guest RAM; Harvester applies its configured scheduling overcommit policy.
+The day-job workspace is separate and unchanged.
+GitHub retains four engine CPUs, 12 GiB RAM and 14 GiB including swap. Harvester
+engine state is under /var/lib/containers/omarchy-dagger on the retained 200 GiB disk. The
 launcher holds one engine lock for the entire pipeline and requires 30 GiB
 actually free. The module explicitly mounts a LOCKED Podman containers-storage
 cache; an opaque shell invocation alone would not create layer caching.

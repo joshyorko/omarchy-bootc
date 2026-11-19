@@ -58,7 +58,12 @@ bounded Dagger parity/cold-warm OCI measurements. Keep independent hosted checks
 
 ## Infrastructure constraint
 
-Exactly one builder was verified running after consolidation: omarchy-ac-0b534,
-unchanged at 6 vCPU / 16 GiB RAM / 200 GiB disk. homebrew-t-18140 was powered off
-with its 200 GiB PVC still Bound. Preserve both disks/caches; no new VM or parallel
-heavy build is authorized. Dakota remains control-plane/source-check-only.
+After owner authorization to resize for available capacity, omarchy-ac-0b534 was
+resized to 4 vCPU / 8 GiB guest RAM / unchanged 200 GiB disk, with a two-CPU host
+quota. Its VMI was verified Running and Ready. Harvester applies its configured
+overcommit policy to requests; verify admitted pod reservations, not only the VM
+template. The engine is capped at two CPUs / 5 GiB RAM / 6 GiB including swap.
+homebrew-t-18140 remains stopped with its 200 GiB PVC Bound. The separate
+day-job VM devsy-shared-harvester-4f954 remains unchanged. Preserve all disks and
+caches; no new VM or parallel heavy build is authorized. Dakota remains
+control-plane/source-check-only.

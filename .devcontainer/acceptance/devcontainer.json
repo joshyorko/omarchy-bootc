@@ -4,11 +4,11 @@
   "runArgs": [
     "--privileged",
     "--cgroupns=private",
-    "--cpus=4",
-    "--memory=12g",
-    "--memory-swap=14g",
+    "--cpus=2",
+    "--memory=2g",
+    "--memory-swap=3g",
     "--pids-limit=4096",
-    "--cpuset-cpus=0-3"
+    "--cpuset-cpus=0-1"
   ],
   "mounts": [
     "source=omarchy-acceptance-builds,target=/builds,type=volume"
