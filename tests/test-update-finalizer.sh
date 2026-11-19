@@ -2,6 +2,19 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# This fixture exercises a user-session finalizer and its scoped sudo calls.
+# A root build worker must actually drop privileges, not invoke installed helpers.
+if (( EUID == 0 )); then
+    fixture=$(mktemp -d "${TMPDIR:-/tmp}/codex-finalizer-user-XXXXXXXX")
+    trap 'rm -rf -- "$fixture"' EXIT
+    install -d -m 0755 "$fixture/tests" "$fixture/custom/bootc"
+    chmod 0711 "$fixture"
+    cp -- "$ROOT_DIR/tests/test-update-finalizer.sh" "$fixture/tests/"
+    cp -- "$ROOT_DIR/custom/bootc/omarchy-bootc-common.sh" \
+        "$ROOT_DIR/custom/bootc/omarchy-bootc-finalize" "$fixture/custom/bootc/"
+    runuser -u nobody -- bash "$fixture/tests/test-update-finalizer.sh"
+    exit
+fi
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
