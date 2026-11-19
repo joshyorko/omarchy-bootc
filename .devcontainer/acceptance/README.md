@@ -53,3 +53,27 @@ or VM success. Retrieve only explicitly needed small receipts. Before safe Devsy
 stop, verify no worker/transfer is active. Preserve the VM disk, named shell builds
 volume and Dagger/Podman cache. Never force-stop a shared machine or prune another
 run. KVM device presence is not boot acceptance; retain actual guest evidence.
+
+## Verified compact-builder checkpoint (2026-11-19)
+
+On source d4f442777625a52e8158e836bb4156bb245cd20b, the existing
+omarchy-ac-0b534 VM was Running/Ready at 4 vCPU / 8 GiB / 200 GiB with an
+enforced two-CPU host quota. homebrew-t-18140 stayed stopped and the day-job
+devsy-shared-harvester-4f954 VM was unchanged. No pods were unschedulable.
+
+The real Dagger v0.20.6 constructor, rootful nested Podman run, overlay build,
+repeat build and CheckResult passed. The tiny two-instruction build took
+0.36 seconds initially and 0.04 seconds on repeat; the second log records
+`Using cache` with the same image ID. This is not an Omarchy-image cold/warm
+benchmark, image qualification, or graphical/KVM acceptance.
+
+The nested worker inherits the engine's enforced cgroups because it has no
+delegated pids controller; it does not change host Podman or firewall policy.
+The source tests cover oversized engine rejection, insufficient guest headroom,
+and preserving independent probe failures while failing qualification.
+
+Evidence remains on the builder under
+`/home/kdlocpanda/omarchy-builds/run.RzDls6Yw` (3.2 MiB at probe completion).
+The persistent engine cache remains `/var/lib/containers/omarchy-dagger`
+(2.9 GiB at probe completion), with 185 GiB disk space free. Failed attempts
+are retained in sibling run directories; no local OCI artifact was downloaded.
