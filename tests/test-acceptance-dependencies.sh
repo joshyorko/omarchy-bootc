@@ -60,10 +60,19 @@ printf '%s\n' \
     '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-status ""' \
     '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-clear-transaction ""' \
     >"$fixture/scoped-sudoers"
+# Exercise the privilege boundary without invoking host sudo or changing policy.
+sudo() {
+    [[ "$1" == -n && "$2" == grep ]] || return 2
+    printf '%s\n' "$*" >"$fixture/sudo-read"
+    shift
+    "$@"
+}
 require_scoped_sudo_command /usr/libexec/omarchy-bootc-status "$fixture"
+[[ -s "$fixture/sudo-read" ]] || { echo 'scoped sudo policy was read without elevation' >&2; exit 1; }
 require_scoped_sudo_command /usr/libexec/omarchy-bootc-clear-transaction "$fixture"
 expect_failure 'missing scoped sudo command' \
     require_scoped_sudo_command /usr/libexec/omarchy-bootc-status "$fixture/absent"
+unset -f sudo
 
 
 # Package metadata is isolated; payload files and offline systemd enablement

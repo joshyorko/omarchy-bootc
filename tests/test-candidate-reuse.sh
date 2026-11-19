@@ -23,6 +23,11 @@ printf 'disposable overlay\n' >scripts/ci/acceptance-overlay.Containerfile
 git add .
 git commit -qm overlay
 bash "${helper}" "${source_head}" HEAD
+mkdir -p build
+printf 'updated verifier\n' >build/acceptance-dependencies.sh
+git add .
+git commit -qm verifier
+bash "${helper}" "${source_head}" HEAD
 printf 'changed image\n' >>Containerfile
 git add .
 git commit -qm image

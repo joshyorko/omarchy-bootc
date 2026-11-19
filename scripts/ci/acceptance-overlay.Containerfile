@@ -7,6 +7,8 @@ COPY build/acceptance-firstboot.sh /ctx/build/acceptance-firstboot.sh
 COPY build/acceptance-firstboot.service /ctx/build/acceptance-firstboot.service
 COPY build/stage-acceptance-node.sh /ctx/build/stage-acceptance-node.sh
 COPY build/25-quattro-user.sh /ctx/build/25-quattro-user.sh
+# Refresh the verifier for guest-side protected reads; retain the parent OCI.
+COPY build/acceptance-dependencies.sh /usr/lib/omarchy-bootc/acceptance-dependencies.sh
 
 # Only this disposable layer permits the SSH harness through product UFW.
 # Offline rule writing must not apply the rules to the build host's firewall.

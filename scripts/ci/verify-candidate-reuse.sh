@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # Product image inputs must match; the disposable overlay is rebuilt and linted.
+# The dependency verifier is explicitly refreshed by that overlay as test code.
 source_head="${1:?Expected full candidate source SHA}"
 harness_head="${2:-HEAD}"
 [[ "${source_head}" =~ ^[[:xdigit:]]{40}$ ]] || {
@@ -14,6 +15,8 @@ if ! git diff --quiet "${source_head}" "${harness_head}" -- . \
     ':!scripts/ci/candidate-runtime.sh' \
     ':!scripts/ci/acceptance-overlay.Containerfile' \
     ':!scripts/ci/verify-candidate-reuse.sh' \
+    ':!build/acceptance-dependencies.sh' \
+    ':!tests/test-acceptance-dependencies.sh' \
     ':!tests/test-acceptance-overlay.sh' \
     ':!tests/test-candidate-reuse.sh'; then
     echo 'Candidate reuse rejected: image or unchecked harness inputs differ' >&2

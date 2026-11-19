@@ -12,7 +12,7 @@ require_executable() {
 
 require_scoped_sudo_command() {
     local command="$1" sudoers_dir="${2:-/etc/sudoers.d}"
-    grep -R -F -xq -- "%wheel ALL=(root) NOPASSWD: ${command} \"\"" "$sudoers_dir" \
+    sudo -n grep -R -F -xq -- "%wheel ALL=(root) NOPASSWD: ${command} \"\"" "$sudoers_dir" \
         || fail "missing scoped sudo command: ${command}"
 }
 
