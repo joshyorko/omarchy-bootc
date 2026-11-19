@@ -7,6 +7,10 @@ on:
       - feat/quattro-daily-driver
   workflow_dispatch:
     inputs:
+      validation_only:
+        description: 'Run shared Dagger source/nesting checks without building or booting a candidate'
+        type: boolean
+        default: false
       candidate_run_id:
         description: 'Existing candidate workflow run (empty builds a new candidate)'
         type: string
@@ -21,9 +25,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  validation:
+    name: Dagger source and nesting validation only
+    if: ${{ inputs.validation_only }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/dagger-parity.yml
+    with:
+      mode: probe
+
   candidate:
     name: Build exact-head candidate
-    if: ${{ !inputs.candidate_run_id }}
+    if: ${{ !inputs.validation_only && !inputs.candidate_run_id }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:
@@ -178,7 +192,7 @@ jobs:
   runtime-pending:
     name: Report pending runtime acceptance
     needs: candidate
-    if: ${{ always() && (needs.candidate.result == 'success' || (needs.candidate.result == 'skipped' && inputs.candidate_run_id != '')) }}
+    if: ${{ always() && !inputs.validation_only && (needs.candidate.result == 'success' || (needs.candidate.result == 'skipped' && inputs.candidate_run_id != '')) }}
     runs-on: ubuntu-24.04
     permissions:
       statuses: write
@@ -197,7 +211,7 @@ jobs:
   runtime:
     name: Boot the accepted candidate with a disposable acceptance overlay
     needs: [candidate, runtime-pending]
-    if: ${{ always() && (needs.candidate.result == 'success' || (needs.candidate.result == 'skipped' && inputs.candidate_run_id != '')) }}
+    if: ${{ always() && !inputs.validation_only && (needs.candidate.result == 'success' || (needs.candidate.result == 'skipped' && inputs.candidate_run_id != '')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     permissions:
@@ -305,7 +319,7 @@ jobs:
   runtime-status:
     name: Report runtime acceptance to PR watcher
     needs: runtime
-    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ always() && !inputs.validation_only && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-24.04
     permissions:
       statuses: write

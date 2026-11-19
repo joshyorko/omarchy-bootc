@@ -1,5 +1,16 @@
 name: Dagger candidate parity
 on:
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        default: probe
+      candidate_run_id:
+        type: string
+        default: ''
+      candidate_source_head:
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       mode:
@@ -42,6 +53,16 @@ jobs:
         with:
           version: v0.20.6
           call: check-result --status=${{ runner.temp }}/probe/exit-code
+      - name: Shared Dagger source contracts
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: v0.20.6
+          call: source-contracts --git-bundle=${{ runner.temp }}/source.bundle --source-head=${{ github.sha }} --execution-id=${{ github.run_id }}-${{ github.run_attempt }}-source export --path=${{ runner.temp }}/dagger-source
+      - name: Require successful source contracts
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: v0.20.6
+          call: check-result --status=${{ runner.temp }}/dagger-source/exit-code
       - name: Build exact-head candidate through shared Dagger stages
         if: inputs.mode == 'build'
         uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
@@ -68,6 +89,7 @@ jobs:
           name: dagger-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/probe
+            ${{ runner.temp }}/dagger-source
             ${{ runner.temp }}/dagger-result/*.log
             ${{ runner.temp }}/dagger-result/*.tsv
             ${{ runner.temp }}/dagger-result/*.resources
