@@ -50,3 +50,7 @@ jobs:
           scandir: '.'
           ignore_paths: vendor
           severity: warning
+      - name: Verify host runtime lock permissions and serialization
+        run: |
+          bash tests/test-host-runtime-lock.sh
+          bash tests/test-host-runtime-lock.sh --hosted-root-setup
