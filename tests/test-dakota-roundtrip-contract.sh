@@ -98,8 +98,16 @@ grep -Fq 'source_configured_ref}" == "${DAKOTA_IMAGE_REF}"' "${SCRIPT}" ||
     fail 'Gate 4 does not bind live Dakota configuration to the frozen source ref'
 # This contract needle is a literal shell statement.
 # shellcheck disable=SC2016
-grep -Fq 'assert_status_digest "${ARTIFACT_DIR}/dakota-source-status.json" "${DAKOTA_EXPECTED_DIGEST}"' "${SCRIPT}" ||
-    fail 'Gate 4 does not verify the booted Dakota source digest'
+grep -Fq 'assert_status_digest "${ARTIFACT_DIR}/dakota-source-status.json" "${overlay_digest}"' "${SCRIPT}" ||
+    fail 'Gate 4 does not verify the booted Dakota overlay digest against the actual payload'
+# shellcheck disable=SC2016
+grep -Fq 'assert_preserved_user_state "${ARTIFACT_DIR}/source-user-state.txt" "${ARTIFACT_DIR}/quattro-user-state.txt"' "${SCRIPT}" ||
+    fail 'Gate 4 does not compare UID/GID/checksum preservation on forward switch'
+# shellcheck disable=SC2016
+grep -Fq 'assert_preserved_user_state "${ARTIFACT_DIR}/source-user-state.txt" "${ARTIFACT_DIR}/dakota-reverse-user-state.txt"' "${SCRIPT}" ||
+    fail 'Gate 4 does not compare UID/GID/checksum preservation on reverse switch'
+grep -Fq '^SKIP:' "${SCRIPT}" ||
+    fail 'Gate 4 does not reject a skipped adoption recovery fixture'
 # These install arguments are literal command-line contract text.
 # shellcheck disable=SC1003,SC2016
 assert_order 'Dakota install target syntax' \

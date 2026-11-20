@@ -222,6 +222,14 @@ assert_status_digest() {
         fail "${label} booted digest ${actual} differs from expected ${expected}"
 }
 
+assert_preserved_user_state() {
+    local expected_file="$1" actual_file="$2" label="$3"
+    [[ -s "${expected_file}" && -s "${actual_file}" ]] ||
+        fail "${label} user-state preservation snapshot is empty"
+    cmp -s "${expected_file}" "${actual_file}" ||
+        fail "${label} user UID/GID or home-state checksum differs from source baseline"
+}
+
 pull_exact() {
     local ref="$1" expected="$2" label="$3" digest
     podman_cmd pull --quiet "${ref}" 2>&1 | tee "${ARTIFACT_DIR}/${label}-pull.log"
@@ -234,6 +242,7 @@ pull_exact() {
 echo '==> Gate 4 inputs' | tee "${ARTIFACT_DIR}/gate4.log"
 printf '%s\n' "${DAKOTA_IMAGE_REF}" >"${ARTIFACT_DIR}/dakota-input-ref.txt"
 printf '%s\n' "${DAKOTA_EXPECTED_DIGEST}" >"${ARTIFACT_DIR}/dakota-input-digest.txt"
+printf '%s\n' "${DAKOTA_EXPECTED_DIGEST}" >"${ARTIFACT_DIR}/dakota-base-digest.txt"
 printf '%s\n' "${QUATTRO_IMAGE_REF}" >"${ARTIFACT_DIR}/quattro-accepted-ref.txt"
 printf '%s\n' "${QUATTRO_TRACKING_REF}" >"${ARTIFACT_DIR}/quattro-tracking-ref.txt"
 printf '%s\n' "${QUATTRO_SOURCE_SHA}" >"${ARTIFACT_DIR}/quattro-source-sha.txt"
@@ -349,7 +358,9 @@ source_configured_ref="$(jq -er '.spec.image.image // empty' "${ARTIFACT_DIR}/da
     fail "Dakota source status configured ref is not the frozen Dakota image: ${source_configured_ref}"
 jq -er '.status.booted.image.imageDigest // empty' "${ARTIFACT_DIR}/dakota-source-status.json" \
     >"${ARTIFACT_DIR}/dakota-overlay-booted-digest.txt" || fail 'Dakota source status has no booted digest'
-assert_status_digest "${ARTIFACT_DIR}/dakota-source-status.json" "${DAKOTA_EXPECTED_DIGEST}" dakota-source
+# Compare the booted disposable Dakota overlay to its actual installed payload
+# digest; the base Dakota release digest is retained separately for tracking/provenance.
+assert_status_digest "${ARTIFACT_DIR}/dakota-source-status.json" "${overlay_digest}" dakota-source-overlay
 run_guest 'id -u omarchy && id -g omarchy && test -f /var/home/omarchy/.gate4-dakota-marker' \
     >"${ARTIFACT_DIR}/dakota-source-account.txt" || fail 'Dakota disposable account did not initialize'
 run_guest 'sudo -n true && getent hosts github.com' \
@@ -368,8 +379,9 @@ copy_to_guest "${WORK_ROOT}/transition/custom/bootc/omarchy-bootc-common.sh" /ho
 run_guest 'sudo -n install -D -m 0755 /home/omarchy/omarchy-transition /home/omarchy/transition/omarchy-transition.sh && \
     sudo -n install -D -m 0644 /home/omarchy/omarchy-bootc-common.sh /home/omarchy/custom/bootc/omarchy-bootc-common.sh'
 
-run_guest 'printf "gate4-user-state\n" > /var/home/omarchy/.gate4-user-state && sha256sum /var/home/omarchy/.gate4-user-state' \
-    >"${ARTIFACT_DIR}/source-user-state.sha256"
+run_guest 'printf "gate4-user-state\n" > /var/home/omarchy/.gate4-user-state && id -u omarchy && id -g omarchy && sha256sum /var/home/omarchy/.gate4-user-state' \
+    >"${ARTIFACT_DIR}/source-user-state.txt" || fail 'could not record Dakota source UID/GID/checksum baseline'
+tail -n 1 "${ARTIFACT_DIR}/source-user-state.txt" >"${ARTIFACT_DIR}/source-user-state.sha256"
 source_transition_env=(OMARCHY_TRANSITION_STATE_ROOT=/var/lib/omarchy-bootc/transitions/gate4-forward)
 run_guest "sudo -n env ${source_transition_env[*]} /home/omarchy/transition/omarchy-transition.sh inspect-source" \
     >"${ARTIFACT_DIR}/dakota-inspect-source.txt" || fail 'live Dakota source inspection failed'
@@ -409,14 +421,19 @@ run_guest 'sudo -n grep -Fxq status=complete /var/lib/omarchy-bootc/adoption/sta
     >"${ARTIFACT_DIR}/quattro-adoption.txt" || fail 'live Quattro adoption did not complete'
 run_guest 'id -u omarchy; id -g omarchy; test -f /var/home/omarchy/.gate4-user-state; sha256sum /var/home/omarchy/.gate4-user-state' \
     >"${ARTIFACT_DIR}/quattro-user-state.txt" || fail 'Quattro did not preserve the Dakota user/home state'
+assert_preserved_user_state "${ARTIFACT_DIR}/source-user-state.txt" "${ARTIFACT_DIR}/quattro-user-state.txt" quattro-forward
 run_guest 'sudo -n true && getent hosts github.com' \
     >"${ARTIFACT_DIR}/quattro-sudo-network.txt" || fail 'Quattro sudo or networking check failed'
 
 # The fixture-level recovery test exercises account-created/password and retry
-# boundaries independently. Its result is retained beside the live adoption
-# receipt so the two proofs cannot be conflated.
+# boundaries independently. A skipped fixture must never be treated as proof.
 bash "${ROOT_DIR}/tests/test-adoption-resume.sh" >"${ARTIFACT_DIR}/adoption-recovery-contract.log" 2>&1 ||
     fail 'adoption recovery contract did not pass'
+if grep -Eq '^SKIP:' "${ARTIFACT_DIR}/adoption-recovery-contract.log"; then
+    fail 'adoption recovery contract skipped instead of proving recovery'
+fi
+grep -Fq 'PASS:' "${ARTIFACT_DIR}/adoption-recovery-contract.log" ||
+    fail 'adoption recovery contract did not emit a passing verdict'
 
 echo '==> Switch Quattro -> Dakota and verify state preservation' | tee -a "${ARTIFACT_DIR}/gate4.log"
 run_guest 'sudo -n systemctl disable dakota-ci-firstboot.service 2>/dev/null || true; \
@@ -446,6 +463,7 @@ record_backend "${ARTIFACT_DIR}/dakota-reverse-status.json" dakota-reverse
 assert_status_digest "${ARTIFACT_DIR}/dakota-reverse-status.json" "${DAKOTA_EXPECTED_DIGEST}" dakota-reverse
 run_guest 'id -u omarchy; id -g omarchy; test -f /var/home/omarchy/.gate4-user-state; sha256sum /var/home/omarchy/.gate4-user-state' \
     >"${ARTIFACT_DIR}/dakota-reverse-user-state.txt" || fail 'Dakota did not preserve the Quattro user/home state'
+assert_preserved_user_state "${ARTIFACT_DIR}/source-user-state.txt" "${ARTIFACT_DIR}/dakota-reverse-user-state.txt" dakota-reverse
 run_guest 'sudo -n true && getent hosts github.com' \
     >"${ARTIFACT_DIR}/dakota-reverse-sudo-network.txt" || fail 'Dakota reverse sudo or networking check failed'
 

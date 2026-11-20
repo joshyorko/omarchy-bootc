@@ -18,11 +18,17 @@ set -euo pipefail
 printf '%s\n' "$*" >>"$BOOTC_LOG"
 case "$*" in
     'upgrade --check') exit "${CHECK_RC:-0}" ;;
-    upgrade)
+    'upgrade --download-only')
         [[ -f "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER" ]] || exit 10
         exit_code="${UPGRADE_RC:-0}"
         [[ "$exit_code" == 0 ]] || exit "$exit_code"
-        jq --arg digest "$STAGE_DIGEST" '.status.staged={image:{imageDigest:$digest}}' \
+        jq --arg digest "$STAGE_DIGEST" '.status.staged={image:{imageDigest:$digest},downloadOnly:true}' \
+            "$OMARCHY_BOOTC_TEST_STATUS_FILE" >"${OMARCHY_BOOTC_TEST_STATUS_FILE}.next"
+        mv "${OMARCHY_BOOTC_TEST_STATUS_FILE}.next" "$OMARCHY_BOOTC_TEST_STATUS_FILE"
+        ;;
+    'upgrade --from-downloaded')
+        [[ "$(jq -r '.status.staged.downloadOnly' "$OMARCHY_BOOTC_TEST_STATUS_FILE")" == true ]] || exit 11
+        jq '.status.staged.downloadOnly=false' \
             "$OMARCHY_BOOTC_TEST_STATUS_FILE" >"${OMARCHY_BOOTC_TEST_STATUS_FILE}.next"
         mv "${OMARCHY_BOOTC_TEST_STATUS_FILE}.next" "$OMARCHY_BOOTC_TEST_STATUS_FILE"
         ;;
@@ -59,6 +65,18 @@ cat >"$tmp/bin/flock" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
+if (( EUID != 0 )); then
+cat >"$tmp/bin/stat" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' && "${3:-}" == "${OMARCHY_BOOTC_TEST_TRANSACTION_MARKER:-}" ]]; then
+    mode="$(/usr/bin/stat -c '%a' "$3")"
+    printf '0:%s\n' "$mode"
+else
+    exec /usr/bin/stat "$@"
+fi
+EOF
+chmod +x "$tmp/bin/stat"
+fi
 chmod +x "$tmp/bin/chown"
 chmod +x "$tmp/bin/flock"
 chmod +x "$tmp/bin/bootc" "$tmp/bin/skopeo" "$tmp/bin/sudo"
@@ -116,12 +134,13 @@ assert_unstaged() {
     if grep -Fxq upgrade "$BOOTC_LOG"; then fail 'failed preflight invoked upgrade'; fi
 }
 
-if (( EUID == 0 )); then
 setup_case composefs
 bash "$SCRIPT" -y >"$tmp/update.out"
 [[ "$(jq -r '.status.staged.image.imageDigest' "$OMARCHY_BOOTC_TEST_STATUS_FILE")" == "$b" ]] || fail 'ordinary null-cachedUpdate path did not stage B'
-[[ "$(cat "$BOOTC_LOG")" == $'upgrade --check\nupgrade' ]] || fail 'ordinary path did not check then stage'
+[[ "$(jq -r '.status.staged.downloadOnly' "$OMARCHY_BOOTC_TEST_STATUS_FILE")" == false ]] || fail 'verified stage was not unlocked'
+[[ "$(cat "$BOOTC_LOG")" == $'upgrade --check\nupgrade --download-only\nupgrade --from-downloaded' ]] || fail 'ordinary path did not check, download-only, verify, then unlock'
 grep -Fxq "expected_digest=$b" "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER" || fail 'root intent did not retain exact resolved digest'
+grep -Fxq "tracking_ref=ghcr.io/example/os:testing" "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER" || fail 'root intent did not retain intended channel'
 [[ "$(stat -c '%a' "$OMARCHY_BOOTC_TEST_UPDATE_LOCK_FILE")" == 660 ]] ||
     fail 'update lock is not restricted to its owner and group'
 initiating_user="$(id -un)"
@@ -133,15 +152,11 @@ grep -Fxq "user=$initiating_user" "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER" ||
     fail 'root invocation did not retain the initiating user'
 grep -Fxq "home=$initiating_home" "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER" ||
     fail 'root invocation did not retain the initiating home'
-[[ "$(stat -c '%u:%a' "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER")" == "$(id -u):600" ]] ||
+[[ "$(stat -c '%u:%a' "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER")" == "0:600" ]] ||
     fail 'root transaction marker has the wrong owner or mode'
 [[ "$(stat -c '%u:%a' "$OMARCHY_BOOTC_TEST_STATE_HOME/omarchy-bootc/pending-update")" == "$(id -u):600" ]] ||
     fail 'user transaction marker has the wrong owner or mode'
-
-
-else
-printf 'SKIP: root-owned marker transaction cases require root; retaining preflight checks\n'
-fi
+unset SUDO_USER
 setup_case unsupported-option
 unsupported_status=0
 if bash "$SCRIPT" --unsupported >"$tmp/unsupported.out" 2>&1; then
@@ -183,31 +198,29 @@ export OMARCHY_BOOTC_TEST_TRANSACTION_MARKER="${OMARCHY_BOOTC_TEST_STATE_ROOT}/$
 if bash "$SCRIPT" -y; then fail 'update proceeded despite a root marker write failure'; fi
 assert_unstaged
 
-if (( EUID == 0 )); then
 setup_case upgrade-failure
 export UPGRADE_RC=1
 if bash "$SCRIPT" -y; then fail 'failed bootc staging was accepted'; fi
 [[ "$(jq -r '.status.staged' "$OMARCHY_BOOTC_TEST_STATUS_FILE")" == null ]] || fail 'failed upgrade produced a stage'
 grep -Fxq "expected_digest=$b" "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER" || fail 'failed staging lost the exact intent'
 
-# A moving tag must not silently replace the candidate recorded before staging.
+# A moving tag must not unlock an unexpected stage for reboot or leave markers behind.
 setup_case tag-moved
 export STAGE_DIGEST="$c"
-if bash "$SCRIPT" -y; then fail 'stage differing from resolved B was accepted'; fi
-grep -Fxq "expected_digest=$b" "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER" || fail 'tag move rewrote expected identity to C'
-[[ "$(jq -r '.status.staged.image.imageDigest' "$OMARCHY_BOOTC_TEST_STATUS_FILE")" == "$c" ]] || fail 'tag-move fixture did not stage C'
+if bash "$SCRIPT" -y >"$tmp/tag-moved.out" 2>"$tmp/tag-moved.err"; then fail 'stage differing from resolved B was accepted'; fi
+[[ ! -e "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER" ]] || fail 'tag move left root transaction marker behind'
+[[ ! -e "$OMARCHY_BOOTC_TEST_STATE_HOME/omarchy-bootc/pending-update" ]] || fail 'tag move left user transaction marker behind'
+[[ "$(jq -r '.status.staged.image.imageDigest' "$OMARCHY_BOOTC_TEST_STATUS_FILE")" == "$c" ]] || fail 'tag-move fixture did not record C'
+[[ "$(jq -r '.status.staged.downloadOnly' "$OMARCHY_BOOTC_TEST_STATUS_FILE")" == true ]] || fail 'unexpected stage C was unlocked for reboot'
+if grep -Fxq 'upgrade --from-downloaded' "$BOOTC_LOG"; then fail 'tag move unlocked unexpected stage C'; fi
 
 setup_case already-staged
-jq --arg b "$b" '.status.staged={image:{imageDigest:$b}}' "$OMARCHY_BOOTC_TEST_STATUS_FILE" >"$tmp/status.next"
+jq --arg b "$b" '.status.staged={image:{imageDigest:$b},downloadOnly:false}' "$OMARCHY_BOOTC_TEST_STATUS_FILE" >"$tmp/status.next"
 mv "$tmp/status.next" "$OMARCHY_BOOTC_TEST_STATUS_FILE"
 export RESOLVER_RC=1
 bash "$SCRIPT" -y
 [[ "$(cat "$BOOTC_LOG")" == 'upgrade --check' ]] || fail 'already-staged path staged again'
 grep -Fxq "expected_digest=$b" "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER" || fail 'already-staged intent lost B'
-
-else
-printf 'SKIP: failed-upgrade, tag-move, and already-staged cases require root-owned marker creation\n'
-fi
 setup_case availability
 bash "$AVAILABLE" >"$tmp/available.out"
 grep -Fq "candidate=$b" "$tmp/available.out" || fail 'availability did not report the resolved candidate'

@@ -60,6 +60,86 @@ fi
 ln -sfn /usr/lib/systemd/user/omarchy-bootc-finalize.service \
     /etc/systemd/user/graphical-session.target.wants/omarchy-bootc-finalize.service
 
+# Install explicit container signature policy (fail-closed default with explicit
+# per-transport rules and sigstore attachments enabled for the published repo).
+install -d -m 0755 /etc/containers /etc/containers/registries.d
+cat >/etc/containers/policy.json <<'EOF'
+{
+  "default": [
+    {
+      "type": "reject"
+    }
+  ],
+  "transports": {
+    "docker": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    },
+    "docker-daemon": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    },
+    "containers-storage": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    },
+    "dir": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    },
+    "oci": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    },
+    "oci-archive": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    },
+    "docker-archive": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    },
+    "tarball": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    }
+  }
+}
+EOF
+chmod 0644 /etc/containers/policy.json
+jq -e '.default == [{"type":"reject"}] and .transports.docker[""] == [{"type":"insecureAcceptAnything"}]' \
+    /etc/containers/policy.json >/dev/null
+cat >/etc/containers/registries.d/omarchy-bootc.yaml <<'EOF'
+docker:
+  ghcr.io/joshyorko/omarchy-bootc:
+    use-sigstore-attachments: true
+EOF
+chmod 0644 /etc/containers/registries.d/omarchy-bootc.yaml
+
 test -d /usr/local && ! test -L /usr/local
 test -x /usr/local/bin/omarchy
 resolved_omarchy="$(PATH=/usr/local/bin:/usr/bin:/bin command -v omarchy)"

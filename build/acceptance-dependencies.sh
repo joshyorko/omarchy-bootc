@@ -256,11 +256,15 @@ main() {
     bootc --version
     sudo --version >/dev/null
     require_bootc_options status '' --format
-    require_bootc_options upgrade '' --check
+    require_bootc_options upgrade '' --check --download-only --from-downloaded
     require_bootc_options switch '' --transport
     require_bootc_options rollback ''
     require_bootc_options install to-disk --source-imgref --target-imgref \
         --target-transport --composefs-backend --via-loopback --filesystem --wipe --bootloader
+    jq -e '.default == [{"type":"reject"}]' /etc/containers/policy.json >/dev/null \
+        || fail 'container signature policy is missing fail-closed default'
+    grep -Fq 'use-sigstore-attachments: true' /etc/containers/registries.d/omarchy-bootc.yaml \
+        || fail 'sigstore attachment discovery is not configured for omarchy-bootc'
     getent group wheel >/dev/null || fail 'wheel group is missing'
 
     if [[ "$phase" == guest ]]; then

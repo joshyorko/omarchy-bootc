@@ -27,6 +27,8 @@ managed_paths=(
     ".agents/skills"
     ".claude/skills"
     ".codex/skills"
+    ".gemini/skills"
+    ".hermes/skills"
     ".pi/agent/skills"
     ".XCompose"
     ".gitconfig"
@@ -44,6 +46,8 @@ protected_paths=(
     ".agents/skills"
     ".claude/skills"
     ".codex/skills"
+    ".gemini/skills"
+    ".hermes/skills"
     ".pi/agent/skills"
     ".XCompose"
     ".gitconfig"
@@ -56,6 +60,74 @@ path_exists() {
 
 valid_username() {
     [[ "$1" =~ ^[a-z_][a-z0-9_-]*[$]?$ ]]
+}
+
+# Confine all home reads/mutations strictly inside the intended user's real
+# home directory; refuse traversal components or symlinked ancestor directories.
+ensure_safe_home_path() {
+    local home="$1" relative="$2"
+    local parent="" segment="" cursor=""
+    local -a segments=()
+
+    [[ -n "$home" && ! -L "$home" && -d "$home" ]] || {
+        echo "Refusing unsafe adoption home directory: ${home}" >&2
+        return 1
+    }
+    [[ -n "$relative" && "$relative" != /* ]] || {
+        echo "Refusing absolute or empty relative adoption path: ${relative}" >&2
+        return 1
+    }
+    IFS='/' read -r -a segments <<<"$relative"
+    for segment in "${segments[@]}"; do
+        [[ -n "$segment" && "$segment" != "." && "$segment" != ".." ]] || {
+            echo "Refusing traversal segment in adoption path: ${relative}" >&2
+            return 1
+        }
+    done
+    parent="$(dirname "$relative")"
+    if [[ "$parent" != "." ]]; then
+        cursor="$home"
+        IFS='/' read -r -a segments <<<"$parent"
+        for segment in "${segments[@]}"; do
+            cursor="${cursor}/${segment}"
+            if [[ -L "$cursor" ]]; then
+                echo "Refusing symlinked parent directory inside home: ${cursor}" >&2
+                return 1
+            fi
+            if [[ -e "$cursor" && ! -d "$cursor" ]]; then
+                echo "Refusing non-directory parent inside home: ${cursor}" >&2
+                return 1
+            fi
+        done
+    fi
+}
+
+ensure_user_parent_dir() {
+    local home="$1" relative="$2" owner_uid="$3" owner_gid="$4"
+    local parent="" segment="" cursor=""
+    local -a segments=()
+
+    ensure_safe_home_path "$home" "$relative"
+    parent="$(dirname "$relative")"
+    [[ "$parent" != "." ]] || return 0
+    cursor="$home"
+    IFS='/' read -r -a segments <<<"$parent"
+    for segment in "${segments[@]}"; do
+        cursor="${cursor}/${segment}"
+        if [[ ! -e "$cursor" ]]; then
+            mkdir -- "$cursor"
+            chmod 0755 -- "$cursor"
+            chown "${owner_uid}:${owner_gid}" -- "$cursor"
+        fi
+    done
+}
+
+is_protected_path() {
+    local target="$1" candidate=""
+    for candidate in "${protected_paths[@]}"; do
+        [[ "$candidate" == "$target" ]] && return 0
+    done
+    return 1
 }
 
 state_value() {
@@ -96,27 +168,13 @@ record_managed_path() {
     fi
 }
 
-backup_path() {
-    local relative="$1"
-    local source="${HOME}/${relative}"
-    local destination="${BACKUP_ROOT}/${relative}"
-
-    record_managed_path "$relative"
-    if path_exists "$source"; then
-        # A crash/retry must retain the original snapshot rather than copying
-        # already-mutated state into the backup a second time.
-        path_exists "$destination" && return 0
-        install -d -m 0700 "$(dirname "$destination")"
-        cp -a -- "$source" "$destination"
-    fi
-}
-
 backup_application_conflicts() {
     local source relative
     [[ -d /usr/share/omarchy/applications ]] || return 0
     for source in /usr/share/omarchy/applications/*.desktop; do
         [[ -f "$source" ]] || continue
         relative=".local/share/applications/$(basename "$source")"
+        ensure_safe_home_path "$HOME" "$relative"
         if path_exists "${HOME}/${relative}"; then
             managed_paths+=("$relative")
             protected_paths+=("$relative")
@@ -124,21 +182,120 @@ backup_application_conflicts() {
     done
 }
 
+discover_hermes_profile_skills() {
+    local profiles_root="${HOME}/.hermes/profiles"
+    local profile="" name="" relative=""
+    [[ ! -L "${HOME}/.hermes" && ! -L "$profiles_root" && -d "$profiles_root" ]] || return 0
+    for profile in "$profiles_root"/*; do
+        [[ ! -L "$profile" && -d "$profile" ]] || continue
+        name="$(basename "$profile")"
+        relative=".hermes/profiles/${name}/skills"
+        ensure_safe_home_path "$HOME" "$relative"
+        if path_exists "${HOME}/${relative}"; then
+            managed_paths+=("$relative")
+            protected_paths+=("$relative")
+        fi
+    done
+}
+
+# Freeze the pre-adoption present/absent baseline exactly once per run so that a
+# crash/retry after partial provisioning never promotes newly created files into
+# the pre-adoption backup.
+freeze_baseline() {
+    local relative="" source="" destination="" protected_flag=""
+    local tmp="${BASELINE_FILE}.tmp.$$"
+
+    if [[ -f "$BASELINE_DONE" && -f "$BASELINE_FILE" ]]; then
+        return 0
+    fi
+
+    backup_application_conflicts
+    discover_hermes_profile_skills
+    : >"$tmp"
+    for relative in "${managed_paths[@]}"; do
+        ensure_safe_home_path "$HOME" "$relative"
+        record_managed_path "$relative"
+        protected_flag=0
+        if is_protected_path "$relative"; then
+            protected_flag=1
+        fi
+        source="${HOME}/${relative}"
+        destination="${BACKUP_ROOT}/${relative}"
+        if path_exists "$source"; then
+            if ! path_exists "$destination"; then
+                install -d -m 0700 "$(dirname "$destination")"
+                cp -a -- "$source" "$destination"
+            fi
+            printf 'present\t%s\t%s\n' "$protected_flag" "$relative" >>"$tmp"
+        else
+            printf 'absent\t%s\t%s\n' "$protected_flag" "$relative" >>"$tmp"
+        fi
+    done
+    chmod 0600 "$tmp"
+    mv -f -- "$tmp" "$BASELINE_FILE"
+    : >"$BASELINE_DONE"
+}
+
+# Preserve every existing user file in a restored directory while seeding any
+# required missing files (e.g. hyprland.lua or official skill links) generated
+# by upstream provisioning.
+seed_missing_from_generated() {
+    local generated_dir="$1" target_dir="$2" owner_uid="$3" owner_gid="$4"
+    local entry="" rel="" dst="" dst_parent=""
+
+    [[ ! -L "$generated_dir" && -d "$generated_dir" ]] || return 0
+    [[ ! -L "$target_dir" && -d "$target_dir" ]] || return 0
+    while IFS= read -r -d '' entry; do
+        rel="${entry#"$generated_dir"/}"
+        [[ -n "$rel" ]] || continue
+        dst="${target_dir}/${rel}"
+        ensure_safe_home_path "$target_dir" "$rel"
+        if path_exists "$dst"; then
+            continue
+        fi
+        dst_parent="$(dirname "$dst")"
+        if [[ ! -d "$dst_parent" ]]; then
+            ensure_user_parent_dir "$target_dir" "$rel" "$owner_uid" "$owner_gid"
+        fi
+        if [[ -d "$entry" && ! -L "$entry" ]]; then
+            mkdir -- "$dst"
+            chmod 0755 -- "$dst"
+            chown "${owner_uid}:${owner_gid}" -- "$dst"
+        else
+            cp -a -- "$entry" "$dst"
+            chown -h "${owner_uid}:${owner_gid}" -- "$dst"
+        fi
+    done < <(find "$generated_dir" -mindepth 1 -print0 | sort -z)
+}
+
 restore_protected_paths() {
-    local relative source destination generated
-    for relative in "${protected_paths[@]}"; do
+    local presence="" protected_flag="" relative="" source="" destination="" generated=""
+
+    [[ -f "$BASELINE_FILE" ]] || {
+        echo "Frozen adoption baseline is missing: ${BASELINE_FILE}" >&2
+        return 1
+    }
+    while IFS=$'\t' read -r presence protected_flag relative; do
+        [[ "$presence" == present && "$protected_flag" == 1 && -n "$relative" ]] || continue
+        ensure_safe_home_path "$HOME" "$relative"
         source="${BACKUP_ROOT}/${relative}"
         destination="${HOME}/${relative}"
         path_exists "$source" || continue
 
+        generated="${ROLLBACK_ROOT}/after/${relative}"
         if path_exists "$destination"; then
-            generated="${ROLLBACK_ROOT}/after/${relative}"
+            if path_exists "$generated"; then
+                rm -rf -- "$generated"
+            fi
             install -d -m 0700 "$(dirname "$generated")"
             mv -- "$destination" "$generated"
         fi
-        install -d -m 0700 "$(dirname "$destination")"
+        ensure_user_parent_dir "$HOME" "$relative" "$uid" "$gid"
         cp -a -- "$source" "$destination"
-    done
+        if [[ ! -L "$source" && -d "$source" && ! -L "$generated" && -d "$generated" ]]; then
+            seed_missing_from_generated "$generated" "$destination" "$uid" "$gid"
+        fi
+    done <"$BASELINE_FILE"
 }
 
 run_rollback() {
@@ -147,9 +304,11 @@ run_rollback() {
         exit 1
     }
 
-    local user home backup_root rollback_root manifest created_user created_group group_name
+    local user home uid gid backup_root rollback_root manifest created_user created_group group_name
     user="$(state_value user)"
     home="$(state_value home)"
+    uid="$(state_value uid)"
+    gid="$(state_value gid)"
     backup_root="$(state_value backup_root)"
     rollback_root="$(state_value rollback_root)"
     manifest="$(state_value manifest)"
@@ -157,7 +316,7 @@ run_rollback() {
     created_group="$(state_value created_group)"
     group_name="$(state_value group_name)"
 
-    [[ -n "$user" && -d "$home" && -f "$manifest" ]] || {
+    [[ -n "$user" && -d "$home" && ! -L "$home" && -f "$manifest" ]] || {
         echo "Adoption state is incomplete; refusing an unscoped rollback." >&2
         exit 1
     }
@@ -165,6 +324,7 @@ run_rollback() {
     local relative source destination preserved
     while IFS= read -r relative; do
         [[ -n "$relative" ]] || continue
+        ensure_safe_home_path "$home" "$relative"
         source="${backup_root}/${relative}"
         destination="${home}/${relative}"
         if path_exists "$destination"; then
@@ -173,7 +333,7 @@ run_rollback() {
             mv -- "$destination" "$preserved"
         fi
         if path_exists "$source"; then
-            install -d -m 0700 "$(dirname "$destination")"
+            ensure_user_parent_dir "$home" "$relative" "$uid" "$gid"
             cp -a -- "$source" "$destination"
         fi
     done <"$manifest"
@@ -186,7 +346,7 @@ run_rollback() {
     fi
 
     write_state \
-        "rolled-back" "$user" "$home" "$(state_value uid)" "$(state_value gid)" \
+        "rolled-back" "$user" "$home" "$uid" "$gid" \
         "$backup_root" "$rollback_root" "$manifest" 0 0 "$group_name"
     echo "Omarchy adoption rolled back for ${user}; post-adoption files are retained under ${rollback_root}."
 }
@@ -225,7 +385,9 @@ if [[ -f "$STATE_FILE" ]]; then
             created_group="$(state_value created_group)"
             group_name="$(state_value group_name)"
             RUN_ROOT="$(dirname "$BACKUP_ROOT")"
-            [[ -n "$selected_user" && -d "$HOME" && -n "$MANIFEST" ]] || {
+            BASELINE_FILE="${RUN_ROOT}/baseline.tsv"
+            BASELINE_DONE="${RUN_ROOT}/baseline.done"
+            [[ -n "$selected_user" && -d "$HOME" && ! -L "$HOME" && -n "$MANIFEST" ]] || {
                 echo 'Adoption recovery state is incomplete; refusing to restart from a fresh baseline.' >&2
                 exit 1
             }
@@ -234,70 +396,73 @@ if [[ -f "$STATE_FILE" ]]; then
 fi
 
 if (( resume == 0 )); then
-mapfile -t candidates < <(
-    if [[ -d "$HOME_ROOT" ]]; then
-        find "$HOME_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
-    fi | while IFS= read -r candidate; do
-        case "$candidate" in
-            lost+found|root|nobody) continue ;;
-        esac
-        valid_username "$candidate" || continue
-        candidate_uid="$(stat -c '%u' "${HOME_ROOT}/${candidate}" 2>/dev/null || true)"
-        [[ "$candidate_uid" =~ ^[0-9]+$ ]] || continue
-        (( candidate_uid >= 1000 && candidate_uid < 60000 )) || continue
-        printf '%s\n' "$candidate"
-    done
-)
+    mapfile -t candidates < <(
+        if [[ -d "$HOME_ROOT" ]]; then
+            find "$HOME_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
+        fi | while IFS= read -r candidate; do
+            case "$candidate" in
+                lost+found|root|nobody) continue ;;
+            esac
+            valid_username "$candidate" || continue
+            candidate_uid="$(stat -c '%u' "${HOME_ROOT}/${candidate}" 2>/dev/null || true)"
+            [[ "$candidate_uid" =~ ^[0-9]+$ ]] || continue
+            (( candidate_uid >= 1000 && candidate_uid < 60000 )) || continue
+            printf '%s\n' "$candidate"
+        done
+    )
 
-if (( ${#candidates[@]} == 0 )); then
-    write_state "no-existing-user" "" "" "" "" "" "" "" 0 0 ""
-    exit 0
-fi
+    if (( ${#candidates[@]} == 0 )); then
+        write_state "no-existing-user" "" "" "" "" "" "" "" 0 0 ""
+        exit 0
+    fi
 
-selected_user=""
-if [[ -f "$USER_SELECTION" ]]; then
-    IFS= read -r selected_user <"$USER_SELECTION" || true
-    valid_username "$selected_user" || {
-        write_state "needs-selection" "" "" "" "" "" "" "" 0 0 ""
-        echo "Invalid adoption user selection: ${USER_SELECTION}" >&2
-        exit 1
-    }
-    if ! printf '%s\n' "${candidates[@]}" | grep -Fxq "$selected_user"; then
-        write_state "needs-selection" "" "" "" "" "" "" "" 0 0 ""
-        echo "Selected adoption user is not an existing home: ${selected_user}" >&2
+    selected_user=""
+    if [[ -f "$USER_SELECTION" ]]; then
+        IFS= read -r selected_user <"$USER_SELECTION" || true
+        valid_username "$selected_user" || {
+            write_state "needs-selection" "" "" "" "" "" "" "" 0 0 ""
+            echo "Invalid adoption user selection: ${USER_SELECTION}" >&2
+            exit 1
+        }
+        if ! printf '%s\n' "${candidates[@]}" | grep -Fxq "$selected_user"; then
+            write_state "needs-selection" "" "" "" "" "" "" "" 0 0 ""
+            echo "Selected adoption user is not an existing home: ${selected_user}" >&2
+            exit 1
+        fi
+    elif (( ${#candidates[@]} == 1 )); then
+        selected_user="${candidates[0]}"
+    else
+        candidate_list="$(IFS=,; printf '%s' "${candidates[*]}")"
+        write_state "needs-selection" "$candidate_list" "" "" "" "" "" "" 0 0 ""
+        echo "Multiple existing homes found; set ${USER_SELECTION} and rerun ${0}." >&2
         exit 1
     fi
-elif (( ${#candidates[@]} == 1 )); then
-    selected_user="${candidates[0]}"
-else
-    candidate_list="$(IFS=,; printf '%s' "${candidates[*]}")"
-    write_state "needs-selection" "$candidate_list" "" "" "" "" "" "" 0 0 ""
-    echo "Multiple existing homes found; set ${USER_SELECTION} and rerun ${0}." >&2
-    exit 1
-fi
 
-HOME="${HOME_ROOT}/${selected_user}"
-uid="$(stat -c '%u' "$HOME")"
-gid="$(stat -c '%g' "$HOME")"
-run_id="$(date +%Y%m%d-%H%M%S)-$$"
-RUN_ROOT="${STATE_ROOT}/runs/${run_id}"
-BACKUP_ROOT="${RUN_ROOT}/backup"
-ROLLBACK_ROOT="${RUN_ROOT}/rollback"
-MANIFEST="${RUN_ROOT}/managed-paths"
-install -d -m 0700 "$RUN_ROOT" "$BACKUP_ROOT" "$ROLLBACK_ROOT"
-: >"$MANIFEST"
-created_user=0
-created_group=0
-group_name=""
-write_state "preparing" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" 0 0 "" no
+    HOME="${HOME_ROOT}/${selected_user}"
+    [[ ! -L "$HOME" && -d "$HOME" ]] || {
+        echo "Refusing symlinked or missing adoption home: ${HOME}" >&2
+        exit 1
+    }
+    uid="$(stat -c '%u' "$HOME")"
+    gid="$(stat -c '%g' "$HOME")"
+    run_id="$(date +%Y%m%d-%H%M%S)-$$"
+    RUN_ROOT="${STATE_ROOT}/runs/${run_id}"
+    BACKUP_ROOT="${RUN_ROOT}/backup"
+    ROLLBACK_ROOT="${RUN_ROOT}/rollback"
+    MANIFEST="${RUN_ROOT}/managed-paths"
+    BASELINE_FILE="${RUN_ROOT}/baseline.tsv"
+    BASELINE_DONE="${RUN_ROOT}/baseline.done"
+    install -d -m 0700 "$RUN_ROOT" "$BACKUP_ROOT" "$ROLLBACK_ROOT"
+    : >"$MANIFEST"
+    created_user=0
+    created_group=0
+    group_name=""
+    write_state "preparing" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" 0 0 "" no
 fi
 
 install -d -m 0700 "$RUN_ROOT" "$BACKUP_ROOT" "$ROLLBACK_ROOT"
 [[ -f "$MANIFEST" ]] || : >"$MANIFEST"
-backup_application_conflicts
-for relative in "${managed_paths[@]}"; do
-    backup_path "$relative"
-done
+freeze_baseline
 write_state "backed-up" "$selected_user" "$HOME" "$uid" "$gid" "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$MANIFEST" "$created_user" "$created_group" "$group_name" no
 
 existing_passwd="$(getent passwd "$selected_user" || true)"
@@ -329,7 +494,6 @@ else
     for group in wheel video audio input network; do
         getent group "$group" >/dev/null && usermod --append --groups "$group" "$selected_user"
     done
-
 fi
 
 password_status="$(passwd -S "$selected_user" 2>/dev/null | awk '{print $2}' || true)"

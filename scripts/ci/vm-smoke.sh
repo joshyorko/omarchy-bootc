@@ -329,8 +329,10 @@ EOF
     run_guest 'sudo -n cat /run/omarchy-bootc-update-trace/calls.log' >"${ARTIFACT_DIR}/omarchy-update-bootc-trace.log"
     grep -Fxq 'upgrade --check' "${ARTIFACT_DIR}/omarchy-update-bootc-trace.log" \
         || fail "omarchy update did not invoke bootc upgrade --check"
-    grep -Fxq 'upgrade' "${ARTIFACT_DIR}/omarchy-update-bootc-trace.log" \
-        || fail "omarchy update did not invoke bootc upgrade to stage B"
+    grep -Fxq 'upgrade --download-only' "${ARTIFACT_DIR}/omarchy-update-bootc-trace.log" \
+        || fail "omarchy update did not invoke bootc upgrade --download-only"
+    grep -Fxq 'upgrade --from-downloaded' "${ARTIFACT_DIR}/omarchy-update-bootc-trace.log" \
+        || fail "omarchy update did not invoke bootc upgrade --from-downloaded"
     run_guest 'test -s "$HOME/.local/state/omarchy-bootc/pending-update" &&
         cat "$HOME/.local/state/omarchy-bootc/pending-update"' \
         >"${ARTIFACT_DIR}/update-pending-marker.txt"
