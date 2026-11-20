@@ -139,6 +139,7 @@ preflight() {
         printf 'kvm=%s\n' "${kvm_state}"
         printf 'rootful_podman=%s\n' "${rootless}"
     } | tee "${LOG_DIR}/preflight.txt"
+    run_logged stage-parent-binding bash "${ROOT_DIR}/scripts/ci/probe-stage-parent-binding.sh"
 }
 
 verify_stage_ancestry() {
@@ -273,7 +274,11 @@ build_foundation() {
         "${ROOT_DIR}"
     bootcrew_image_id="$(sudo -n podman image inspect "${bootcrew_ref}" --format '{{.Id}}')"
     # foundation is a verification sibling of quattro-assembly branching off bootcrew-system.
+    python3 "${ROOT_DIR}/scripts/ci/pin-stage-parent.py" \
+        "${ROOT_DIR}/Containerfile" foundation bootcrew-system "${bootcrew_image_id}" \
+        "${ARTIFACT_DIR}/Containerfile.foundation.pinned"
     run_logged foundation-verification-sibling-build sudo -n podman build \
+        --file "${ARTIFACT_DIR}/Containerfile.foundation.pinned" \
         --pull=missing --format=oci --target foundation \
         --tag "${image_ref}" \
         --label "org.opencontainers.image.revision=${head_sha}" \
@@ -282,7 +287,7 @@ build_foundation() {
         --label "com.omarchy.foundation.head=${head_sha}" \
         "${ROOT_DIR}"
     run_logged foundation-ancestry verify_stage_ancestry \
-        "${bootcrew_ref}" "${image_ref}" "bootcrew-system -> foundation (verification sibling)"
+        "${bootcrew_image_id}" "${image_ref}" "bootcrew-system -> foundation (verification sibling)"
     run_logged foundation-contract sudo -n podman run --rm --pull=never --privileged \
         "${image_ref}" /usr/lib/omarchy-bootc/foundation-contract.sh
     record_stage_receipt foundation "${image_ref}" omarchy-bootc.foundation-verification-sibling/v1 \
@@ -312,7 +317,11 @@ build_assembly() {
         --format '{{.Id}}' 2>/dev/null || true)"
     [[ -n "${foundation_image_id}" ]] \
         || die "foundation verification sibling image is not present before assembly"
+    python3 "${ROOT_DIR}/scripts/ci/pin-stage-parent.py" \
+        "${ROOT_DIR}/Containerfile" quattro-assembly bootcrew-system "${bootcrew_image_id}" \
+        "${ARTIFACT_DIR}/Containerfile.quattro-assembly.pinned"
     run_logged assembly-build sudo -n podman build \
+        --file "${ARTIFACT_DIR}/Containerfile.quattro-assembly.pinned" \
         --pull=missing --format=oci --target quattro-assembly \
         --tag "${image_ref}" \
         --label "org.opencontainers.image.revision=${head_sha}" \
@@ -321,7 +330,7 @@ build_assembly() {
         --label "com.omarchy.assembly.foundation-sibling=${foundation_image_id}" \
         "${ROOT_DIR}"
     run_logged assembly-ancestry verify_stage_ancestry \
-        "${bootcrew_ref}" "${image_ref}" "bootcrew-system -> quattro-assembly"
+        "${bootcrew_image_id}" "${image_ref}" "bootcrew-system -> quattro-assembly"
     run_logged assembly-contract sudo -n podman run --rm --pull=never --privileged \
         "${image_ref}" bash -ceu 'set -euo pipefail
             test -s /usr/share/omarchy-bootc/quattro-package-manifest.txt
@@ -351,7 +360,11 @@ build_integration() {
         --format '{{.Id}}' 2>/dev/null || true)"
     [[ -n "${assembly_image_id}" ]] \
         || die "immutable assembly image is not present before integration"
+    python3 "${ROOT_DIR}/scripts/ci/pin-stage-parent.py" \
+        "${ROOT_DIR}/Containerfile" quattro-base quattro-assembly "${assembly_image_id}" \
+        "${ARTIFACT_DIR}/Containerfile.quattro-base.pinned"
     run_logged integration-build sudo -n podman build \
+        --file "${ARTIFACT_DIR}/Containerfile.quattro-base.pinned" \
         --pull=missing --format=oci --target quattro-integration \
         --tag "${image_ref}" \
         --label "org.opencontainers.image.revision=${head_sha}" \
@@ -359,7 +372,7 @@ build_integration() {
         --label "com.omarchy.integration.assembly=${assembly_image_id}" \
         "${ROOT_DIR}"
     run_logged integration-ancestry verify_stage_ancestry \
-        "${assembly_image_ref}" "${image_ref}" "quattro-assembly -> quattro-integration"
+        "${assembly_image_id}" "${image_ref}" "quattro-assembly -> quattro-integration"
     run_logged integration-lint sudo -n podman run --rm --pull=never --privileged \
         "${image_ref}" bootc container lint --fatal-warnings
     record_stage_receipt quattro-integration "${image_ref}" omarchy-bootc.integration/v1 \
@@ -408,7 +421,16 @@ build_candidate() {
     [[ "${bootc_version}" == "v1.16.13" ]] || die "unexpected bootc version record: ${bootc_version}"
     [[ -n "${arch_bootstrap_ref}" && -n "${bootcrew_source}" && -n "${bootc_source}" && -n "${omarchy_source}" && -n "${omarchy_iso_source}" && -n "${omarchy_version}" ]] || die "missing Containerfile or upstream source metadata"
 
+    local integration_image_ref="${INTEGRATION_IMAGE_REF:-localhost/omarchy-bootc:integration}"
+    local integration_image_id="" candidate_file="${ROOT_DIR}/Containerfile"
+    integration_image_id="$(sudo -n podman image inspect "${integration_image_ref}" --format '{{.Id}}' 2>/dev/null || true)"
+    if [[ -n "$integration_image_id" ]]; then
+        candidate_file="${ARTIFACT_DIR}/Containerfile.final.pinned"
+        python3 "${ROOT_DIR}/scripts/ci/pin-stage-parent.py" \
+            "${ROOT_DIR}/Containerfile" final quattro-integration "$integration_image_id" "$candidate_file"
+    fi
     run_logged build sudo -n podman build \
+        --file "$candidate_file" \
         --pull=missing \
         --format=oci \
         --target final \
@@ -424,10 +446,9 @@ build_candidate() {
         "${ROOT_DIR}"
 
     run_logged fatal-lint sudo -n podman run --rm --pull=never --privileged "${IMAGE_REF}" bootc container lint --fatal-warnings
-    local integration_image_ref="${INTEGRATION_IMAGE_REF:-localhost/omarchy-bootc:integration}"
-    if sudo -n podman image inspect "${integration_image_ref}" >/dev/null 2>&1; then
+    if [[ -n "$integration_image_id" ]]; then
         run_logged final-ancestry verify_stage_ancestry \
-            "${integration_image_ref}" "${IMAGE_REF}" "quattro-integration -> final"
+            "${integration_image_id}" "${IMAGE_REF}" "quattro-integration -> final"
     fi
     run_logged candidate-dependencies sudo -n podman run --rm --pull=never \
         "${IMAGE_REF}" /usr/lib/omarchy-bootc/acceptance-dependencies.sh final

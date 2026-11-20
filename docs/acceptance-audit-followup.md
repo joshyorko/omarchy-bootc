@@ -67,6 +67,11 @@ publication is authorized. Installer Gate 6 remains separate and unaccepted.
 - P2-05: `scripts/ci/candidate-build.sh` explicitly names `foundation` as a
   verification sibling of `quattro-assembly` off `bootcrew-system` and verifies
   OCI `RootFS.Layers` DiffID prefix ancestry across every stage.
+  Run 44721708559 exposed separately rebuilt parent divergence despite successful
+  lint/contracts. Staged builds now render only the relevant `FROM` boundary to
+  the recorded immutable local image ID; all stage instructions remain unchanged.
+  A tiny real Podman parent-binding probe runs in preflight before the compiler;
+  the original DiffID prefix gate remains fatal.
 - P2-06: `Containerfile` and `build/20-quattro.sh` resolve `pacman-conf DBPath`
   and require nonempty repository database SHA-256 provenance including expected
   databases (`core.db`, `extra.db`, and `omarchy.db`).
