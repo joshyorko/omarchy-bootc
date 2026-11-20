@@ -1,0 +1,942 @@
+{
+  "schema": "omarchy.real-guest-gallery/v1",
+  "scope": "Actual installed KVM acceptance guests with disposable test overlays. These are OS qualification screens, NOT an ISO installation, NOT physical Dakota and NOT proof of signed production publication. Source341dbb8 includes the merge-blocker repairs; source9eb9418 is prior historical OS qualification. OMP uses a controlled prompt recorder, not a real provider API. Optional SSH password-hardening exercise was skipped.",
+  "screenshots": [
+    {
+      "path": "44768835123/sddm-greeter.png",
+      "sha256": "9c3b97c3278f8dcc00dde7f15de330497c0c405250c50f6c4ea7683004b80112",
+      "size_bytes": 8688,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "SDDM greeter",
+      "group": "Qualified repaired OS341dbb8 \u2014 installed desktop",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "booted_overlay_digest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/job/136417143943",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/artifacts/14648634649",
+      "artifact_member": "qualification.oyVKf9pl/screenshots/sddm-greeter.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay",
+      "step": "Install boot and exercise candidate; 2026-11-20 16:34:37\u201316:54:06 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44768835123/success-desktop.png",
+      "sha256": "5cd56ffa86220ccbcb9324b13eab0ce23e5e5d56297ce5d7eace7ea88492157b",
+      "size_bytes": 1366117,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Logged-in Omarchy desktop",
+      "group": "Qualified repaired OS341dbb8 \u2014 installed desktop",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "booted_overlay_digest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/job/136417143943",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/artifacts/14648634649",
+      "artifact_member": "qualification.oyVKf9pl/guest-receipts/upstream/success-desktop.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay",
+      "step": "Install boot and exercise candidate; 2026-11-20 16:34:37\u201316:54:06 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44768835123/success-apps-menu-open.png",
+      "sha256": "f174372c13bf93a2811da08ce865b5d7c47bc48117c8b5f062bf8d4b7e52800a",
+      "size_bytes": 719153,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Apps grid",
+      "group": "Qualified repaired OS341dbb8 \u2014 installed desktop",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "booted_overlay_digest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/job/136417143943",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/artifacts/14648634649",
+      "artifact_member": "qualification.oyVKf9pl/guest-receipts/upstream/success-apps-menu-open.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay",
+      "step": "Install boot and exercise candidate; 2026-11-20 16:34:37\u201316:54:06 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44768835123/success-apps-menu-search.png",
+      "sha256": "15659d5cbf31a4574cbc1f5d40845fc5dcfdb565a17be1572f5f3309f226229a",
+      "size_bytes": 612609,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Apps search result",
+      "group": "Qualified repaired OS341dbb8 \u2014 installed desktop",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "booted_overlay_digest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/job/136417143943",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/artifacts/14648634649",
+      "artifact_member": "qualification.oyVKf9pl/guest-receipts/upstream/success-apps-menu-search.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay",
+      "step": "Install boot and exercise candidate; 2026-11-20 16:34:37\u201316:54:06 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44768835123/success-menu-01-root.png",
+      "sha256": "06a7cbe44ef9798fa061028e78963434085d137d8110fea49b454cbd8c3b07a5",
+      "size_bytes": 912451,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Omarchy root menu",
+      "group": "Qualified repaired OS341dbb8 \u2014 installed desktop",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "booted_overlay_digest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/job/136417143943",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/artifacts/14648634649",
+      "artifact_member": "qualification.oyVKf9pl/guest-receipts/upstream/success-menu-01-root.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay",
+      "step": "Install boot and exercise candidate; 2026-11-20 16:34:37\u201316:54:06 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44768835123/success-menu-06-bar-left.png",
+      "sha256": "767e3a3d9fa337c2f570e5bf83b4066368f8afb1fcc9d89ca1a7c50f618d18a7",
+      "size_bytes": 1376515,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Quickshell bar moved left",
+      "group": "Qualified repaired OS341dbb8 \u2014 installed desktop",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "booted_overlay_digest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/job/136417143943",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/artifacts/14648634649",
+      "artifact_member": "qualification.oyVKf9pl/guest-receipts/upstream/success-menu-06-bar-left.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay",
+      "step": "Install boot and exercise candidate; 2026-11-20 16:34:37\u201316:54:06 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44768835123/success-panel-weather.png",
+      "sha256": "05ab8d38db31c08f305b953b5d4b1e90321661aa8166b8f4670aeb5f85354a5a",
+      "size_bytes": 1274198,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Weather widget",
+      "group": "Qualified repaired OS341dbb8 \u2014 installed desktop",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "booted_overlay_digest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/job/136417143943",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/artifacts/14648634649",
+      "artifact_member": "qualification.oyVKf9pl/guest-receipts/upstream/success-panel-weather.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay",
+      "step": "Install boot and exercise candidate; 2026-11-20 16:34:37\u201316:54:06 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44768835123/success-notification-popup.png",
+      "sha256": "c0191f32f42f63b6041c3ca7088a86ccb14a14421ae65fe1f14839c0b1b3280f",
+      "size_bytes": 1415643,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Notification rendered",
+      "group": "Qualified repaired OS341dbb8 \u2014 installed desktop",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "booted_overlay_digest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/job/136417143943",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/artifacts/14648634649",
+      "artifact_member": "qualification.oyVKf9pl/guest-receipts/upstream/success-notification-popup.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay",
+      "step": "Install boot and exercise candidate; 2026-11-20 16:34:37\u201316:54:06 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44768835123/verify-version-plugins-omp.png",
+      "sha256": "fa29556962e1477445f2944fc1ddaa4d90c3beeb28ca7e9bd801b88530f241dc",
+      "size_bytes": 276041,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Native plugin enabled state and bootc JSON terminal",
+      "group": "Qualified repaired OS341dbb8 \u2014 installed desktop",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "booted_overlay_digest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/job/136417143943",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/artifacts/14648634649",
+      "artifact_member": "qualification.oyVKf9pl/guest-receipts/native/verify-version-plugins-omp.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay",
+      "step": "Install boot and exercise candidate; 2026-11-20 16:34:37\u201316:54:06 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44768835123/update-b-desktop.png",
+      "sha256": "899c1ffbef09ec997f042e1c5913433ccbc177a3f6fee67900c9eb76e4c17f53",
+      "size_bytes": 1433302,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Updated B desktop",
+      "group": "Qualified repaired OS341dbb8 \u2014 A \u2192 B \u2192 A lifecycle",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "booted_overlay_digest": "sha256:af9a91998a87e5fd142c897011fa2225c05290f28d58c30ef7f27ae3360a4c1c",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/job/136417143943",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/artifacts/14648634649",
+      "artifact_member": "qualification.oyVKf9pl/screenshots/update-b-desktop.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay",
+      "step": "Install boot and exercise candidate; 2026-11-20 16:34:37\u201316:54:06 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44768835123/rollback-a-desktop.png",
+      "sha256": "636a4d6a65c0c938494599ac925dac24a59996c06196737391761658e9f766af",
+      "size_bytes": 1433675,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Rollback A desktop",
+      "group": "Qualified repaired OS341dbb8 \u2014 A \u2192 B \u2192 A lifecycle",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "booted_overlay_digest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/job/136417143943",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44768835123/artifacts/14648634649",
+      "artifact_member": "qualification.oyVKf9pl/screenshots/rollback-a-desktop.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay",
+      "step": "Install boot and exercise candidate; 2026-11-20 16:34:37\u201316:54:06 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44748869929/sddm-greeter.png",
+      "sha256": "9c3b97c3278f8dcc00dde7f15de330497c0c405250c50f6c4ea7683004b80112",
+      "size_bytes": 8688,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "SDDM greeter",
+      "group": "Prior OS9eb9418 \u2014 historical KVM qualification, not installer proof",
+      "source_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+      "harness_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+      "image_digest": "sha256:82fb540306252eef723776633bb8731c9c01895ef378c7bbae65b74a86bd304f",
+      "booted_overlay_digest": "sha256:34a520465f1c365860cb6eb23b10d8f8d6383daa31aba4618df5e88cc08be920",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929/job/136345257225",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929/artifacts/14639516012",
+      "artifact_member": "qualification.gr3yEf23/screenshots/sddm-greeter.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay; prior historical qualification",
+      "step": "Install boot and exercise candidate; 2026-11-20 14:30:50\u201314:49:16 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44748869929/success-desktop.png",
+      "sha256": "27ef1ae83e14dd47a6720db6d80aaee8999d8ed161bfe21f688b28eeb06c1ec2",
+      "size_bytes": 1366112,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Logged-in Omarchy desktop",
+      "group": "Prior OS9eb9418 \u2014 historical KVM qualification, not installer proof",
+      "source_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+      "harness_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+      "image_digest": "sha256:82fb540306252eef723776633bb8731c9c01895ef378c7bbae65b74a86bd304f",
+      "booted_overlay_digest": "sha256:34a520465f1c365860cb6eb23b10d8f8d6383daa31aba4618df5e88cc08be920",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929/job/136345257225",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929/artifacts/14639516012",
+      "artifact_member": "qualification.gr3yEf23/guest-receipts/upstream/success-desktop.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay; prior historical qualification",
+      "step": "Install boot and exercise candidate; 2026-11-20 14:30:50\u201314:49:16 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44748869929/verify-version-plugins-omp.png",
+      "sha256": "7a86449280b9ffd0d1f00ffd771954488128628bbfeb666f0a5067bf3855235c",
+      "size_bytes": 275550,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Native plugin enabled state and bootc JSON terminal",
+      "group": "Prior OS9eb9418 \u2014 historical KVM qualification, not installer proof",
+      "source_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+      "harness_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+      "image_digest": "sha256:82fb540306252eef723776633bb8731c9c01895ef378c7bbae65b74a86bd304f",
+      "booted_overlay_digest": "sha256:34a520465f1c365860cb6eb23b10d8f8d6383daa31aba4618df5e88cc08be920",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929/job/136345257225",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929/artifacts/14639516012",
+      "artifact_member": "qualification.gr3yEf23/guest-receipts/native/verify-version-plugins-omp.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay; prior historical qualification",
+      "step": "Install boot and exercise candidate; 2026-11-20 14:30:50\u201314:49:16 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44748869929/update-b-desktop.png",
+      "sha256": "0be66e76725a020fd858a2368ff6eb9de42be55f6188865806ca032e0b40aa2e",
+      "size_bytes": 1433226,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Updated B desktop",
+      "group": "Prior OS9eb9418 \u2014 historical KVM qualification, not installer proof",
+      "source_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+      "harness_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+      "image_digest": "sha256:82fb540306252eef723776633bb8731c9c01895ef378c7bbae65b74a86bd304f",
+      "booted_overlay_digest": "sha256:f0329a5dedbcafacabfa53e402ff2b1f6cbe805016332c1eeec0c8a56d49ab8a",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929/job/136345257225",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929/artifacts/14639516012",
+      "artifact_member": "qualification.gr3yEf23/screenshots/update-b-desktop.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay; prior historical qualification",
+      "step": "Install boot and exercise candidate; 2026-11-20 14:30:50\u201314:49:16 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    },
+    {
+      "path": "44748869929/rollback-a-desktop.png",
+      "sha256": "6d6a78957b5f06959923dd6ff4f96159fa355203dc5ca6484be8b1ef35ca3587",
+      "size_bytes": 1433651,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "stage": "Rollback A desktop",
+      "group": "Prior OS9eb9418 \u2014 historical KVM qualification, not installer proof",
+      "source_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+      "harness_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+      "image_digest": "sha256:82fb540306252eef723776633bb8731c9c01895ef378c7bbae65b74a86bd304f",
+      "booted_overlay_digest": "sha256:34a520465f1c365860cb6eb23b10d8f8d6383daa31aba4618df5e88cc08be920",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929/job/136345257225",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/44748869929/artifacts/14639516012",
+      "artifact_member": "qualification.gr3yEf23/screenshots/rollback-a-desktop.png",
+      "provenance": "actual installed KVM guest; disposable acceptance overlay; prior historical qualification",
+      "step": "Install boot and exercise candidate; 2026-11-20 14:30:50\u201314:49:16 UTC (step window; individual capture timestamps unavailable)",
+      "outcome": "OS acceptance passed; installer not tested",
+      "reviewed_for_publication": true
+    }
+  ],
+  "receipts": {
+    "44768835123": {
+      "accepted_candidate": {
+        "schema": "omarchy-bootc.accepted-candidate/v1",
+        "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+        "harness_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+        "candidate": {
+          "archive": "omarchy-bootc-candidate-head-341dbb85351994fad83012e40c5bb894c96d1cb5-quattro-ac2690cd7be4-iso-2d0b3ecdec2d-bootcrew-5f048fa65a94-bootc-fa0d3f9cb9a0.oci.tar",
+          "archive_sha256": "sha256:44400d308c084ff40f796f96fc2b0633c7e999fcdc5d220bf033ebd211a0168a",
+          "oci_manifest_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+          "local_image_id": "3b4187ef1ed30f67bfbf01389819b1b81104e25bc646f78be70ad2b1686e45b6"
+        },
+        "acceptance": {
+          "status": "passed",
+          "evidence_dir": "/home/runner/work/_temp/runtime-receipts/qualification.oyVKf9pl",
+          "lifecycle": "passed",
+          "profile": "omarchy",
+          "upstream_revision": "ac2690cd7be4f47e4a255f5e2e78d904d436b068",
+          "upstream_suite": "passed-with-recorded-upstream-adapter",
+          "upstream_adaptation": {
+            "adapted_sha256": {
+              "test/acceptance": "sha256:08773f0771e24d72687941063d4968de10a16ef81a22b554c46b785420d2fd86",
+              "test/acceptance.d/apps-test.sh": "sha256:f2b4250a9f4e4d47cc08a449b8e89de8f9942a5bad54607a2159f8f53ab637ad",
+              "test/acceptance.d/base-test.sh": "sha256:453dbb1d92e2a3e6ab3e3dd2fcbd3e67793631a4e229bcf22e8e2b60af54e299",
+              "test/acceptance.d/bootc-acceptance-helper.sh": "sha256:ca1d053fd2413eab74c5dd7341dfecef8bb3553a3da70ec2a1cd3befb14e2ebc",
+              "test/acceptance.d/cups-test.sh": "sha256:98cc07d62d8720c2c5b0990f192fac654b96a0bc4d22d003901e62f3b452a184",
+              "test/acceptance.d/input-method-notifications.py": "sha256:d715f84284c594396eceb1f7c4a02ebbb2e730fbbaede11375d33297d67a3c9a",
+              "test/acceptance.d/input-method-state.py": "sha256:19510ad3263efdaea02c9b7a6a2a6ea266e3ad8fd2368187714d9d22ff39a0c6",
+              "test/acceptance.d/input-methods-test.sh": "sha256:4bd143706dc5db76c310ad8e03979adc235c67b9fd8e72c3d57c2bc3377b3734",
+              "test/acceptance.d/menu-test.sh": "sha256:30241543972f554387e0a9a765b327ff5f2c47b04e852639c652f921675a6bed",
+              "test/acceptance.d/overlay-monitor-test.sh": "sha256:13868f6fafa0364c01665bb99bd1aa6087df32a994950f4b46c07ebd7921a196",
+              "test/acceptance.d/panels-test.sh": "sha256:1bc77bebb339a01a5c9fbacdba2e27bba1a3722b2855c051440baeafe17acc94",
+              "test/acceptance.d/security-test.sh": "sha256:f1a899620c84ce45e39fc5860fbddbd26dec34e9c35c29e3518fe83f478c9400",
+              "test/acceptance.d/session-test.sh": "sha256:d1d605853e473b82137b8969d44fef481f9e0942a721e6a2dcb90be1ae45c238",
+              "test/acceptance.d/shell-surfaces-test.sh": "sha256:ced64df4df46c135cb458213a25a2fa4ccb6b75bd2779e5b18cf7a254c436216",
+              "test/acceptance.d/system-test.sh": "sha256:9d758f8f6b949bdf0797532153aaf013276b595487890bdd4ddffcf4dbbe7761"
+            },
+            "changes": [
+              {
+                "after_sha256": "sha256:453dbb1d92e2a3e6ab3e3dd2fcbd3e67793631a4e229bcf22e8e2b60af54e299",
+                "before_sha256": "sha256:66177a7ba966eb6a552fb76f3e600442ff07988757d7db5a12c193b945679aaa",
+                "original": "screen_contains() {\n  local text=\"$1\"\n  local snapshot=\"/tmp/omarchy-acceptance-ocr-$$.png\"\n\n  # Capture at 2x scale: tesseract routinely drops small caption text at\n  # native resolution (the weather panel's detail labels, for one).\n  if ! timeout 10 grim -s 2 \"$snapshot\" 2>/dev/null; then\n    rm -f \"$snapshot\"\n    return 1\n  fi\n  tesseract \"$snapshot\" stdout --psm 11 2>/dev/null | grep -Fi -- \"$text\" >/dev/null\n  local status=$?\n  rm -f \"$snapshot\"\n  return $status\n}\n",
+                "path": "test/acceptance.d/base-test.sh",
+                "replacement": "screen_contains() {\n  local text=\"$1\"\n  local snapshot=\"/tmp/omarchy-acceptance-ocr-$$.png\"\n\n  # Capture at 2x scale: tesseract routinely drops small caption text at\n  # native resolution (the weather panel's detail labels, for one).\n  if ! timeout 10 grim -s 2 \"$snapshot\" 2>/dev/null; then\n    rm -f \"$snapshot\"\n    return 1\n  fi\n  tesseract \"$snapshot\" stdout --psm 11 >\"$snapshot.txt\" 2>/dev/null\n  local ocr_status=$?\n  grep -Fi -- \"$text\" \"$snapshot.txt\" >/dev/null\n  local status=$?\n  ((ocr_status == 0)) || status=$ocr_status\n  if [[ $text == \"Acceptance notification\" ]]; then\n    # Retain the actual OCR inputs before the short-lived toast expires.\n    cp \"$snapshot\" \"$ARTIFACTS/notification-ocr-latest.png\" || true\n    cp \"$snapshot.txt\" \"$ARTIFACTS/notification-ocr-latest.txt\" || true\n    if [[ ! -f \"$ARTIFACTS/notification-ocr-first.png\" ]]; then\n      cp \"$snapshot\" \"$ARTIFACTS/notification-ocr-first.png\" || true\n      cp \"$snapshot.txt\" \"$ARTIFACTS/notification-ocr-first.txt\" || true\n      timeout 2 omarchy-shell notifications probe >\"$ARTIFACTS/notification-first-probe.json\" 2>\"$ARTIFACTS/notification-first-probe.stderr\" || true\n      timeout 1 hyprctl -j monitors >\"$ARTIFACTS/notification-first-monitors.json\" 2>&1 || true\n      timeout 1 hyprctl -j layers >\"$ARTIFACTS/notification-first-layers.json\" 2>&1 || true\n    fi\n    # P2-01: when full-desktop OCR misses small toast text, crop directly from\n    # the measured omarchy-notifications layer bounds while preserving OCR errors.\n    if ((status != 0 && ocr_status == 0)); then\n      local helper_script monitors_json layers_json geom crop crop_ocr_status\n      helper_script=\"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\"\n      monitors_json=\"$ARTIFACTS/notification-latest-monitors.json\"\n      layers_json=\"$ARTIFACTS/notification-latest-layers.json\"\n      if timeout 1 hyprctl -j monitors >\"$monitors_json\" 2>/dev/null &&\n         timeout 1 hyprctl -j layers >\"$layers_json\" 2>/dev/null &&\n         geom=\"$(OMARCHY_ACCEPTANCE_DIR=\"$ARTIFACTS\" bash \"$helper_script\" notification-bounds \"$monitors_json\" \"$layers_json\" 2>/dev/null)\" &&\n         [[ -n \"$geom\" ]]; then\n        crop=\"/tmp/omarchy-acceptance-ocr-crop-$$.png\"\n        if timeout 10 grim -g \"$geom\" -s 2 \"$crop\" 2>/dev/null; then\n          crop_ocr_status=0\n          tesseract \"$crop\" stdout --psm 6 >\"$crop.txt\" 2>/dev/null || crop_ocr_status=$?\n          if ((crop_ocr_status == 0)) && ! grep -Fi -- \"$text\" \"$crop.txt\" >/dev/null; then\n            tesseract \"$crop\" stdout --psm 11 >>\"$crop.txt\" 2>/dev/null || crop_ocr_status=$?\n          fi\n          cp \"$crop\" \"$ARTIFACTS/notification-ocr-crop-latest.png\" || true\n          cp \"$crop.txt\" \"$ARTIFACTS/notification-ocr-crop-latest.txt\" || true\n          if [[ ! -f \"$ARTIFACTS/notification-ocr-crop-first.png\" ]]; then\n            cp \"$crop\" \"$ARTIFACTS/notification-ocr-crop-first.png\" || true\n            cp \"$crop.txt\" \"$ARTIFACTS/notification-ocr-crop-first.txt\" || true\n          fi\n          if ((crop_ocr_status != 0)); then\n            status=$crop_ocr_status\n          elif grep -Fi -- \"$text\" \"$crop.txt\" >/dev/null; then\n            status=0\n          fi\n        fi\n        rm -f \"$crop\" \"$crop.txt\"\n      fi\n    fi\n  fi\n  rm -f \"$snapshot\" \"$snapshot.txt\"\n  return $status\n}\n"
+              },
+              {
+                "after_sha256": "sha256:13868f6fafa0364c01665bb99bd1aa6087df32a994950f4b46c07ebd7921a196",
+                "before_sha256": "sha256:bfc109915e7de1ce3428cb724a301105c4f1b3a5f465a38312ba55f9a014e26f",
+                "original": "wtype \"keybindings\"\nwait_until \"menu search renders on tall monitor\" 15 monitor_contains \"$virtual_monitor\" \"Keybindings\"\nscreenshot \"success-overlay-monitor-04-open-search\"\nremove_source_monitor\nwait_until \"open menu moves to remaining monitor\" 15 menu_on_monitor \"$remaining_monitor\"\nwait_until \"open menu search renders on shorter monitor\" 15 monitor_contains \"$remaining_monitor\" \"Keybindings\"\n",
+                "path": "test/acceptance.d/overlay-monitor-test.sh",
+                "replacement": "wtype \"keybindings\"\nwait_until \"menu search renders on tall monitor\" 15 bash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" menu-search \"$virtual_monitor\" \"keybindings\" \"Keybindings\"\nscreenshot \"success-overlay-monitor-04-open-search\"\nremove_source_monitor\nwait_until \"open menu moves to remaining monitor\" 15 menu_on_monitor \"$remaining_monitor\"\nwait_until \"open menu search renders on shorter monitor\" 15 bash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" menu-search \"$remaining_monitor\" \"keybindings\" \"Keybindings\"\n"
+              },
+              {
+                "after_sha256": "sha256:30241543972f554387e0a9a765b327ff5f2c47b04e852639c652f921675a6bed",
+                "before_sha256": "sha256:90113adc1702ed96d7af22b1a290388c3a9f79566bab7f86f394fa96157cc225",
+                "original": "bar_is_vertical() {\n  local width height\n\n  read -r width height < <(hyprctl -j layers | jq -r '\n    [.. | objects | select(.namespace? == \"omarchy-bar\")][0]\n    | [.w, .h] | @tsv\n  ')\n\n  [[ $width =~ ^[0-9]+$ && $height =~ ^[0-9]+$ ]] && ((width < height))\n}\n\nbar_is_horizontal() {\n  local width height\n\n  read -r width height < <(hyprctl -j layers | jq -r '\n    [.. | objects | select(.namespace? == \"omarchy-bar\")][0]\n    | [.w, .h] | @tsv\n  ')\n\n  [[ $width =~ ^[0-9]+$ && $height =~ ^[0-9]+$ ]] && ((width > height))\n}\n\nbar_position_is() {\n  local expected=\"$1\"\n\n  [[ $(jq -r '.bar.position // \"top\"' \"$CONFIG_FILE\") == $expected ]]\n}\n\nsource_file=$DEFAULTS_FILE\n((config_existed)) && source_file=$CONFIG_FILE\noriginal_position=$(jq -r '.bar.position // \"top\"' \"$source_file\")\n\nomarchy-shell shell summon omarchy.menu '{\"menu\":\"root\"}' >/dev/null\nwait_until \"root menu opens\" 15 layer_on_overlay \"omarchy-menu\"\nwait_until \"root menu content is visible\" 15 screen_contains \"Apps\"\nscreenshot \"success-menu-01-root\"\n\nwtype -k Down -k Down -k Down\nsleep 1\nscreenshot \"success-menu-02-style-selected\"\nwtype -k Return\n\nwait_until \"style submenu is visible\" 15 screen_contains \"Theme\"\nscreenshot \"success-menu-03-style-submenu\"\n\nwtype -k Down -k Down -k Down -k Down -k Return\nsleep 1\nscreenshot \"success-menu-04-menu-bar-submenu\"\n\nwtype -k Return\nsleep 1\nscreenshot \"success-menu-05-position-submenu\"\n\nwtype -k Down -k Down -k Return\n",
+                "path": "test/acceptance.d/menu-test.sh",
+                "replacement": "bar_is_vertical() {\n  bash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" bar-vertical\n}\n\nbar_is_horizontal() {\n  bash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" bar-horizontal\n}\n\nbar_position_is() {\n  local expected=\"$1\"\n\n  [[ $(jq -r '.bar.position // \"top\"' \"$CONFIG_FILE\") == $expected ]]\n}\n\nsource_file=$DEFAULTS_FILE\n((config_existed)) && source_file=$CONFIG_FILE\noriginal_position=$(jq -r '.bar.position // \"top\"' \"$source_file\")\n\nomarchy-shell shell summon omarchy.menu '{\"menu\":\"root\"}' >/dev/null\nwait_until \"root menu opens\" 15 layer_on_overlay \"omarchy-menu\"\nwait_until \"root menu content is visible\" 15 screen_contains \"Apps\"\nscreenshot \"success-menu-01-root\"\n\nwtype -k Down -k Down\nsleep 1\nscreenshot \"success-menu-02-style-selected\"\nwtype -k Return\n\nwait_until \"style submenu is visible\" 15 screen_contains \"Theme\"\nscreenshot \"success-menu-03-style-submenu\"\n\nwtype -k Down -k Down -k Down -k Return\nsleep 1\nscreenshot \"success-menu-04-menu-bar-submenu\"\n\nwtype -k Down -k Return\nsleep 1\nscreenshot \"success-menu-05-position-submenu\"\n\nwtype -k Down -k Down -k Return\n"
+              },
+              {
+                "after_sha256": "sha256:d1d605853e473b82137b8969d44fef481f9e0942a721e6a2dcb90be1ae45c238",
+                "before_sha256": "sha256:f04af8cf2cd6e77ec8192b9eb16c8ef08967096cef1723a8e906a2cabbec4b5e",
+                "original": "# Root filesystem is btrfs as installed\n[[ $(findmnt -no FSTYPE /) == \"btrfs\" ]] || fail \"root filesystem is btrfs\"\npass \"root filesystem is btrfs\"\n",
+                "path": "test/acceptance.d/session-test.sh",
+                "replacement": "# bootc architecture: immutable composefs root on the installed Btrfs backing.\nbash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" root ||\n  fail \"immutable composefs root has Btrfs backing and booted identity\"\n"
+              },
+              {
+                "after_sha256": "sha256:9d758f8f6b949bdf0797532153aaf013276b595487890bdd4ddffcf4dbbe7761",
+                "before_sha256": "sha256:ba02d03388c9084de57f7e7d55f666041fba16cc6c8847ab93328ed9c77965b1",
+                "original": "verify_kernel_headers() {\n  local kernel=linux-omarchy\n  local release\n  release=$(uname -r)\n  omarchy-pkg-present linux-t2 && kernel=linux-t2\n\n  [[ $(cat \"/usr/lib/modules/$release/pkgbase\") == \"$kernel\" ]] ||\n    fail \"the installed system boots the supported kernel\" \"$release is not $kernel\"\n  omarchy-pkg-present \"$kernel-headers\" || fail \"kernel headers are installed\" \"$kernel-headers is missing\"\n  [[ $(cat \"/usr/lib/modules/$release/build/include/config/kernel.release\") == \"$release\" ]] ||\n    fail \"headers match the running kernel\" \"$release has missing or mismatched headers\"\n  pass \"the running $kernel kernel has matching headers ($release)\"\n}\n",
+                "path": "test/acceptance.d/system-test.sh",
+                "replacement": "verify_kernel_headers() {\n  # bootc architecture: the image declares the supported kernel, not the installer.\n  bash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" kernel ||\n    fail \"the running image-declared kernel has package-owned matching headers\"\n}\n"
+              },
+              {
+                "after_sha256": "sha256:ced64df4df46c135cb458213a25a2fa4ccb6b75bd2779e5b18cf7a254c436216",
+                "before_sha256": "sha256:2d7fb57ae0b5682473ecb7c1420cfde08c1d5f622993d093671ebd00715f1b97",
+                "original": "# The menu's Apps submenu does the full launcher loop: open, search by\n# typing, launch the top hit.\nif window_present \"(?i)omawrite\" >/dev/null 2>&1; then\n  fail \"app launch test starts with no Omawrite window\" \"an Omawrite window is already open\"\nfi\n\nomarchy-menu summon apps >/dev/null\nwait_until \"apps menu opens\" 15 layer_on_overlay \"omarchy-menu\"\nsleep 1\nscreenshot \"success-apps-menu-open\"\n\nwtype \"omawrite\"\nsleep 1\nscreenshot \"success-apps-menu-search\"\nwtype -k Return\n\nwait_until \"apps menu launches the top search hit\" 60 window_present \"(?i)omawrite\"\nwait_until \"apps menu closes after launching\" 15 layer_absent \"omarchy-menu\"\n\nclose_windows \"(?i)omawrite\"\nwait_until \"Omawrite window closes\" 30 window_absent \"(?i)omawrite\"\n",
+                "path": "test/acceptance.d/shell-surfaces-test.sh",
+                "replacement": "# The pinned Apps action redirects to omarchy.dock's application grid.\n# Prove its specific overlay, search, top-hit launch and closure.\nif window_present \"(?i)omawrite\" >/dev/null 2>&1; then\n  fail \"app launch test starts with no Omawrite window\" \"an Omawrite window is already open\"\nfi\n\nomarchy-menu summon apps >/dev/null\nwait_until \"apps menu opens\" 15 layer_on_overlay \"omarchy-dock-apps\"\nsleep 1\nscreenshot \"success-apps-menu-open\"\n\nwtype \"omawrite\"\nsleep 1\nscreenshot \"success-apps-menu-search\"\nwtype -k Return\n\nwait_until \"apps menu launches the top search hit\" 60 window_present \"(?i)omawrite\"\nwait_until \"apps menu closes after launching\" 15 layer_absent \"omarchy-dock-apps\"\n\nclose_windows \"(?i)omawrite\"\nwait_until \"Omawrite window closes\" 30 window_absent \"(?i)omawrite\"\n"
+              }
+            ],
+            "helper": {
+              "path": "test/acceptance.d/bootc-acceptance-helper.sh",
+              "sha256": "sha256:ca1d053fd2413eab74c5dd7341dfecef8bb3553a3da70ec2a1cd3befb14e2ebc"
+            },
+            "original_sha256": {
+              "test/acceptance": "sha256:08773f0771e24d72687941063d4968de10a16ef81a22b554c46b785420d2fd86",
+              "test/acceptance.d/apps-test.sh": "sha256:f2b4250a9f4e4d47cc08a449b8e89de8f9942a5bad54607a2159f8f53ab637ad",
+              "test/acceptance.d/base-test.sh": "sha256:66177a7ba966eb6a552fb76f3e600442ff07988757d7db5a12c193b945679aaa",
+              "test/acceptance.d/cups-test.sh": "sha256:98cc07d62d8720c2c5b0990f192fac654b96a0bc4d22d003901e62f3b452a184",
+              "test/acceptance.d/input-method-notifications.py": "sha256:d715f84284c594396eceb1f7c4a02ebbb2e730fbbaede11375d33297d67a3c9a",
+              "test/acceptance.d/input-method-state.py": "sha256:19510ad3263efdaea02c9b7a6a2a6ea266e3ad8fd2368187714d9d22ff39a0c6",
+              "test/acceptance.d/input-methods-test.sh": "sha256:4bd143706dc5db76c310ad8e03979adc235c67b9fd8e72c3d57c2bc3377b3734",
+              "test/acceptance.d/menu-test.sh": "sha256:90113adc1702ed96d7af22b1a290388c3a9f79566bab7f86f394fa96157cc225",
+              "test/acceptance.d/overlay-monitor-test.sh": "sha256:bfc109915e7de1ce3428cb724a301105c4f1b3a5f465a38312ba55f9a014e26f",
+              "test/acceptance.d/panels-test.sh": "sha256:1bc77bebb339a01a5c9fbacdba2e27bba1a3722b2855c051440baeafe17acc94",
+              "test/acceptance.d/security-test.sh": "sha256:f1a899620c84ce45e39fc5860fbddbd26dec34e9c35c29e3518fe83f478c9400",
+              "test/acceptance.d/session-test.sh": "sha256:f04af8cf2cd6e77ec8192b9eb16c8ef08967096cef1723a8e906a2cabbec4b5e",
+              "test/acceptance.d/shell-surfaces-test.sh": "sha256:2d7fb57ae0b5682473ecb7c1420cfde08c1d5f622993d093671ebd00715f1b97",
+              "test/acceptance.d/system-test.sh": "sha256:ba02d03388c9084de57f7e7d55f666041fba16cc6c8847ab93328ed9c77965b1"
+            },
+            "patch": "upstream-acceptance-adaptation.patch",
+            "patch_sha256": "sha256:ac4cae7acbf4ac0f476c6b9b97bf01092570e90c6813286c2bca95ab69c9f386",
+            "required_tests": [
+              "test/acceptance.d/apps-test.sh",
+              "test/acceptance.d/cups-test.sh",
+              "test/acceptance.d/input-methods-test.sh",
+              "test/acceptance.d/menu-test.sh",
+              "test/acceptance.d/overlay-monitor-test.sh",
+              "test/acceptance.d/panels-test.sh",
+              "test/acceptance.d/security-test.sh",
+              "test/acceptance.d/session-test.sh",
+              "test/acceptance.d/shell-surfaces-test.sh",
+              "test/acceptance.d/system-test.sh"
+            ],
+            "schema": "omarchy-bootc.upstream-acceptance-adaptation/v1",
+            "scope": "root-filesystem-declared-kernel-menu-navigation-apps-grid-bar-reservations-and-ocr-evidence",
+            "skipped_tests": [],
+            "status": "adapted-not-executed",
+            "upstream_revision": "ac2690cd7be4f47e4a255f5e2e78d904d436b068"
+          },
+          "overlay_image_id": "65c198b3e6ef9a5e1ad0733cee16880ea1b6fd6f8e213e7f05aa959cc8c1f9f0",
+          "overlay_scope": "disposable-test-fixture-only"
+        },
+        "publishable": false
+      },
+      "lifecycle-b-booted-status.json": {
+        "apiVersion": "org.containers.bootc/v1",
+        "kind": "BootcHost",
+        "metadata": {
+          "name": "host"
+        },
+        "spec": {
+          "bootOrder": "default",
+          "image": {
+            "image": "10.0.2.2:38947/omarchy:acceptance",
+            "transport": "registry"
+          }
+        },
+        "status": {
+          "booted": {
+            "cachedUpdate": null,
+            "composefs": {
+              "bootDigest": "9d7be0a112db62f3253fd8eb097e0c12ae8ab9d4d8e33429513f95cdd383fa57",
+              "bootType": "Bls",
+              "bootloader": "systemd",
+              "missingVerityAllowed": false,
+              "verity": "5d24b6b88f0b772830610e3c6e67905b2e2bd14148e3b3797173b8423039f59bec187cb8390809de006d231533291b3b7a91cffb9a70a2b492b2782c0e5cf7c8"
+            },
+            "downloadOnly": false,
+            "image": {
+              "architecture": "amd64",
+              "image": {
+                "image": "10.0.2.2:38947/omarchy:acceptance",
+                "transport": "registry"
+              },
+              "imageDigest": "sha256:af9a91998a87e5fd142c897011fa2225c05290f28d58c30ef7f27ae3360a4c1c",
+              "timestamp": "2026-11-20T16:48:23.356093840Z",
+              "version": null
+            },
+            "incompatible": false,
+            "ostree": null,
+            "pinned": false,
+            "softRebootCapable": false,
+            "store": null
+          },
+          "readOnly": false,
+          "rollback": {
+            "cachedUpdate": null,
+            "composefs": {
+              "bootDigest": "9d7be0a112db62f3253fd8eb097e0c12ae8ab9d4d8e33429513f95cdd383fa57",
+              "bootType": "Bls",
+              "bootloader": "systemd",
+              "missingVerityAllowed": false,
+              "verity": "b5138ba447fd9a44c322d4516864487a3a3e287ba6da57c4660aaa6f034a73bd7f646896184fd28891b90539eb39b22a29eb73173fda9db158f996b76b45e5c2"
+            },
+            "downloadOnly": false,
+            "image": {
+              "architecture": "amd64",
+              "image": {
+                "image": "10.0.2.2:38947/omarchy:acceptance",
+                "transport": "registry"
+              },
+              "imageDigest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+              "timestamp": "2026-11-20T16:34:35.520461977Z",
+              "version": null
+            },
+            "incompatible": false,
+            "ostree": null,
+            "pinned": false,
+            "softRebootCapable": true,
+            "store": null
+          },
+          "rollbackQueued": false,
+          "staged": null,
+          "type": null,
+          "usrOverlay": null
+        }
+      },
+      "lifecycle-a-rollback-status.json": {
+        "apiVersion": "org.containers.bootc/v1",
+        "kind": "BootcHost",
+        "metadata": {
+          "name": "host"
+        },
+        "spec": {
+          "bootOrder": "default",
+          "image": {
+            "image": "10.0.2.2:38947/omarchy:acceptance",
+            "transport": "registry"
+          }
+        },
+        "status": {
+          "booted": {
+            "cachedUpdate": null,
+            "composefs": {
+              "bootDigest": "9d7be0a112db62f3253fd8eb097e0c12ae8ab9d4d8e33429513f95cdd383fa57",
+              "bootType": "Bls",
+              "bootloader": "systemd",
+              "missingVerityAllowed": false,
+              "verity": "b5138ba447fd9a44c322d4516864487a3a3e287ba6da57c4660aaa6f034a73bd7f646896184fd28891b90539eb39b22a29eb73173fda9db158f996b76b45e5c2"
+            },
+            "downloadOnly": false,
+            "image": {
+              "architecture": "amd64",
+              "image": {
+                "image": "10.0.2.2:38947/omarchy:acceptance",
+                "transport": "registry"
+              },
+              "imageDigest": "sha256:317f4c8ddd9fa7264a086be9ae2ee80a5ae0aa393c6fed4d6d470d343ccc25ea",
+              "timestamp": "2026-11-20T16:34:35.520461977Z",
+              "version": null
+            },
+            "incompatible": false,
+            "ostree": null,
+            "pinned": false,
+            "softRebootCapable": false,
+            "store": null
+          },
+          "readOnly": false,
+          "rollback": {
+            "cachedUpdate": null,
+            "composefs": {
+              "bootDigest": "9d7be0a112db62f3253fd8eb097e0c12ae8ab9d4d8e33429513f95cdd383fa57",
+              "bootType": "Bls",
+              "bootloader": "systemd",
+              "missingVerityAllowed": false,
+              "verity": "5d24b6b88f0b772830610e3c6e67905b2e2bd14148e3b3797173b8423039f59bec187cb8390809de006d231533291b3b7a91cffb9a70a2b492b2782c0e5cf7c8"
+            },
+            "downloadOnly": false,
+            "image": {
+              "architecture": "amd64",
+              "image": {
+                "image": "10.0.2.2:38947/omarchy:acceptance",
+                "transport": "registry"
+              },
+              "imageDigest": "sha256:af9a91998a87e5fd142c897011fa2225c05290f28d58c30ef7f27ae3360a4c1c",
+              "timestamp": "2026-11-20T16:48:23.356093840Z",
+              "version": null
+            },
+            "incompatible": false,
+            "ostree": null,
+            "pinned": false,
+            "softRebootCapable": true,
+            "store": null
+          },
+          "rollbackQueued": false,
+          "staged": null,
+          "type": null,
+          "usrOverlay": null
+        }
+      }
+    },
+    "44748869929": {
+      "accepted_candidate": {
+        "schema": "omarchy-bootc.accepted-candidate/v1",
+        "source_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+        "harness_sha": "9eb94185ca5dce3ef45e97c90ae4c6f3651649fa",
+        "candidate": {
+          "archive": "omarchy-bootc-candidate-head-9eb94185ca5dce3ef45e97c90ae4c6f3651649fa-quattro-ac2690cd7be4-iso-2d0b3ecdec2d-bootcrew-5f048fa65a94-bootc-fa0d3f9cb9a0.oci.tar",
+          "archive_sha256": "sha256:e72afaa640889dbc7bd943f695d466b26a468dfa70b45ce4a612cbceb5ca9f72",
+          "oci_manifest_digest": "sha256:82fb540306252eef723776633bb8731c9c01895ef378c7bbae65b74a86bd304f",
+          "local_image_id": "d7b154f5d79f4d73e2adc097ee369df86416ee33234d94deb9e467c4266c6c5c"
+        },
+        "acceptance": {
+          "status": "passed",
+          "evidence_dir": "/home/runner/work/_temp/runtime-receipts/qualification.gr3yEf23",
+          "lifecycle": "passed",
+          "profile": "omarchy",
+          "upstream_revision": "ac2690cd7be4f47e4a255f5e2e78d904d436b068",
+          "upstream_suite": "passed-with-recorded-upstream-adapter",
+          "upstream_adaptation": {
+            "adapted_sha256": {
+              "test/acceptance": "sha256:08773f0771e24d72687941063d4968de10a16ef81a22b554c46b785420d2fd86",
+              "test/acceptance.d/apps-test.sh": "sha256:f2b4250a9f4e4d47cc08a449b8e89de8f9942a5bad54607a2159f8f53ab637ad",
+              "test/acceptance.d/base-test.sh": "sha256:453dbb1d92e2a3e6ab3e3dd2fcbd3e67793631a4e229bcf22e8e2b60af54e299",
+              "test/acceptance.d/bootc-acceptance-helper.sh": "sha256:ca1d053fd2413eab74c5dd7341dfecef8bb3553a3da70ec2a1cd3befb14e2ebc",
+              "test/acceptance.d/cups-test.sh": "sha256:98cc07d62d8720c2c5b0990f192fac654b96a0bc4d22d003901e62f3b452a184",
+              "test/acceptance.d/input-method-notifications.py": "sha256:d715f84284c594396eceb1f7c4a02ebbb2e730fbbaede11375d33297d67a3c9a",
+              "test/acceptance.d/input-method-state.py": "sha256:19510ad3263efdaea02c9b7a6a2a6ea266e3ad8fd2368187714d9d22ff39a0c6",
+              "test/acceptance.d/input-methods-test.sh": "sha256:4bd143706dc5db76c310ad8e03979adc235c67b9fd8e72c3d57c2bc3377b3734",
+              "test/acceptance.d/menu-test.sh": "sha256:30241543972f554387e0a9a765b327ff5f2c47b04e852639c652f921675a6bed",
+              "test/acceptance.d/overlay-monitor-test.sh": "sha256:13868f6fafa0364c01665bb99bd1aa6087df32a994950f4b46c07ebd7921a196",
+              "test/acceptance.d/panels-test.sh": "sha256:1bc77bebb339a01a5c9fbacdba2e27bba1a3722b2855c051440baeafe17acc94",
+              "test/acceptance.d/security-test.sh": "sha256:f1a899620c84ce45e39fc5860fbddbd26dec34e9c35c29e3518fe83f478c9400",
+              "test/acceptance.d/session-test.sh": "sha256:d1d605853e473b82137b8969d44fef481f9e0942a721e6a2dcb90be1ae45c238",
+              "test/acceptance.d/shell-surfaces-test.sh": "sha256:ced64df4df46c135cb458213a25a2fa4ccb6b75bd2779e5b18cf7a254c436216",
+              "test/acceptance.d/system-test.sh": "sha256:9d758f8f6b949bdf0797532153aaf013276b595487890bdd4ddffcf4dbbe7761"
+            },
+            "changes": [
+              {
+                "after_sha256": "sha256:453dbb1d92e2a3e6ab3e3dd2fcbd3e67793631a4e229bcf22e8e2b60af54e299",
+                "before_sha256": "sha256:66177a7ba966eb6a552fb76f3e600442ff07988757d7db5a12c193b945679aaa",
+                "original": "screen_contains() {\n  local text=\"$1\"\n  local snapshot=\"/tmp/omarchy-acceptance-ocr-$$.png\"\n\n  # Capture at 2x scale: tesseract routinely drops small caption text at\n  # native resolution (the weather panel's detail labels, for one).\n  if ! timeout 10 grim -s 2 \"$snapshot\" 2>/dev/null; then\n    rm -f \"$snapshot\"\n    return 1\n  fi\n  tesseract \"$snapshot\" stdout --psm 11 2>/dev/null | grep -Fi -- \"$text\" >/dev/null\n  local status=$?\n  rm -f \"$snapshot\"\n  return $status\n}\n",
+                "path": "test/acceptance.d/base-test.sh",
+                "replacement": "screen_contains() {\n  local text=\"$1\"\n  local snapshot=\"/tmp/omarchy-acceptance-ocr-$$.png\"\n\n  # Capture at 2x scale: tesseract routinely drops small caption text at\n  # native resolution (the weather panel's detail labels, for one).\n  if ! timeout 10 grim -s 2 \"$snapshot\" 2>/dev/null; then\n    rm -f \"$snapshot\"\n    return 1\n  fi\n  tesseract \"$snapshot\" stdout --psm 11 >\"$snapshot.txt\" 2>/dev/null\n  local ocr_status=$?\n  grep -Fi -- \"$text\" \"$snapshot.txt\" >/dev/null\n  local status=$?\n  ((ocr_status == 0)) || status=$ocr_status\n  if [[ $text == \"Acceptance notification\" ]]; then\n    # Retain the actual OCR inputs before the short-lived toast expires.\n    cp \"$snapshot\" \"$ARTIFACTS/notification-ocr-latest.png\" || true\n    cp \"$snapshot.txt\" \"$ARTIFACTS/notification-ocr-latest.txt\" || true\n    if [[ ! -f \"$ARTIFACTS/notification-ocr-first.png\" ]]; then\n      cp \"$snapshot\" \"$ARTIFACTS/notification-ocr-first.png\" || true\n      cp \"$snapshot.txt\" \"$ARTIFACTS/notification-ocr-first.txt\" || true\n      timeout 2 omarchy-shell notifications probe >\"$ARTIFACTS/notification-first-probe.json\" 2>\"$ARTIFACTS/notification-first-probe.stderr\" || true\n      timeout 1 hyprctl -j monitors >\"$ARTIFACTS/notification-first-monitors.json\" 2>&1 || true\n      timeout 1 hyprctl -j layers >\"$ARTIFACTS/notification-first-layers.json\" 2>&1 || true\n    fi\n    # P2-01: when full-desktop OCR misses small toast text, crop directly from\n    # the measured omarchy-notifications layer bounds while preserving OCR errors.\n    if ((status != 0 && ocr_status == 0)); then\n      local helper_script monitors_json layers_json geom crop crop_ocr_status\n      helper_script=\"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\"\n      monitors_json=\"$ARTIFACTS/notification-latest-monitors.json\"\n      layers_json=\"$ARTIFACTS/notification-latest-layers.json\"\n      if timeout 1 hyprctl -j monitors >\"$monitors_json\" 2>/dev/null &&\n         timeout 1 hyprctl -j layers >\"$layers_json\" 2>/dev/null &&\n         geom=\"$(OMARCHY_ACCEPTANCE_DIR=\"$ARTIFACTS\" bash \"$helper_script\" notification-bounds \"$monitors_json\" \"$layers_json\" 2>/dev/null)\" &&\n         [[ -n \"$geom\" ]]; then\n        crop=\"/tmp/omarchy-acceptance-ocr-crop-$$.png\"\n        if timeout 10 grim -g \"$geom\" -s 2 \"$crop\" 2>/dev/null; then\n          crop_ocr_status=0\n          tesseract \"$crop\" stdout --psm 6 >\"$crop.txt\" 2>/dev/null || crop_ocr_status=$?\n          if ((crop_ocr_status == 0)) && ! grep -Fi -- \"$text\" \"$crop.txt\" >/dev/null; then\n            tesseract \"$crop\" stdout --psm 11 >>\"$crop.txt\" 2>/dev/null || crop_ocr_status=$?\n          fi\n          cp \"$crop\" \"$ARTIFACTS/notification-ocr-crop-latest.png\" || true\n          cp \"$crop.txt\" \"$ARTIFACTS/notification-ocr-crop-latest.txt\" || true\n          if [[ ! -f \"$ARTIFACTS/notification-ocr-crop-first.png\" ]]; then\n            cp \"$crop\" \"$ARTIFACTS/notification-ocr-crop-first.png\" || true\n            cp \"$crop.txt\" \"$ARTIFACTS/notification-ocr-crop-first.txt\" || true\n          fi\n          if ((crop_ocr_status != 0)); then\n            status=$crop_ocr_status\n          elif grep -Fi -- \"$text\" \"$crop.txt\" >/dev/null; then\n            status=0\n          fi\n        fi\n        rm -f \"$crop\" \"$crop.txt\"\n      fi\n    fi\n  fi\n  rm -f \"$snapshot\" \"$snapshot.txt\"\n  return $status\n}\n"
+              },
+              {
+                "after_sha256": "sha256:13868f6fafa0364c01665bb99bd1aa6087df32a994950f4b46c07ebd7921a196",
+                "before_sha256": "sha256:bfc109915e7de1ce3428cb724a301105c4f1b3a5f465a38312ba55f9a014e26f",
+                "original": "wtype \"keybindings\"\nwait_until \"menu search renders on tall monitor\" 15 monitor_contains \"$virtual_monitor\" \"Keybindings\"\nscreenshot \"success-overlay-monitor-04-open-search\"\nremove_source_monitor\nwait_until \"open menu moves to remaining monitor\" 15 menu_on_monitor \"$remaining_monitor\"\nwait_until \"open menu search renders on shorter monitor\" 15 monitor_contains \"$remaining_monitor\" \"Keybindings\"\n",
+                "path": "test/acceptance.d/overlay-monitor-test.sh",
+                "replacement": "wtype \"keybindings\"\nwait_until \"menu search renders on tall monitor\" 15 bash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" menu-search \"$virtual_monitor\" \"keybindings\" \"Keybindings\"\nscreenshot \"success-overlay-monitor-04-open-search\"\nremove_source_monitor\nwait_until \"open menu moves to remaining monitor\" 15 menu_on_monitor \"$remaining_monitor\"\nwait_until \"open menu search renders on shorter monitor\" 15 bash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" menu-search \"$remaining_monitor\" \"keybindings\" \"Keybindings\"\n"
+              },
+              {
+                "after_sha256": "sha256:30241543972f554387e0a9a765b327ff5f2c47b04e852639c652f921675a6bed",
+                "before_sha256": "sha256:90113adc1702ed96d7af22b1a290388c3a9f79566bab7f86f394fa96157cc225",
+                "original": "bar_is_vertical() {\n  local width height\n\n  read -r width height < <(hyprctl -j layers | jq -r '\n    [.. | objects | select(.namespace? == \"omarchy-bar\")][0]\n    | [.w, .h] | @tsv\n  ')\n\n  [[ $width =~ ^[0-9]+$ && $height =~ ^[0-9]+$ ]] && ((width < height))\n}\n\nbar_is_horizontal() {\n  local width height\n\n  read -r width height < <(hyprctl -j layers | jq -r '\n    [.. | objects | select(.namespace? == \"omarchy-bar\")][0]\n    | [.w, .h] | @tsv\n  ')\n\n  [[ $width =~ ^[0-9]+$ && $height =~ ^[0-9]+$ ]] && ((width > height))\n}\n\nbar_position_is() {\n  local expected=\"$1\"\n\n  [[ $(jq -r '.bar.position // \"top\"' \"$CONFIG_FILE\") == $expected ]]\n}\n\nsource_file=$DEFAULTS_FILE\n((config_existed)) && source_file=$CONFIG_FILE\noriginal_position=$(jq -r '.bar.position // \"top\"' \"$source_file\")\n\nomarchy-shell shell summon omarchy.menu '{\"menu\":\"root\"}' >/dev/null\nwait_until \"root menu opens\" 15 layer_on_overlay \"omarchy-menu\"\nwait_until \"root menu content is visible\" 15 screen_contains \"Apps\"\nscreenshot \"success-menu-01-root\"\n\nwtype -k Down -k Down -k Down\nsleep 1\nscreenshot \"success-menu-02-style-selected\"\nwtype -k Return\n\nwait_until \"style submenu is visible\" 15 screen_contains \"Theme\"\nscreenshot \"success-menu-03-style-submenu\"\n\nwtype -k Down -k Down -k Down -k Down -k Return\nsleep 1\nscreenshot \"success-menu-04-menu-bar-submenu\"\n\nwtype -k Return\nsleep 1\nscreenshot \"success-menu-05-position-submenu\"\n\nwtype -k Down -k Down -k Return\n",
+                "path": "test/acceptance.d/menu-test.sh",
+                "replacement": "bar_is_vertical() {\n  bash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" bar-vertical\n}\n\nbar_is_horizontal() {\n  bash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" bar-horizontal\n}\n\nbar_position_is() {\n  local expected=\"$1\"\n\n  [[ $(jq -r '.bar.position // \"top\"' \"$CONFIG_FILE\") == $expected ]]\n}\n\nsource_file=$DEFAULTS_FILE\n((config_existed)) && source_file=$CONFIG_FILE\noriginal_position=$(jq -r '.bar.position // \"top\"' \"$source_file\")\n\nomarchy-shell shell summon omarchy.menu '{\"menu\":\"root\"}' >/dev/null\nwait_until \"root menu opens\" 15 layer_on_overlay \"omarchy-menu\"\nwait_until \"root menu content is visible\" 15 screen_contains \"Apps\"\nscreenshot \"success-menu-01-root\"\n\nwtype -k Down -k Down\nsleep 1\nscreenshot \"success-menu-02-style-selected\"\nwtype -k Return\n\nwait_until \"style submenu is visible\" 15 screen_contains \"Theme\"\nscreenshot \"success-menu-03-style-submenu\"\n\nwtype -k Down -k Down -k Down -k Return\nsleep 1\nscreenshot \"success-menu-04-menu-bar-submenu\"\n\nwtype -k Down -k Return\nsleep 1\nscreenshot \"success-menu-05-position-submenu\"\n\nwtype -k Down -k Down -k Return\n"
+              },
+              {
+                "after_sha256": "sha256:d1d605853e473b82137b8969d44fef481f9e0942a721e6a2dcb90be1ae45c238",
+                "before_sha256": "sha256:f04af8cf2cd6e77ec8192b9eb16c8ef08967096cef1723a8e906a2cabbec4b5e",
+                "original": "# Root filesystem is btrfs as installed\n[[ $(findmnt -no FSTYPE /) == \"btrfs\" ]] || fail \"root filesystem is btrfs\"\npass \"root filesystem is btrfs\"\n",
+                "path": "test/acceptance.d/session-test.sh",
+                "replacement": "# bootc architecture: immutable composefs root on the installed Btrfs backing.\nbash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" root ||\n  fail \"immutable composefs root has Btrfs backing and booted identity\"\n"
+              },
+              {
+                "after_sha256": "sha256:9d758f8f6b949bdf0797532153aaf013276b595487890bdd4ddffcf4dbbe7761",
+                "before_sha256": "sha256:ba02d03388c9084de57f7e7d55f666041fba16cc6c8847ab93328ed9c77965b1",
+                "original": "verify_kernel_headers() {\n  local kernel=linux-omarchy\n  local release\n  release=$(uname -r)\n  omarchy-pkg-present linux-t2 && kernel=linux-t2\n\n  [[ $(cat \"/usr/lib/modules/$release/pkgbase\") == \"$kernel\" ]] ||\n    fail \"the installed system boots the supported kernel\" \"$release is not $kernel\"\n  omarchy-pkg-present \"$kernel-headers\" || fail \"kernel headers are installed\" \"$kernel-headers is missing\"\n  [[ $(cat \"/usr/lib/modules/$release/build/include/config/kernel.release\") == \"$release\" ]] ||\n    fail \"headers match the running kernel\" \"$release has missing or mismatched headers\"\n  pass \"the running $kernel kernel has matching headers ($release)\"\n}\n",
+                "path": "test/acceptance.d/system-test.sh",
+                "replacement": "verify_kernel_headers() {\n  # bootc architecture: the image declares the supported kernel, not the installer.\n  bash \"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)/bootc-acceptance-helper.sh\" kernel ||\n    fail \"the running image-declared kernel has package-owned matching headers\"\n}\n"
+              },
+              {
+                "after_sha256": "sha256:ced64df4df46c135cb458213a25a2fa4ccb6b75bd2779e5b18cf7a254c436216",
+                "before_sha256": "sha256:2d7fb57ae0b5682473ecb7c1420cfde08c1d5f622993d093671ebd00715f1b97",
+                "original": "# The menu's Apps submenu does the full launcher loop: open, search by\n# typing, launch the top hit.\nif window_present \"(?i)omawrite\" >/dev/null 2>&1; then\n  fail \"app launch test starts with no Omawrite window\" \"an Omawrite window is already open\"\nfi\n\nomarchy-menu summon apps >/dev/null\nwait_until \"apps menu opens\" 15 layer_on_overlay \"omarchy-menu\"\nsleep 1\nscreenshot \"success-apps-menu-open\"\n\nwtype \"omawrite\"\nsleep 1\nscreenshot \"success-apps-menu-search\"\nwtype -k Return\n\nwait_until \"apps menu launches the top search hit\" 60 window_present \"(?i)omawrite\"\nwait_until \"apps menu closes after launching\" 15 layer_absent \"omarchy-menu\"\n\nclose_windows \"(?i)omawrite\"\nwait_until \"Omawrite window closes\" 30 window_absent \"(?i)omawrite\"\n",
+                "path": "test/acceptance.d/shell-surfaces-test.sh",
+                "replacement": "# The pinned Apps action redirects to omarchy.dock's application grid.\n# Prove its specific overlay, search, top-hit launch and closure.\nif window_present \"(?i)omawrite\" >/dev/null 2>&1; then\n  fail \"app launch test starts with no Omawrite window\" \"an Omawrite window is already open\"\nfi\n\nomarchy-menu summon apps >/dev/null\nwait_until \"apps menu opens\" 15 layer_on_overlay \"omarchy-dock-apps\"\nsleep 1\nscreenshot \"success-apps-menu-open\"\n\nwtype \"omawrite\"\nsleep 1\nscreenshot \"success-apps-menu-search\"\nwtype -k Return\n\nwait_until \"apps menu launches the top search hit\" 60 window_present \"(?i)omawrite\"\nwait_until \"apps menu closes after launching\" 15 layer_absent \"omarchy-dock-apps\"\n\nclose_windows \"(?i)omawrite\"\nwait_until \"Omawrite window closes\" 30 window_absent \"(?i)omawrite\"\n"
+              }
+            ],
+            "helper": {
+              "path": "test/acceptance.d/bootc-acceptance-helper.sh",
+              "sha256": "sha256:ca1d053fd2413eab74c5dd7341dfecef8bb3553a3da70ec2a1cd3befb14e2ebc"
+            },
+            "original_sha256": {
+              "test/acceptance": "sha256:08773f0771e24d72687941063d4968de10a16ef81a22b554c46b785420d2fd86",
+              "test/acceptance.d/apps-test.sh": "sha256:f2b4250a9f4e4d47cc08a449b8e89de8f9942a5bad54607a2159f8f53ab637ad",
+              "test/acceptance.d/base-test.sh": "sha256:66177a7ba966eb6a552fb76f3e600442ff07988757d7db5a12c193b945679aaa",
+              "test/acceptance.d/cups-test.sh": "sha256:98cc07d62d8720c2c5b0990f192fac654b96a0bc4d22d003901e62f3b452a184",
+              "test/acceptance.d/input-method-notifications.py": "sha256:d715f84284c594396eceb1f7c4a02ebbb2e730fbbaede11375d33297d67a3c9a",
+              "test/acceptance.d/input-method-state.py": "sha256:19510ad3263efdaea02c9b7a6a2a6ea266e3ad8fd2368187714d9d22ff39a0c6",
+              "test/acceptance.d/input-methods-test.sh": "sha256:4bd143706dc5db76c310ad8e03979adc235c67b9fd8e72c3d57c2bc3377b3734",
+              "test/acceptance.d/menu-test.sh": "sha256:90113adc1702ed96d7af22b1a290388c3a9f79566bab7f86f394fa96157cc225",
+              "test/acceptance.d/overlay-monitor-test.sh": "sha256:bfc109915e7de1ce3428cb724a301105c4f1b3a5f465a38312ba55f9a014e26f",
+              "test/acceptance.d/panels-test.sh": "sha256:1bc77bebb339a01a5c9fbacdba2e27bba1a3722b2855c051440baeafe17acc94",
+              "test/acceptance.d/security-test.sh": "sha256:f1a899620c84ce45e39fc5860fbddbd26dec34e9c35c29e3518fe83f478c9400",
+              "test/acceptance.d/session-test.sh": "sha256:f04af8cf2cd6e77ec8192b9eb16c8ef08967096cef1723a8e906a2cabbec4b5e",
+              "test/acceptance.d/shell-surfaces-test.sh": "sha256:2d7fb57ae0b5682473ecb7c1420cfde08c1d5f622993d093671ebd00715f1b97",
+              "test/acceptance.d/system-test.sh": "sha256:ba02d03388c9084de57f7e7d55f666041fba16cc6c8847ab93328ed9c77965b1"
+            },
+            "patch": "upstream-acceptance-adaptation.patch",
+            "patch_sha256": "sha256:ac4cae7acbf4ac0f476c6b9b97bf01092570e90c6813286c2bca95ab69c9f386",
+            "required_tests": [
+              "test/acceptance.d/apps-test.sh",
+              "test/acceptance.d/cups-test.sh",
+              "test/acceptance.d/input-methods-test.sh",
+              "test/acceptance.d/menu-test.sh",
+              "test/acceptance.d/overlay-monitor-test.sh",
+              "test/acceptance.d/panels-test.sh",
+              "test/acceptance.d/security-test.sh",
+              "test/acceptance.d/session-test.sh",
+              "test/acceptance.d/shell-surfaces-test.sh",
+              "test/acceptance.d/system-test.sh"
+            ],
+            "schema": "omarchy-bootc.upstream-acceptance-adaptation/v1",
+            "scope": "root-filesystem-declared-kernel-menu-navigation-apps-grid-bar-reservations-and-ocr-evidence",
+            "skipped_tests": [],
+            "status": "adapted-not-executed",
+            "upstream_revision": "ac2690cd7be4f47e4a255f5e2e78d904d436b068"
+          },
+          "overlay_image_id": "56d59224add09fa7e14322f056c9a393d8aaa3d366b1eec4ff1473e21cc44cb3",
+          "overlay_scope": "disposable-test-fixture-only"
+        },
+        "publishable": false
+      },
+      "lifecycle-b-booted-status.json": {
+        "apiVersion": "org.containers.bootc/v1",
+        "kind": "BootcHost",
+        "metadata": {
+          "name": "host"
+        },
+        "spec": {
+          "bootOrder": "default",
+          "image": {
+            "image": "10.0.2.2:37657/omarchy:acceptance",
+            "transport": "registry"
+          }
+        },
+        "status": {
+          "booted": {
+            "cachedUpdate": null,
+            "composefs": {
+              "bootDigest": "9d7be0a112db62f3253fd8eb097e0c12ae8ab9d4d8e33429513f95cdd383fa57",
+              "bootType": "Bls",
+              "bootloader": "systemd",
+              "missingVerityAllowed": false,
+              "verity": "0bd4eedd551efb4dff35f9c11b50dc50db22072182e4f6522f826a2822c54836787e21e235dd595b7f2fd9cf56427a2e181c90edbe06ef34123b7fc9c60743d7"
+            },
+            "downloadOnly": false,
+            "image": {
+              "architecture": "amd64",
+              "image": {
+                "image": "10.0.2.2:37657/omarchy:acceptance",
+                "transport": "registry"
+              },
+              "imageDigest": "sha256:f0329a5dedbcafacabfa53e402ff2b1f6cbe805016332c1eeec0c8a56d49ab8a",
+              "timestamp": "2026-11-20T14:44:06.248826834Z",
+              "version": null
+            },
+            "incompatible": false,
+            "ostree": null,
+            "pinned": false,
+            "softRebootCapable": false,
+            "store": null
+          },
+          "readOnly": false,
+          "rollback": {
+            "cachedUpdate": null,
+            "composefs": {
+              "bootDigest": "9d7be0a112db62f3253fd8eb097e0c12ae8ab9d4d8e33429513f95cdd383fa57",
+              "bootType": "Bls",
+              "bootloader": "systemd",
+              "missingVerityAllowed": false,
+              "verity": "7cdf01cd37c8549b4a04d55fa93b9110ce89c6a769f187066c7b49770973634d879c6d2888f970470afe02c86bfb65fb89719e2caf73fdfa9feba4d7af68d252"
+            },
+            "downloadOnly": false,
+            "image": {
+              "architecture": "amd64",
+              "image": {
+                "image": "10.0.2.2:37657/omarchy:acceptance",
+                "transport": "registry"
+              },
+              "imageDigest": "sha256:34a520465f1c365860cb6eb23b10d8f8d6383daa31aba4618df5e88cc08be920",
+              "timestamp": "2026-11-20T14:30:47.894705521Z",
+              "version": null
+            },
+            "incompatible": false,
+            "ostree": null,
+            "pinned": false,
+            "softRebootCapable": true,
+            "store": null
+          },
+          "rollbackQueued": false,
+          "staged": null,
+          "type": null,
+          "usrOverlay": null
+        }
+      },
+      "lifecycle-a-rollback-status.json": {
+        "apiVersion": "org.containers.bootc/v1",
+        "kind": "BootcHost",
+        "metadata": {
+          "name": "host"
+        },
+        "spec": {
+          "bootOrder": "default",
+          "image": {
+            "image": "10.0.2.2:37657/omarchy:acceptance",
+            "transport": "registry"
+          }
+        },
+        "status": {
+          "booted": {
+            "cachedUpdate": null,
+            "composefs": {
+              "bootDigest": "9d7be0a112db62f3253fd8eb097e0c12ae8ab9d4d8e33429513f95cdd383fa57",
+              "bootType": "Bls",
+              "bootloader": "systemd",
+              "missingVerityAllowed": false,
+              "verity": "7cdf01cd37c8549b4a04d55fa93b9110ce89c6a769f187066c7b49770973634d879c6d2888f970470afe02c86bfb65fb89719e2caf73fdfa9feba4d7af68d252"
+            },
+            "downloadOnly": false,
+            "image": {
+              "architecture": "amd64",
+              "image": {
+                "image": "10.0.2.2:37657/omarchy:acceptance",
+                "transport": "registry"
+              },
+              "imageDigest": "sha256:34a520465f1c365860cb6eb23b10d8f8d6383daa31aba4618df5e88cc08be920",
+              "timestamp": "2026-11-20T14:30:47.894705521Z",
+              "version": null
+            },
+            "incompatible": false,
+            "ostree": null,
+            "pinned": false,
+            "softRebootCapable": false,
+            "store": null
+          },
+          "readOnly": false,
+          "rollback": {
+            "cachedUpdate": null,
+            "composefs": {
+              "bootDigest": "9d7be0a112db62f3253fd8eb097e0c12ae8ab9d4d8e33429513f95cdd383fa57",
+              "bootType": "Bls",
+              "bootloader": "systemd",
+              "missingVerityAllowed": false,
+              "verity": "0bd4eedd551efb4dff35f9c11b50dc50db22072182e4f6522f826a2822c54836787e21e235dd595b7f2fd9cf56427a2e181c90edbe06ef34123b7fc9c60743d7"
+            },
+            "downloadOnly": false,
+            "image": {
+              "architecture": "amd64",
+              "image": {
+                "image": "10.0.2.2:37657/omarchy:acceptance",
+                "transport": "registry"
+              },
+              "imageDigest": "sha256:f0329a5dedbcafacabfa53e402ff2b1f6cbe805016332c1eeec0c8a56d49ab8a",
+              "timestamp": "2026-11-20T14:44:06.248826834Z",
+              "version": null
+            },
+            "incompatible": false,
+            "ostree": null,
+            "pinned": false,
+            "softRebootCapable": true,
+            "store": null
+          },
+          "rollbackQueued": false,
+          "staged": null,
+          "type": null,
+          "usrOverlay": null
+        }
+      }
+    }
+  },
+  "not_captured": [
+    "Installer ISO boot/GRUB, Anaconda landing, disk selection, account creation, progress and completion: no installer guest has run yet. Direct-kernel kickstart acceptance will bypass GRUB and interactive disk/account screens.",
+    "First disk-only boot, SDDM and desktop from the ISO: pending actual blank-disk installation.",
+    "Native plugin before/after UI comparison and a readable dedicated source/image-digest terminal: retained native-plugin JSON terminal is available, but these dedicated screens were not captured.",
+    "Separate reboot-persistence PNG: receipts check persistence; no separate screenshot was retained."
+  ]
+}
