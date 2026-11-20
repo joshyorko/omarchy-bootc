@@ -26,6 +26,7 @@ fi
 free=$(df -Pk /var/lib/containers | awk 'NR==2 {print $4}')
 ((free >= 30 * 1024 * 1024))
 export CANDIDATE_MIN_FREE_GIB=30 CANDIDATE_MAX_LOG_BYTES=52428800
+export BOOTCREW_IMAGE_REF=localhost/omarchy-bootc:bootcrew-system
 export FOUNDATION_IMAGE_REF=localhost/omarchy-bootc:foundation
 export ASSEMBLY_IMAGE_REF=localhost/omarchy-bootc:assembly
 export INTEGRATION_IMAGE_REF=localhost/omarchy-bootc:integration
@@ -62,7 +63,8 @@ case "$phase" in
         receipts=(/out/candidate/*candidate*.receipt.json)
         archives=(/out/candidate/*candidate*.oci.tar)
         [[ ${#receipts[@]} == 1 && ${#archives[@]} == 1 ]]
-        cp --reflink=auto "${receipts[0]}" "${archives[0]}" /out/final/
+        # Move instead of copying so the multi-GiB final archive is never duplicated.
+        mv -f "${receipts[0]}" "${archives[0]}" /out/final/
         export CI_ARTIFACT_DIR=/out/identity CANDIDATE_SOURCE_HEAD=$EXPECTED_SOURCE_HEAD
         timeout --kill-after=60s 20m bash scripts/ci/candidate-runtime.sh /out/final import > /out/identity.log 2>&1
         ;;

@@ -60,15 +60,19 @@ RUN --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \
         -Sy base pacman-mirrorlist && \
     install -D -m 0644 \
         /tmp/stable-pacman.conf \
-        /stable-root/etc/pacman.conf
+        /stable-root/etc/pacman.conf && \
+    rm -rf /stable-root/etc/pacman.d/gnupg
 
 # The final Arch root begins empty and is populated only by Omarchy stable.
 FROM scratch AS stable-base
 COPY --from=stable-bootstrap /stable-root /
-RUN systemd-sysusers && \
+COPY build/pacman-public-keyring.sh /usr/lib/omarchy-bootc/pacman-public-keyring.sh
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
+    systemd-sysusers && \
     update-ca-trust && \
-    pacman-key --init && \
-    pacman-key --populate archlinux
+    bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh init && \
+    bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh export
+RUN bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh restore
 
 FROM scratch AS bootcrew-ctx
 COPY vendor/bootcrew /
@@ -82,7 +86,8 @@ ARG SELINUX_LIBSELINUX_SHA256
 ARG COREUTILS_VERSION
 ARG COREUTILS_SHA256
 ARG COREUTILS_SOURCE_URL
-RUN pacman -Syu --noconfirm curl flex clang gcc gperf python make git diffutils inetutils rust go-md2man ostree glibc pkgconf pcre2 && \
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh init && \
+    pacman -Syu --noconfirm curl flex clang gcc gperf python make git diffutils inetutils rust go-md2man ostree glibc pkgconf pcre2 && \
     workdir="$(mktemp -d)" && \
     curl --fail --location --retry 3 --retry-delay 2 \
         "https://github.com/SELinuxProject/selinux/releases/download/${SELINUX_USERSPACE_VERSION}/libsepol-${SELINUX_USERSPACE_VERSION}.tar.gz" \
@@ -142,7 +147,10 @@ COPY --from=bootc-builder /output /
 RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | xargs -n1 sh -c 'mkdir -p "/usr/lib/sysimage/$(dirname $(echo $1 | sed "s@/var/@@"))" && mv -v "$1" "/usr/lib/sysimage/$(echo "$1" | sed "s@/var/@@")"' '' && \
     sed -i -e "/= *\/var/ s/^#//" -e "s@= */var@= /usr/lib/sysimage@g" -e "/DownloadUser/d" /etc/pacman.conf
 
-RUN pacman -Syu --noconfirm
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh init && \
+    pacman -Syu --noconfirm && \
+    bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh export
+RUN bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh restore
 
 RUN pacman -Sy --noconfirm \
         base bubblewrap dracut linux linux-headers linux-firmware ostree btrfs-progs \
@@ -207,8 +215,14 @@ RUN --mount=type=bind,from=bootcrew-ctx,source=/,target=/ctx \
     install -d -m 0755 /usr/share/omarchy-bootc && \
     pacman -Q > /usr/share/omarchy-bootc/bootcrew-stable-package-manifest.txt && \
     pacman -Qi > /usr/share/omarchy-bootc/bootcrew-stable-package-provenance.txt && \
-    find /var/lib/pacman/sync -maxdepth 1 -type f -name '*.db*' -print0 | sort -z | \
+    db_path="$(pacman-conf DBPath)" && \
+    test -n "${db_path}" && \
+    test -d "${db_path}/sync" && \
+    find "${db_path}/sync" -maxdepth 1 -type f -name '*.db*' -print0 | sort -z | \
         xargs -0 -r sha256sum > /usr/share/omarchy-bootc/bootcrew-repository-database-sha256sums.txt && \
+    test -s /usr/share/omarchy-bootc/bootcrew-repository-database-sha256sums.txt && \
+    grep -Eq '/core\.db$' /usr/share/omarchy-bootc/bootcrew-repository-database-sha256sums.txt && \
+    grep -Eq '/extra\.db$' /usr/share/omarchy-bootc/bootcrew-repository-database-sha256sums.txt && \
     test -z "$(pacman -Qu)"
 
 LABEL org.opencontainers.image.bootcrew.revision="${BOOTCREW_MONO_REVISION}"
@@ -266,10 +280,12 @@ COPY transition/omarchy-transition.sh /transition/omarchy-transition.sh
 
 FROM bootcrew-system AS quattro-assembly
 
-RUN --mount=type=bind,from=install-ctx,source=/,target=/ctx \
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg --mount=type=bind,from=install-ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/usr/lib/sysimage/cache/pacman/pkg,sharing=locked \
     --mount=type=tmpfs,dst=/tmp \
-    bash /ctx/build/20-quattro.sh
+    bash /ctx/build/20-quattro.sh && \
+    bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh export
+RUN bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh restore
 
 RUN --mount=type=bind,from=provenance-ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/tmp \

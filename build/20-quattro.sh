@@ -47,6 +47,10 @@ done <"${HOOK_INVENTORY}"
 sed -i "/^\[options\]$/a HookDir = ${BOOTC_HOOK_DIR}" /etc/pacman.conf
 
 phase=refresh-signing-keys
+[[ "$(findmnt -T /etc/pacman.d/gnupg -no FSTYPE)" == tmpfs ]] || {
+    echo 'Refusing to initialize pacman signing keys outside build-only tmpfs' >&2
+    exit 1
+}
 pacman-key --init
 pacman-key --populate archlinux
 omarchy_key_file=/ctx/sources/omarchy-package-signing-key.asc
@@ -172,13 +176,24 @@ pacman -Q >"${provenance_dir}/quattro-package-manifest.txt"
 pacman -Qi >"${provenance_dir}/quattro-package-provenance.txt"
 pacman -Qm >"${provenance_dir}/quattro-foreign-package-manifest.txt" || [[ "$?" -eq 1 ]]
 cp /etc/pacman.conf "${provenance_dir}/pacman.conf"
-if [[ -d /var/lib/pacman/sync ]]; then
-    find /var/lib/pacman/sync -maxdepth 1 -type f -name '*.db*' -print0 \
-        | sort -z \
-        | xargs -0 -r sha256sum >"${provenance_dir}/repository-database-sha256sums.txt"
-else
-    : >"${provenance_dir}/repository-database-sha256sums.txt"
-fi
+db_path="$(pacman-conf DBPath)"
+[[ -n "${db_path}" && -d "${db_path}/sync" ]] || {
+    echo "Configured pacman DBPath sync directory is missing: ${db_path:-unset}" >&2
+    exit 1
+}
+find "${db_path}/sync" -maxdepth 1 -type f -name '*.db*' -print0 \
+    | sort -z \
+    | xargs -0 -r sha256sum >"${provenance_dir}/repository-database-sha256sums.txt"
+[[ -s "${provenance_dir}/repository-database-sha256sums.txt" ]] || {
+    echo 'Repository database SHA-256 provenance is empty' >&2
+    exit 1
+}
+for expected_db in core.db extra.db omarchy.db; do
+    grep -Eq "/${expected_db//./\\.}$" "${provenance_dir}/repository-database-sha256sums.txt" || {
+        echo "Missing expected repository database hash: ${expected_db}" >&2
+        exit 1
+    }
+done
 
 phase=clean-pacman-cache
 pacman -Scc --noconfirm

@@ -175,5 +175,16 @@ PATH="$fixture/bin:$host_path" expect_failure 'UFW configuration is not enabled'
 printf 'ENABLED=yes\n' >"$service_root/etc/ufw/ufw.conf"
 rm "$service_root/usr/lib/systemd/user/pipewire-pulse.service"
 PATH="$fixture/bin:$host_path" expect_failure 'missing pipewire-pulse user service' require_desktop_services "$service_root"
+printf '[Service]\nExecStart=/usr/bin/pipewire-pulse\n' >"$service_root/usr/lib/systemd/user/pipewire-pulse.service"
+
+mkdir -p "$service_root/usr/lib/systemd/network"
+printf '[Match]\nType=ether\n[Network]\nDHCP=yes\n' >"$service_root/usr/lib/systemd/network/20-wired.network"
+PATH="$fixture/bin:$host_path" expect_failure 'wildcard networkd Ethernet rule conflicts with NetworkManager' require_desktop_services "$service_root"
+rm "$service_root/usr/lib/systemd/network/20-wired.network"
+
+ln -s /usr/lib/systemd/system/systemd-networkd.service "$service_root/etc/systemd/system/multi-user.target.wants/systemd-networkd.service"
+PATH="$fixture/bin:$host_path" expect_failure 'systemd-networkd.service conflicts with NetworkManager' require_desktop_services "$service_root"
+rm "$service_root/etc/systemd/system/multi-user.target.wants/systemd-networkd.service"
+PATH="$fixture/bin:$host_path" require_desktop_services "$service_root"
 
 printf 'acceptance dependency boundaries, kernel headers and desktop services passed\n'

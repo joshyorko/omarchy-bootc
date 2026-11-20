@@ -14,6 +14,16 @@ BOOTC_CONFLICTING_UNITS=(
 export OMARCHY_PATH=/usr/share/omarchy
 export OMARCHY_INSTALL=/usr/share/omarchy/install
 bash "${OMARCHY_INSTALL}/config/enable-services.sh"
+# NetworkManager owns desktop networking once enabled; remove Bootcrew's
+# wildcard Ethernet networkd profile and mask networkd to avoid dual ownership.
+[[ "$(systemctl is-enabled NetworkManager.service)" == enabled ]]
+for unit in systemd-networkd.service systemd-networkd.socket systemd-networkd-wait-online.service; do
+    systemctl disable "${unit}" >/dev/null 2>&1 || true
+    systemctl mask "${unit}"
+    [[ "$(systemctl is-enabled "${unit}")" == masked ]]
+done
+rm -f /usr/lib/systemd/network/20-wired.network
+[[ ! -e /usr/lib/systemd/network/20-wired.network ]]
 # Upstream writes UFW configuration and enables its unit without activating the
 # build host's firewall. Product policy keeps incoming SSH closed.
 grep -Fxq ENABLED=no /etc/ufw/ufw.conf

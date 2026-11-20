@@ -101,6 +101,8 @@ require_commands() {
 preflight() {
     local rootless=""
     local free_kib=""
+    local graphroot=""
+    local graph_free_kib=""
     local minimum_kib=$((MIN_FREE_GIB * 1024 * 1024))
     local kvm_state="unavailable"
 
@@ -113,37 +115,64 @@ preflight() {
         kvm_state="present-but-inaccessible"
     fi
 
-    free_kib="$(df -Pk "${ROOT_DIR}" | awk 'NR == 2 {print $4}')"
-    [[ "${free_kib}" =~ ^[0-9]+$ ]] || die "unable to determine free disk space"
-    ((free_kib >= minimum_kib)) || die "only $((free_kib / 1024 / 1024)) GiB free; need at least ${MIN_FREE_GIB} GiB"
+    free_kib="$(df -Pk "${ARTIFACT_DIR}" | awk 'NR == 2 {print $4}')"
+    [[ "${free_kib}" =~ ^[0-9]+$ ]] || die "unable to determine export store free disk space"
+    ((free_kib >= minimum_kib)) || die "export store has only $((free_kib / 1024 / 1024)) GiB free; need at least ${MIN_FREE_GIB} GiB"
 
     rootless="$(sudo -n podman info --format '{{.Host.Security.Rootless}}')"
     [[ "${rootless}" == "false" ]] || die "sudo podman is not rootful (rootless=${rootless})"
+    graphroot="$(sudo -n podman info --format '{{.Store.GraphRoot}}')"
+    [[ -n "${graphroot}" ]] || die "unable to determine Podman graphroot"
+    graph_free_kib="$(sudo -n df -Pk "${graphroot}" | awk 'NR == 2 {print $4}')"
+    [[ "${graph_free_kib}" =~ ^[0-9]+$ ]] || die "unable to determine graphroot free disk space"
+    ((graph_free_kib >= minimum_kib)) || die "Podman graphroot ${graphroot} has only $((graph_free_kib / 1024 / 1024)) GiB free; need at least ${MIN_FREE_GIB} GiB"
     run_logged podman-info sudo -n podman info --format 'version={{.Version.Version}} rootless={{.Host.Security.Rootless}} graphroot={{.Store.GraphRoot}}'
 
     {
         printf 'source_head=%s\n' "$(git rev-parse HEAD)"
         printf 'root_dir=%s\n' "${ROOT_DIR}"
+        printf 'artifact_dir=%s\n' "${ARTIFACT_DIR}"
+        printf 'graphroot=%s\n' "${graphroot}"
         printf 'free_disk_gib=%s\n' "$((free_kib / 1024 / 1024))"
+        printf 'graphroot_free_disk_gib=%s\n' "$((graph_free_kib / 1024 / 1024))"
         printf 'minimum_free_disk_gib=%s\n' "${MIN_FREE_GIB}"
         printf 'kvm=%s\n' "${kvm_state}"
         printf 'rootful_podman=%s\n' "${rootless}"
     } | tee "${LOG_DIR}/preflight.txt"
 }
 
+verify_stage_ancestry() {
+    local parent_ref="$1" child_ref="$2" relation="$3"
+    local parent_layers="" child_layers=""
+    parent_layers="$(sudo -n podman image inspect "${parent_ref}" --format '{{json .RootFS.Layers}}')"
+    child_layers="$(sudo -n podman image inspect "${child_ref}" --format '{{json .RootFS.Layers}}')"
+    python3 - "${parent_layers}" "${child_layers}" "${relation}" <<'PY'
+import json, sys
+parent = json.loads(sys.argv[1])
+child = json.loads(sys.argv[2])
+relation = sys.argv[3]
+if not isinstance(parent, list) or not isinstance(child, list) or not parent:
+    raise SystemExit(f"ERROR: empty or invalid layer DiffIDs for {relation}")
+if len(child) < len(parent) or child[:len(parent)] != parent:
+    raise SystemExit(
+        f"ERROR: stage ancestry broken for {relation}: "
+        f"parent has {len(parent)} layers, child has {len(child)} layers with mismatched prefix"
+    )
+print(f"Verified stage ancestry ({relation}): {len(parent)} -> {len(child)} layers")
+PY
+}
 
-export_stage() {
+record_stage_receipt() {
     local target="$1"
     local image_ref="$2"
     local schema="$3"
-    local archive_stem="$4"
-    local foundation_image_id="$5"
+    local receipt_stem="$4"
+    local parent_target="$5"
+    local parent_image_id="$6"
+    local sibling_note="$7"
     local image_id=""
-    local manifest_digest=""
-    local archive_path=""
+    local layer_count=""
     local receipt_path=""
-    local archive_sha256=""
-    local archive_size=""
     local created_at=""
     local head_sha=""
     local quattro_revision=""
@@ -171,14 +200,8 @@ export_stage() {
     image_id="$(sudo -n podman image inspect "${image_ref}" --format '{{.Id}}')"
     [[ "${image_id}" =~ ^(sha256:)?[[:xdigit:]]{64}$ ]] \
         || die "${target} image ID is not immutable: ${image_id}"
-    archive_path="${ARTIFACT_DIR}/${archive_stem}.oci.tar"
-    receipt_path="${ARTIFACT_DIR}/${archive_stem}.receipt.json"
-    run_logged "${target}-export" export_archive "${archive_path}" "${image_ref}"
-    archive_sha256="$(sha256sum "${archive_path}" | awk '{print $1}')"
-    manifest_digest="$(tar -xOf "${archive_path}" index.json | jq -er '.manifests[0].digest')"
-    [[ "${manifest_digest}" =~ ^sha256:[[:xdigit:]]{64}$ ]] \
-        || die "${target} archive has no immutable manifest digest"
-    archive_size="$(stat -c '%s' "${archive_path}")"
+    layer_count="$(sudo -n podman image inspect "${image_ref}" --format '{{len .RootFS.Layers}}')"
+    receipt_path="${ARTIFACT_DIR}/${receipt_stem}.receipt.json"
     created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
     jq -n \
@@ -187,12 +210,11 @@ export_stage() {
         --arg target "${target}" \
         --arg image "${image_ref}" \
         --arg image_id "${image_id}" \
-        --arg archive "$(basename "${archive_path}")" \
-        --arg archive_sha256 "sha256:${archive_sha256}" \
-        --arg archive_size "${archive_size}" \
-        --arg manifest_digest "${manifest_digest}" \
+        --arg layer_count "${layer_count}" \
         --arg created_at "${created_at}" \
-        --arg foundation_image_id "${foundation_image_id}" \
+        --arg parent_target "${parent_target}" \
+        --arg parent_image_id "${parent_image_id}" \
+        --arg verification_sibling "${sibling_note}" \
         --arg arch_bootstrap_ref "${arch_bootstrap_ref}" \
         --arg omarchy_source "${omarchy_source}" \
         --arg omarchy_iso_source "${omarchy_iso_source}" \
@@ -204,10 +226,11 @@ export_stage() {
         --arg iso_revision "${iso_revision}" \
         --arg tracking_ref "${tracking_ref}" \
         '{schema:$schema, source_sha:$source_sha, target:$target, image:$image,
-          image_id:$image_id, archive:$archive, archive_sha256:$archive_sha256,
-          archive_size_bytes:($archive_size|tonumber),
-          oci_manifest_digest:$manifest_digest, created_at:$created_at,
-          foundation_image_id:$foundation_image_id,
+          image_id:$image_id, layer_count:($layer_count|tonumber),
+          intermediate_archive_exported:false,
+          ancestry:{verified:true, parent_target:$parent_target,
+            parent_image_id:$parent_image_id, verification_sibling:$verification_sibling},
+          created_at:$created_at,
           upstream_pins:{arch_bootstrap_ref:$arch_bootstrap_ref,
             omarchy_source:$omarchy_source, omarchy_iso_source:$omarchy_iso_source,
             omarchy_version:$omarchy_version,
@@ -217,13 +240,14 @@ export_stage() {
             omarchy_iso_quattro_revision:$iso_revision,
             tracking_ref:$tracking_ref}}' \
         >"${receipt_path}"
-    printf '%s archive: %s\n%s receipt: %s\n' \
-        "${target}" "${archive_path}" "${target}" "${receipt_path}"
+    printf '%s receipt: %s\n' "${target}" "${receipt_path}"
 }
 
 build_foundation() {
     local head_sha=""
+    local bootcrew_ref="${BOOTCREW_IMAGE_REF:-localhost/omarchy-bootc:bootcrew-system}"
     local image_ref="${FOUNDATION_IMAGE_REF:-localhost/omarchy-bootc:foundation}"
+    local bootcrew_image_id=""
     local head_short=""
     local bootcrew_revision=""
     local bootc_revision=""
@@ -237,44 +261,67 @@ build_foundation() {
     bootc_revision="$(read_pin vendor/bootcrew/BOOTC_REVISION)"
     bootc_version="$(tr -d '\r\n' <vendor/bootcrew/BOOTC_VERSION)"
     arch_bootstrap_ref="$(read_arg ARCH_BOOTSTRAP_REF)"
-    run_logged foundation-build sudo -n podman build \
-        --pull=missing --format=oci --target foundation \
-        --tag "${image_ref}" \
+    run_logged bootcrew-system-build sudo -n podman build \
+        --pull=missing --format=oci --target bootcrew-system \
+        --tag "${bootcrew_ref}" \
         --label "org.opencontainers.image.revision=${head_sha}" \
-        --label "com.omarchy.foundation.head=${head_sha}" \
+        --label "com.omarchy.bootcrew-system.head=${head_sha}" \
         --label "com.omarchy.foundation.bootcrew=${bootcrew_revision}" \
         --label "com.omarchy.foundation.bootc=${bootc_revision}" \
         --label "com.omarchy.foundation.bootc-version=${bootc_version}" \
         --label "com.omarchy.foundation.arch-bootstrap=${arch_bootstrap_ref}" \
         "${ROOT_DIR}"
+    bootcrew_image_id="$(sudo -n podman image inspect "${bootcrew_ref}" --format '{{.Id}}')"
+    # foundation is a verification sibling of quattro-assembly branching off bootcrew-system.
+    run_logged foundation-verification-sibling-build sudo -n podman build \
+        --pull=missing --format=oci --target foundation \
+        --tag "${image_ref}" \
+        --label "org.opencontainers.image.revision=${head_sha}" \
+        --label "com.omarchy.foundation.role=verification-sibling" \
+        --label "com.omarchy.foundation.parent=${bootcrew_image_id}" \
+        --label "com.omarchy.foundation.head=${head_sha}" \
+        "${ROOT_DIR}"
+    run_logged foundation-ancestry verify_stage_ancestry \
+        "${bootcrew_ref}" "${image_ref}" "bootcrew-system -> foundation (verification sibling)"
     run_logged foundation-contract sudo -n podman run --rm --pull=never --privileged \
         "${image_ref}" /usr/lib/omarchy-bootc/foundation-contract.sh
-    export_stage foundation "${image_ref}" omarchy-bootc.foundation/v1 \
-        "omarchy-bootc-foundation-head-${head_sha}-bootc-${bootc_revision:0:12}" ""
-    printf 'foundation head=%s\n' "${head_short}" | tee "${LOG_DIR}/foundation.txt"
+    record_stage_receipt foundation "${image_ref}" omarchy-bootc.foundation-verification-sibling/v1 \
+        "omarchy-bootc-foundation-head-${head_sha}-bootc-${bootc_revision:0:12}" \
+        "bootcrew-system" "${bootcrew_image_id}" "verification-sibling-of-quattro-assembly"
+    printf 'foundation_verification_sibling head=%s bootcrew_system=%s\n' \
+        "${head_short}" "${bootcrew_image_id}" | tee "${LOG_DIR}/foundation.txt"
 }
 
 build_assembly() {
     local head_sha=""
     local image_ref="${ASSEMBLY_IMAGE_REF:-localhost/omarchy-bootc:assembly}"
+    local bootcrew_ref="${BOOTCREW_IMAGE_REF:-localhost/omarchy-bootc:bootcrew-system}"
     local foundation_image_ref="${FOUNDATION_IMAGE_REF:-localhost/omarchy-bootc:foundation}"
+    local bootcrew_image_id=""
     local foundation_image_id=""
     local head_short=""
 
     cd "${ROOT_DIR}"
     head_sha="$(git rev-parse --verify HEAD)"
     head_short="${head_sha:0:12}"
+    bootcrew_image_id="$(sudo -n podman image inspect "${bootcrew_ref}" \
+        --format '{{.Id}}' 2>/dev/null || true)"
+    [[ -n "${bootcrew_image_id}" ]] \
+        || die "immutable bootcrew-system parent image is not present before assembly"
     foundation_image_id="$(sudo -n podman image inspect "${foundation_image_ref}" \
         --format '{{.Id}}' 2>/dev/null || true)"
     [[ -n "${foundation_image_id}" ]] \
-        || die "immutable foundation image is not present before assembly"
+        || die "foundation verification sibling image is not present before assembly"
     run_logged assembly-build sudo -n podman build \
         --pull=missing --format=oci --target quattro-assembly \
         --tag "${image_ref}" \
         --label "org.opencontainers.image.revision=${head_sha}" \
         --label "com.omarchy.assembly.head=${head_sha}" \
-        --label "com.omarchy.assembly.foundation=${foundation_image_id}" \
+        --label "com.omarchy.assembly.parent=${bootcrew_image_id}" \
+        --label "com.omarchy.assembly.foundation-sibling=${foundation_image_id}" \
         "${ROOT_DIR}"
+    run_logged assembly-ancestry verify_stage_ancestry \
+        "${bootcrew_ref}" "${image_ref}" "bootcrew-system -> quattro-assembly"
     run_logged assembly-contract sudo -n podman run --rm --pull=never --privileged \
         "${image_ref}" bash -ceu 'set -euo pipefail
             test -s /usr/share/omarchy-bootc/quattro-package-manifest.txt
@@ -282,11 +329,13 @@ build_assembly() {
             test -s /usr/share/omarchy-bootc/package-provenance.txt
             test -s /usr/share/omarchy-bootc/optional-package-resolvability.txt
             test -s /usr/share/omarchy-bootc/pacman.conf
+            test -s /usr/share/omarchy-bootc/repository-database-sha256sums.txt
             printf "Omarchy assembly package/provenance contract passed\\n"'
-    export_stage assembly "${image_ref}" omarchy-bootc.assembly/v1 \
-        "omarchy-bootc-assembly-head-${head_sha}" "${foundation_image_id}"
-    printf 'assembly head=%s foundation=%s\n' \
-        "${head_short}" "${foundation_image_id}" | tee "${LOG_DIR}/assembly.txt"
+    record_stage_receipt quattro-assembly "${image_ref}" omarchy-bootc.assembly/v1 \
+        "omarchy-bootc-assembly-head-${head_sha}" \
+        "bootcrew-system" "${bootcrew_image_id}" "${foundation_image_id}"
+    printf 'assembly head=%s parent=%s foundation_sibling=%s\n' \
+        "${head_short}" "${bootcrew_image_id}" "${foundation_image_id}" | tee "${LOG_DIR}/assembly.txt"
 }
 
 
@@ -309,10 +358,13 @@ build_integration() {
         --label "com.omarchy.integration.head=${head_sha}" \
         --label "com.omarchy.integration.assembly=${assembly_image_id}" \
         "${ROOT_DIR}"
+    run_logged integration-ancestry verify_stage_ancestry \
+        "${assembly_image_ref}" "${image_ref}" "quattro-assembly -> quattro-integration"
     run_logged integration-lint sudo -n podman run --rm --pull=never --privileged \
         "${image_ref}" bootc container lint --fatal-warnings
-    export_stage integration "${image_ref}" omarchy-bootc.integration/v1 \
-        "omarchy-bootc-integration-head-${head_sha}" "${assembly_image_id}"
+    record_stage_receipt quattro-integration "${image_ref}" omarchy-bootc.integration/v1 \
+        "omarchy-bootc-integration-head-${head_sha}" \
+        "quattro-assembly" "${assembly_image_id}" ""
 }
 build_candidate() {
     local head_sha=""
@@ -372,11 +424,21 @@ build_candidate() {
         "${ROOT_DIR}"
 
     run_logged fatal-lint sudo -n podman run --rm --pull=never --privileged "${IMAGE_REF}" bootc container lint --fatal-warnings
+    local integration_image_ref="${INTEGRATION_IMAGE_REF:-localhost/omarchy-bootc:integration}"
+    if sudo -n podman image inspect "${integration_image_ref}" >/dev/null 2>&1; then
+        run_logged final-ancestry verify_stage_ancestry \
+            "${integration_image_ref}" "${IMAGE_REF}" "quattro-integration -> final"
+    fi
     run_logged candidate-dependencies sudo -n podman run --rm --pull=never \
         "${IMAGE_REF}" /usr/lib/omarchy-bootc/acceptance-dependencies.sh final
 
     image_id="$(sudo -n podman image inspect "${IMAGE_REF}" --format '{{.Id}}')"
     [[ "${image_id}" =~ ^(sha256:)?[[:xdigit:]]{64}$ ]] || die "image ID is not immutable: ${image_id}"
+
+    local export_free_kib=""
+    export_free_kib="$(df -Pk "${ARTIFACT_DIR}" | awk 'NR == 2 {print $4}')"
+    ((export_free_kib >= MIN_FREE_GIB * 1024 * 1024)) \
+        || die "export store has only $((export_free_kib / 1024 / 1024)) GiB free before final archive export"
 
     candidate_stem="omarchy-bootc-candidate-head-${head_sha}-quattro-${quattro_revision:0:12}-iso-${iso_revision:0:12}-bootcrew-${bootcrew_revision:0:12}-bootc-${bootc_revision:0:12}"
     archive_path="${ARTIFACT_DIR}/${candidate_stem}.oci.tar"
@@ -432,6 +494,10 @@ build_candidate() {
             apple_bcm_firmware:{source:$firmware_source, sha256:$firmware_sha256}},
           acceptance_overlay:{applied:false, target:"final"}}' \
         >"${receipt_path}"
+
+    # Verify archive identity and scan EVERY exported layer for pacman secret material.
+    run_logged archive-layer-scan python3 "${ROOT_DIR}/scripts/ci/verify-candidate-archive.py" \
+        "${receipt_path}" "${archive_path}" "${head_sha}"
 
     printf 'Candidate archive: %s\nReceipt: %s\n' "${archive_path}" "${receipt_path}"
 }

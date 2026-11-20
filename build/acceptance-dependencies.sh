@@ -99,6 +99,11 @@ require_desktop_services() {
         [[ "$state" == enabled ]] || fail "required service is not enabled: $unit ($state)"
     done
     grep -Fxq ENABLED=yes "$root/etc/ufw/ufw.conf" || fail 'UFW configuration is not enabled'
+    [[ ! -e "$root/usr/lib/systemd/network/20-wired.network" ]] \
+        || fail 'wildcard networkd Ethernet rule conflicts with NetworkManager'
+    if [[ "$(systemctl --root="${root:-/}" is-enabled systemd-networkd.service 2>/dev/null || true)" == enabled ]]; then
+        fail 'systemd-networkd.service conflicts with NetworkManager'
+    fi
     [[ -s "$root/usr/lib/systemd/user/pipewire-pulse.service" ]] || fail 'missing pipewire-pulse user service'
     [[ "$(pacman -Qqo "$root/usr/lib/systemd/user/pipewire-pulse.service")" == pipewire-pulse ]] \
         || fail 'pipewire-pulse user service is not package-owned'

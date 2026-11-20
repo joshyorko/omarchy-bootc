@@ -43,6 +43,7 @@ jobs:
     permissions:
       contents: read
     env:
+      BOOTCREW_IMAGE_REF: localhost/omarchy-bootc:bootcrew-system
       FOUNDATION_IMAGE_REF: localhost/omarchy-bootc:foundation
       ASSEMBLY_IMAGE_REF: localhost/omarchy-bootc:assembly
       INTEGRATION_IMAGE_REF: localhost/omarchy-bootc:integration
@@ -114,53 +115,50 @@ jobs:
       - name: Check the published optional package graph before compiling bootc
         run: timeout --signal=TERM --kill-after=30s 5m ./scripts/ci/candidate-build.sh packages
 
-      - name: Build and export immutable bootc foundation
+      - name: Build and verify bootcrew-system and foundation sibling
         env:
           CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
         run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh foundation
 
-      - name: Upload immutable foundation handoff
+      - name: Upload foundation verification sibling receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: omarchy-bootc-foundation-${{ github.event.pull_request.head.sha || github.sha }}
+          name: omarchy-bootc-foundation-receipt-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
-            ${{ runner.temp }}/omarchy-bootc-candidate/*foundation*
+            ${{ runner.temp }}/omarchy-bootc-candidate/*foundation*.receipt.json
           if-no-files-found: warn
-          compression-level: 0
-          retention-days: 30
+          retention-days: 7
 
-      - name: Build and export Omarchy package assembly
+      - name: Build and verify Omarchy package assembly
         env:
           CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
         run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh assembly
 
-      - name: Upload immutable assembly handoff
+      - name: Upload assembly receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: omarchy-bootc-assembly-${{ github.event.pull_request.head.sha || github.sha }}
+          name: omarchy-bootc-assembly-receipt-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
-            ${{ runner.temp }}/omarchy-bootc-candidate/*assembly*
+            ${{ runner.temp }}/omarchy-bootc-candidate/*assembly*.receipt.json
           if-no-files-found: warn
-          compression-level: 0
-          retention-days: 30
+          retention-days: 7
 
-      - name: Build and export integration layer
+      - name: Build and verify integration layer
         env:
           CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
         run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh integration
 
-      - name: Upload immutable integration handoff
+      - name: Upload integration receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: omarchy-bootc-integration-${{ github.event.pull_request.head.sha || github.sha }}
+          name: omarchy-bootc-integration-receipt-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
-            ${{ runner.temp }}/omarchy-bootc-candidate/*integration*
+            ${{ runner.temp }}/omarchy-bootc-candidate/*integration*.receipt.json
           if-no-files-found: warn
-          compression-level: 0
-          retention-days: 30
+          retention-days: 7
 
       - name: Build, lint, and export candidate
         env:
@@ -303,7 +301,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: omarchy-bootc-runtime-${{ github.event.pull_request.head.sha || github.sha }}
-          path: ${{ runner.temp }}/runtime-receipts
+          path: |
+            ${{ runner.temp }}/runtime-receipts
+            !${{ runner.temp }}/runtime-receipts/**/*.raw
+            !${{ runner.temp }}/runtime-receipts/**/*.qcow2
+            !${{ runner.temp }}/runtime-receipts/**/*.img
+            !${{ runner.temp }}/runtime-receipts/**/*.oci.tar
           retention-days: 7
           if-no-files-found: warn
 
