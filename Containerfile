@@ -272,6 +272,7 @@ COPY build/verify-publishable-image.sh /build/verify-publishable-image.sh
 
 FROM scratch AS adoption-ctx
 COPY custom/first-boot/omarchy-adopt-existing-user.sh /custom/first-boot/omarchy-adopt-existing-user.sh
+COPY custom/first-boot/omarchy-adoption-filesystem.py /custom/first-boot/omarchy-adoption-filesystem.py
 COPY custom/first-boot/omarchy-adoption-rollback.sh /custom/first-boot/omarchy-adoption-rollback.sh
 COPY systemd/system/omarchy-adopt-existing-user.service /systemd/system/omarchy-adopt-existing-user.service
 
@@ -302,6 +303,9 @@ RUN --mount=type=bind,from=adoption-ctx,source=/,target=/ctx \
     install -D -m 0755 \
         /ctx/custom/first-boot/omarchy-adopt-existing-user.sh \
         /usr/lib/omarchy/omarchy-adopt-existing-user.sh && \
+    install -D -m 0755 \
+        /ctx/custom/first-boot/omarchy-adoption-filesystem.py \
+        /usr/lib/omarchy/omarchy-adoption-filesystem.py && \
     install -D -m 0644 \
         /ctx/systemd/system/omarchy-adopt-existing-user.service \
         /usr/lib/systemd/system/omarchy-adopt-existing-user.service && \

@@ -93,6 +93,16 @@ publication is authorized. Installer Gate 6 remains separate and unaccepted.
 
 ## Remaining gates (require real runtime execution)
 
+- **P1-07 race reproduced at bc6eff9:** a deterministic parent-replacement fixture
+  copies an outside-home dummy file after `ensure_safe_home_path` returns.
+  The guard before root `cp`/`mv` is not race-safe confinement. The local
+  reproducer and receipt are in `output/acceptance-evidence/adoption-race/`.
+  The repair routes backup, restore, seeding and rollback through the installed
+  `omarchy-adoption-filesystem.py` helper: component-by-component no-follow
+  descriptor traversal, descriptor-relative recursion, and no-clobber publication.
+  Local race and preservation tests pass; real-root hosted verification and a new
+  image/guest qualification remain required before this gate can be closed.
+
 1. Hosted exact-head OCI candidate build + per-layer secret scan + hosted QEMU
    graphical/desktop/notification/menu + native plugin/OMP + A->B update & rollback
    qualification on the integrated head.

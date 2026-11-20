@@ -12,6 +12,11 @@ INSTALLER_ORIGIN="${OMARCHY_INSTALLER_ORIGIN_FILE:-/var/lib/omarchy-bootc/instal
 USER_SELECTION="${OMARCHY_ADOPTION_USER_FILE:-/etc/omarchy/adoption-user}"
 PROVISION_BIN="${OMARCHY_ADOPTION_PROVISION_BIN:-/usr/bin/omarchy-provision-user}"
 STATE_FILE="${STATE_ROOT}/state.env"
+FS_HELPER="$(dirname -- "${BASH_SOURCE[0]}")/omarchy-adoption-filesystem.py"
+
+adoption_fs() {
+    python3 "$FS_HELPER" "$@"
+}
 
 managed_paths=(
     ".config/hypr"
@@ -73,7 +78,7 @@ ensure_safe_home_path() {
         echo "Refusing unsafe adoption home directory: ${home}" >&2
         return 1
     }
-    [[ -n "$relative" && "$relative" != /* ]] || {
+    [[ -n "$relative" && "$relative" != /* && "$relative" != *$'\n'* && "$relative" != *$'\t'* && "$relative" != *$'\r'* ]] || {
         echo "Refusing absolute or empty relative adoption path: ${relative}" >&2
         return 1
     }
@@ -103,23 +108,11 @@ ensure_safe_home_path() {
 }
 
 ensure_user_parent_dir() {
-    local home="$1" relative="$2" owner_uid="$3" owner_gid="$4"
-    local parent="" segment="" cursor=""
-    local -a segments=()
-
+    local home="$1" relative="$2" owner_uid="$3" owner_gid="$4" parent
     ensure_safe_home_path "$home" "$relative"
     parent="$(dirname "$relative")"
-    [[ "$parent" != "." ]] || return 0
-    cursor="$home"
-    IFS='/' read -r -a segments <<<"$parent"
-    for segment in "${segments[@]}"; do
-        cursor="${cursor}/${segment}"
-        if [[ ! -e "$cursor" ]]; then
-            mkdir -- "$cursor"
-            chmod 0755 -- "$cursor"
-            chown "${owner_uid}:${owner_gid}" -- "$cursor"
-        fi
-    done
+    [[ $parent != . ]] || return 0
+    adoption_fs mkdir "$home" "$parent" "$owner_uid" "$owner_gid"
 }
 
 is_protected_path() {
@@ -223,8 +216,7 @@ freeze_baseline() {
         destination="${BACKUP_ROOT}/${relative}"
         if path_exists "$source"; then
             if ! path_exists "$destination"; then
-                install -d -m 0700 "$(dirname "$destination")"
-                cp -a -- "$source" "$destination"
+                adoption_fs copy "$HOME" "$relative" "$BACKUP_ROOT" "$relative"
             fi
             printf 'present\t%s\t%s\n' "$protected_flag" "$relative" >>"$tmp"
         else
@@ -240,32 +232,8 @@ freeze_baseline() {
 # required missing files (e.g. hyprland.lua or official skill links) generated
 # by upstream provisioning.
 seed_missing_from_generated() {
-    local generated_dir="$1" target_dir="$2" owner_uid="$3" owner_gid="$4"
-    local entry="" rel="" dst="" dst_parent=""
-
-    [[ ! -L "$generated_dir" && -d "$generated_dir" ]] || return 0
-    [[ ! -L "$target_dir" && -d "$target_dir" ]] || return 0
-    while IFS= read -r -d '' entry; do
-        rel="${entry#"$generated_dir"/}"
-        [[ -n "$rel" ]] || continue
-        dst="${target_dir}/${rel}"
-        ensure_safe_home_path "$target_dir" "$rel"
-        if path_exists "$dst"; then
-            continue
-        fi
-        dst_parent="$(dirname "$dst")"
-        if [[ ! -d "$dst_parent" ]]; then
-            ensure_user_parent_dir "$target_dir" "$rel" "$owner_uid" "$owner_gid"
-        fi
-        if [[ -d "$entry" && ! -L "$entry" ]]; then
-            mkdir -- "$dst"
-            chmod 0755 -- "$dst"
-            chown "${owner_uid}:${owner_gid}" -- "$dst"
-        else
-            cp -a -- "$entry" "$dst"
-            chown -h "${owner_uid}:${owner_gid}" -- "$dst"
-        fi
-    done < <(find "$generated_dir" -mindepth 1 -print0 | sort -z)
+    local relative="$1" owner_uid="$2" owner_gid="$3"
+    adoption_fs seed "$ROLLBACK_ROOT" "after/$relative" "$HOME" "$relative" "$owner_uid" "$owner_gid"
 }
 
 restore_protected_paths() {
@@ -285,15 +253,14 @@ restore_protected_paths() {
         generated="${ROLLBACK_ROOT}/after/${relative}"
         if path_exists "$destination"; then
             if path_exists "$generated"; then
-                rm -rf -- "$generated"
+                adoption_fs remove "$ROLLBACK_ROOT" "after/$relative"
             fi
-            install -d -m 0700 "$(dirname "$generated")"
-            mv -- "$destination" "$generated"
+            adoption_fs move "$HOME" "$relative" "$ROLLBACK_ROOT" "after/$relative"
         fi
         ensure_user_parent_dir "$HOME" "$relative" "$uid" "$gid"
-        cp -a -- "$source" "$destination"
+        adoption_fs copy "$BACKUP_ROOT" "$relative" "$HOME" "$relative"
         if [[ ! -L "$source" && -d "$source" && ! -L "$generated" && -d "$generated" ]]; then
-            seed_missing_from_generated "$generated" "$destination" "$uid" "$gid"
+            seed_missing_from_generated "$relative" "$uid" "$gid"
         fi
     done <"$BASELINE_FILE"
 }
@@ -321,20 +288,18 @@ run_rollback() {
         exit 1
     }
 
-    local relative source destination preserved
+    local relative source destination
     while IFS= read -r relative; do
         [[ -n "$relative" ]] || continue
         ensure_safe_home_path "$home" "$relative"
         source="${backup_root}/${relative}"
         destination="${home}/${relative}"
         if path_exists "$destination"; then
-            preserved="${rollback_root}/rollback-current/${relative}"
-            install -d -m 0700 "$(dirname "$preserved")"
-            mv -- "$destination" "$preserved"
+            adoption_fs move "$home" "$relative" "$rollback_root" "rollback-current/$relative"
         fi
         if path_exists "$source"; then
             ensure_user_parent_dir "$home" "$relative" "$uid" "$gid"
-            cp -a -- "$source" "$destination"
+            adoption_fs copy "$backup_root" "$relative" "$home" "$relative"
         fi
     done <"$manifest"
 

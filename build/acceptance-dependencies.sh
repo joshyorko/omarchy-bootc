@@ -124,7 +124,7 @@ main() {
     # Host QEMU/podman/SSH transport dependencies belong to the VM harness.
     for command_name in \
         bash sh env sudo visudo bootc skopeo jq flock getent install dirname id cut \
-        mktemp rm cat sed readlink grep stat sha256sum \
+        mktemp rm cat sed readlink grep stat sha256sum python3 \
         groupadd useradd chpasswd runuser chown chmod cp touch \
         git pacman pacman-conf journalctl systemctl systemd-cat busctl \
         timeout logger pgrep find sort head tail awk xargs cmp mkdir mv date \
@@ -156,6 +156,7 @@ main() {
     for path in \
         /usr/bin/true /usr/bin/test \
         /usr/lib/omarchy-bootc/update-common.sh \
+        /usr/lib/omarchy/omarchy-adoption-filesystem.py \
         /usr/lib/omarchy-bootc/omarchy-bootc-update \
         /usr/lib/omarchy-bootc/omarchy-bootc-update-available \
         /usr/lib/omarchy-bootc/omarchy-wrapper \
