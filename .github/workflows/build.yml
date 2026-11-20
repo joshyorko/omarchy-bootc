@@ -179,6 +179,7 @@ jobs:
           retention-days: 30
 
       - name: Build, lint and export the exact staged candidate
+        id: export_candidate
         env:
           CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/publish-candidate
         run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh build
@@ -219,15 +220,16 @@ jobs:
           path: ${{ runner.temp }}/vm-smoke-artifacts
           if-no-files-found: warn
 
-      - name: Retain exact accepted publication artifact
+      - name: Retain exact publication candidate, including runtime failures
         id: accepted_artifact
-        if: success() && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        if: always() && steps.export_candidate.outcome == 'success' && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         uses: actions/upload-artifact@v4
         with:
           name: omarchy-publish-candidate-${{ github.sha }}
           path: ${{ runner.temp }}/publish-candidate
           compression-level: 0
           if-no-files-found: error
+          retention-days: 7
 
   publish:
     name: Promote accepted manifest and sign
