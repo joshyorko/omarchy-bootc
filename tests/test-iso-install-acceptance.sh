@@ -52,6 +52,7 @@ assert 'artifact-ids: ${{ steps.iso_producer.outputs.artifact_id }}' in workflow
 assert workflow.index('Verify exact signed image and source') < workflow.index('actions/download-artifact')
 assert 'sha256sum -c' in workflow and '90m bash scripts/ci/iso-install-acceptance.sh' in workflow
 assert 'packages: write' not in workflow and 'id-token: write' not in workflow
+assert 'screenshots/*.json' in workflow and 'iso-install/*.md' in workflow
 # Execute the actual pre-download metadata boundary, substituting only GitHub
 # transport. Reject foreign/failed producers and expired/ambiguous artifacts.
 block=workflow.split('      - name: Verify trusted ISO producer before downloading\n',1)[1].split('      - name: Prepare hosted KVM tools\n',1)[0]
@@ -77,6 +78,8 @@ assert text.index('qemu-img create') < text.index('ostreecontainer --url=')
 assert 'user --name=omarchyci' in text and 'reboot --eject' in text
 assert 'status.booted.image.imageDigest == $digest' in text and '.status.booted.composefs != null' in text
 assert 'installed-greeter' in text and 'installed-desktop' in text and 'qmp-login.py' in text
+assert "installer-observed-%03d" in text and 'installer-last-observed' not in text
+assert 'record-screenshot-evidence.py' in text and 'ISO_SHA256' in text
 assert text.index('qmp-login.py') < text.index('installed-desktop') < text.index('iso-install.receipt.json')
 print('PASS: no workstation disk operations; exact one-shot QMP login keys; artifact-only signed ISO wiring and installed guest gates (not a VM pass)')
 PY

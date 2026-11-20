@@ -7,10 +7,12 @@ set -euo pipefail
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 iso=$(realpath "${1:?Usage: iso-install-acceptance.sh ISO}")
 [[ -f $iso ]]
-: "${RUNNER_TEMP:?}" "${CI_ARTIFACT_DIR:?}" "${INSTALL_IMAGE_REF:?}" "${INSTALL_SOURCE_SHA:?}"
+: "${RUNNER_TEMP:?}" "${CI_ARTIFACT_DIR:?}" "${INSTALL_IMAGE_REF:?}" "${INSTALL_SOURCE_SHA:?}" "${CI_JOB_ID:?}"
 [[ $INSTALL_IMAGE_REF =~ ^ghcr.io/joshyorko/omarchy-bootc@sha256:[a-f0-9]{64}$ ]]
 [[ $INSTALL_SOURCE_SHA =~ ^[a-f0-9]{40}$ ]]
 expected=${INSTALL_IMAGE_REF##*@}
+ISO_SHA256=$(sha256sum "$iso" | cut -d' ' -f1)
+export ISO_SHA256
 df -Pk "$RUNNER_TEMP" | awk 'NR==2 {exit !($4 >= 25*1024*1024)}'
 mkdir -p "$CI_ARTIFACT_DIR/screenshots"
 work=$(mktemp -d "$RUNNER_TEMP/omarchy-iso-install.XXXXXXXX")
@@ -18,6 +20,7 @@ disk="$work/disk.qcow2"
 qmp="$work/qmp.sock"
 pidfile="$work/qemu.pid"
 http_pid=''
+phase=installer
 cleanup_qemu() {
     local pid
     if [[ -s $pidfile ]]; then
@@ -27,7 +30,11 @@ cleanup_qemu() {
         fi
     fi
 }
-capture() { sudo -n python3 "$script_dir/capture-vm-screen.py" "$qmp" "$CI_ARTIFACT_DIR/screenshots/$1.png"; }
+capture() {
+    local path="$CI_ARTIFACT_DIR/screenshots/$1.png"
+    sudo -n python3 "$script_dir/capture-vm-screen.py" "$qmp" "$path"
+    python3 "$script_dir/record-screenshot-evidence.py" record "$path" "${2:-$1}" "$phase"
+}
 cleanup() {
     local status=$?
     if ((status != 0)); then capture failure || true; fi
@@ -39,6 +46,9 @@ cleanup() {
     for name in live-serial.log installed-serial.log; do
         [[ ! -f "$work/$name" ]] || cp "$work/$name" "$CI_ARTIFACT_DIR/$name"
     done
+    local outcome=failed
+    ((status != 0)) || outcome=installed-guest-checks-passed
+    python3 "$script_dir/record-screenshot-evidence.py" index "$CI_ARTIFACT_DIR" "$outcome" || status=1
     exit "$status"
 }
 trap cleanup EXIT
@@ -95,19 +105,33 @@ sudo -n qemu-system-x86_64 "${common[@]}" \
     -no-reboot -serial "file:$work/live-serial.log"
 deadline=$((SECONDS+3600))
 next_capture=$((SECONDS+30))
+capture_number=0
 while ((SECONDS < deadline)); do
     if grep -Fq OMARCHY_ISO_INSTALL_COMPLETE "$work/live-serial.log"; then break; fi
     sudo -n kill -0 "$(cat "$pidfile")" 2>/dev/null || { echo 'Installer exited before completion' >&2; exit 1; }
-    if ((SECONDS >= next_capture)); then capture installer-last-observed; next_capture=$((SECONDS+60)); fi
+    if ((SECONDS >= next_capture)); then
+        capture_number=$((capture_number+1))
+        printf -v frame 'installer-observed-%03d' "$capture_number"
+        capture "$frame" 'ISO live/installer observation (page requires visual review)'
+        next_capture=$((SECONDS+60))
+    fi
     sleep 10
 done
 grep -Fq OMARCHY_ISO_INSTALL_COMPLETE "$work/live-serial.log"
-[[ -s "$CI_ARTIFACT_DIR/screenshots/installer-last-observed.png" ]]
+((capture_number > 0))
+# With -no-reboot, QEMU can exit immediately after the completion marker.
+# Missing completion pixels must be explicit, not an invented screenshot.
+if ! capture installer-completion-observed 'Guest completion marker received; actual display at that step'; then
+    echo 'NOT CAPTURED: completion frame; guest display unavailable after completion marker' >>"$CI_ARTIFACT_DIR/capture-notes.txt"
+fi
 cleanup_qemu
 sleep 3
 rm -f "$qmp" "$pidfile"
 # The installed phase has no CD, kernel/initrd injection or acceptance overlay.
+phase=installed
 sudo -n qemu-system-x86_64 "${common[@]}" -serial "file:$work/installed-serial.log"
+sleep 3
+capture installed-boot-observed 'First disk-only boot observation (not a greeter assertion)'
 ssh_args=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 -p 2239)
 guest() { sshpass -p "$password" ssh "${ssh_args[@]}" omarchyci@127.0.0.1 "$@"; }
 deadline=$((SECONDS+600))

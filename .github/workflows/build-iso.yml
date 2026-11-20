@@ -93,6 +93,14 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/installer-iso
           merge-multiple: true
+      - name: Record hosted job identity for screenshot provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" --jq '.jobs[] | select(.name == "installer-acceptance" and .status == "in_progress") | .id')
+          [[ "$id" =~ ^[0-9]+$ ]]
+          echo "CI_JOB_ID=$id" >> "$GITHUB_ENV"
       - name: Install the ISO on a blank disk and log into the installed desktop
         env:
           CI_ARTIFACT_DIR: ${{ runner.temp }}/iso-install
@@ -120,6 +128,8 @@ jobs:
             ${{ runner.temp }}/iso-install/*.json
             ${{ runner.temp }}/iso-install/*.log
             ${{ runner.temp }}/iso-install/*.txt
+            ${{ runner.temp }}/iso-install/*.md
             ${{ runner.temp }}/iso-install/screenshots/*.png
+            ${{ runner.temp }}/iso-install/screenshots/*.json
           if-no-files-found: warn
           retention-days: 30
