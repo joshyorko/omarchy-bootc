@@ -4,12 +4,19 @@
 # It never builds, merges, signs, publishes or installs anything.
 set -euo pipefail
 run=${1:?Run ID}; source_sha=${2:?Expected main source}; target_sha=${3:?Follow-up check SHA}
+target_branch=${4:-}
 [[ $run =~ ^[0-9]+$ && $source_sha =~ ^[a-f0-9]{40}$ && $target_sha =~ ^[a-f0-9]{40}$ ]]
+[[ -z $target_branch || $target_branch =~ ^[a-zA-Z0-9._/-]+$ ]]
 repository=joshyorko/omarchy-bootc
 url="https://github.com/$repository/actions/runs/$run"
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/codex-main-observer-XXXXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 post() {
+    if [[ -n $target_branch ]]; then
+        # Resolve only when reporting a state, never poll PR/branch metadata.
+        target_sha=$(gh api "repos/$repository/git/ref/heads/$target_branch" --jq '.object.sha')
+        [[ $target_sha =~ ^[a-f0-9]{40}$ ]]
+    fi
     gh api --method POST "repos/$repository/statuses/$target_sha" \
         -f "state=$1" -f 'context=Trusted testing image and ISO build' \
         -f "target_url=$url" -f "description=$2" >/dev/null

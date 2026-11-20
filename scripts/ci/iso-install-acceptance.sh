@@ -146,7 +146,7 @@ deadline=$((SECONDS+240))
 until guest 'pgrep -u "$(id -u)" -x Hyprland >/dev/null && pgrep -u "$(id -u)" -x quickshell >/dev/null'; do
     ((SECONDS < deadline)); sleep 3
 done
-guest 'sudo -n /usr/libexec/omarchy-bootc-status' >"$CI_ARTIFACT_DIR/installed-bootc-status.json"
+guest 'sudo -S -p "" -- /usr/libexec/omarchy-bootc-status' <<<"$password" >"$CI_ARTIFACT_DIR/installed-bootc-status.json"
 jq -e --arg digest "$expected" '.status.booted.image.imageDigest == $digest and .status.booted.composefs != null and .spec.image.image == "ghcr.io/joshyorko/omarchy-bootc:testing"' \
     "$CI_ARTIFACT_DIR/installed-bootc-status.json" >/dev/null
 guest 'export XDG_RUNTIME_DIR="/run/user/$(id -u)"; export HYPRLAND_INSTANCE_SIGNATURE="$(find "$XDG_RUNTIME_DIR/hypr" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | head -n1)"; /usr/local/bin/omarchy plugin list --json' \

@@ -73,6 +73,22 @@ for bad in ('', 'source', 'workflow', 'run-failed', 'job-skipped', 'expired', 'd
   if not bad:assert (base/'output').read_text()=='artifact_id=99\n'
   else:assert not (base/'output').exists()
 text=script.read_text()
+# The unmodified product requires a sudo password. Exercise the actual status
+# command with only SSH transport substituted; never add NOPASSWD to the image.
+line=next(line for line in text.splitlines() if line.startswith("guest '") and 'installed-bootc-status.json' in line)
+with tempfile.TemporaryDirectory(prefix='codex-iso-status-',dir='/tmp') as temp:
+ env=dict(os.environ,CI_ARTIFACT_DIR=temp,password='disposablefixture',EXPECTED_PASSWORD='disposablefixture')
+ command='''guest() {
+   [[ $# == 1 && $1 == 'sudo -S -p "" -- /usr/libexec/omarchy-bootc-status' ]] || return 2
+   local supplied; IFS= read -r supplied
+   [[ $supplied == "$EXPECTED_PASSWORD" ]] || return 3
+   printf '{"status":"fixture"}\\n'
+ }
+ '''+line
+ result=subprocess.run(['bash','-eu','-c',command],env=env,capture_output=True,text=True,timeout=5)
+ assert result.returncode==0,result.stderr
+ assert json.loads((Path(temp)/'installed-bootc-status.json').read_text())=={'status':'fixture'}
+assert 'NOPASSWD' not in text
 assert 'bootc install' not in '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('#'))
 assert text.index('qemu-img create') < text.index('ostreecontainer --url=')
 assert 'user --name=omarchyci' in text and 'reboot --eject' in text
