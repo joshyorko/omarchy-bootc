@@ -53,7 +53,7 @@ with tempfile.TemporaryDirectory() as temporary:
     receipt = json.loads((artifacts / "upstream-acceptance-adaptation.json").read_bytes())
     assert receipt["patch_sha256"] == adapter.sha256((artifacts / receipt["patch"]).read_bytes())
     assert receipt["status"] == "adapted-not-executed"
-    assert len(receipt["changes"]) == 4 and receipt["skipped_tests"] == []
+    assert len(receipt["changes"]) == 5 and receipt["skipped_tests"] == []
     # Exercise the adapted OCR function at its external capture/recognition
     # boundaries. Diagnostic failures must never turn an OCR miss into a pass.
     import os
@@ -212,5 +212,69 @@ with tempfile.TemporaryDirectory(prefix="bar-reservations-") as directory:
     assert not bar([28,0,0,0], "vertical", focused=False)
     assert not bar([28,0,0], "vertical")
     assert not bar(["28",0,0,0], "vertical")
-print("PASS: bounded four-span adaptation, preserved gates, drift refusal, and root parser boundaries (not a VM pass)")
+
+# P2-01 & P1-13 unit fixtures: notification layer bounds cropping and strict
+# single-first-character Keybindings menu search validation.
+with tempfile.TemporaryDirectory(prefix="notif-menu-fixtures-") as directory:
+    tmp = Path(directory)
+    helper = str(script.with_name("guest-bootc-acceptance.sh"))
+    m_path, l_path = tmp / "monitors.json", tmp / "layers.json"
+    m_path.write_text(json.dumps([{"name": "Virtual-1", "focused": True, "x": 0, "y": 0, "width": 1280, "height": 800}]))
+    l_path.write_text(json.dumps({"Virtual-1": {"levels": {"3": [{"namespace": "omarchy-notifications", "x": 900, "y": 0, "w": 380, "h": 800}]}}}))
+    geom = subprocess.check_output(
+        ["bash", "-c", 'source "$1"; bootc_notification_layer_geometry "$2" "$3"',
+         "geom-test", helper, str(m_path), str(l_path)], text=True
+    ).strip()
+    assert geom == "900,0 380x800", geom
+    # Missing or zero-sized notification layer must fail closed.
+    l_path.write_text(json.dumps({"Virtual-1": {"levels": {"3": [{"namespace": "omarchy-notifications", "x": 900, "y": 0, "w": 0, "h": 800}]}}}))
+    assert subprocess.run(
+        ["bash", "-c", 'source "$1"; bootc_notification_layer_geometry "$2" "$3"',
+         "geom-test", helper, str(m_path), str(l_path)], capture_output=True
+    ).returncode != 0
+
+    # Cropped notification OCR succeeds when full-desktop OCR misses but measured layer matches.
+    crop_bin = tmp / "bin"
+    crop_bin.mkdir()
+    (crop_bin / "grim").write_text('#!/usr/bin/env bash\nprintf "%s" "$*" >"${@: -1}"\n')
+    (crop_bin / "tesseract").write_text(
+        '#!/usr/bin/env bash\n'
+        'if grep -Fq -- "-g 900,0 380x800" "$1"; then printf "Acceptance notification\\n"; else printf "desktop noise\\n"; fi\n'
+    )
+    (crop_bin / "omarchy-shell").write_text('#!/usr/bin/env bash\nprintf "{}"\n')
+    (crop_bin / "hyprctl").write_text(
+        '#!/usr/bin/env bash\n'
+        'if [[ $2 == monitors ]]; then cat "$M_JSON"; else cat "$L_JSON"; fi\n'
+    )
+    for exe in crop_bin.iterdir():
+        exe.chmod(0o755)
+    l_path.write_text(json.dumps({"Virtual-1": {"levels": {"3": [{"namespace": "omarchy-notifications", "x": 900, "y": 0, "w": 380, "h": 800}]}}}))
+    ocr_dir = tmp / "suite"
+    ocr_dir.mkdir()
+    (ocr_dir / "bootc-acceptance-helper.sh").write_bytes(script.with_name("guest-bootc-acceptance.sh").read_bytes())
+    (ocr_dir / "base.sh").write_bytes(adapter.REPLACEMENTS["test/acceptance.d/base-test.sh"][1])
+    art_dir = tmp / "art"
+    art_dir.mkdir()
+    env = dict(os.environ, PATH=str(crop_bin) + ":" + os.environ["PATH"],
+               M_JSON=str(m_path), L_JSON=str(l_path))
+    crop_res = subprocess.run(
+        ["bash", "-c", 'set -uo pipefail; source "$1"; ARTIFACTS="$2"; screen_contains "Acceptance notification"',
+         "crop-test", str(ocr_dir / "base.sh"), str(art_dir)], env=env, capture_output=True, text=True
+    )
+    assert crop_res.returncode == 0, crop_res.stderr
+    assert "900,0 380x800" in (art_dir / "notification-ocr-crop-latest.png").read_text()
+
+    # P1-13: duplicated first key / No matches must be rejected even though 'keybindings' is a substring.
+    ocr_txt = tmp / "menu.txt"
+    ocr_txt.write_text('kkeybindings\nNo matches for "kkeybindings"\n')
+    assert subprocess.run(
+        ["bash", "-c", 'source "$1"; bootc_validate_menu_search "$2" keybindings Keybindings',
+         "menu-test", helper, str(ocr_txt)], capture_output=True
+    ).returncode != 0
+    ocr_txt.write_text('keybindings\nKeybindings\nLearn\n')
+    assert subprocess.run(
+        ["bash", "-c", 'source "$1"; bootc_validate_menu_search "$2" keybindings Keybindings',
+         "menu-test", helper, str(ocr_txt)], capture_output=True
+    ).returncode == 0
+print("PASS: bounded five-span adaptation, preserved gates, drift refusal, root/bar/notification/menu parser boundaries (not a VM pass)")
 PY

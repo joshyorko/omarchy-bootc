@@ -44,5 +44,29 @@ with tempfile.TemporaryDirectory(prefix='plugin-reload-patch-') as tmp:
         assert result.stdout == expected
         assert result.stdout != source
         assert not result.stdout.startswith('omarchy.'), 'third-party clone uses reserved namespace'
-print('PASS: targeted plugin reload patch, provenance hashes, and drift refusal')
+    menu = Path(tmp)/'Menu.qml'
+    menu_orig = (
+        '  function setFilter(nextFilter) {\n'
+        '    if (!root.dmenuActive && root.filterText.trim()) root.loadProvidersForSearch()\n'
+        '  }\n'
+        '  OverlayWindow {\n'
+        '    onShownChanged: if (!shown) { cardTop = -1; maxRowsHeight = -1 }\n'
+        '    onTargetScreenChanged: { cardTop = -1; maxRowsHeight = -1 }\n'
+        '        // Focus is on filterInput, which forwards every key here first.\n'
+        '        Keys.onPressed: function(event) {\n'
+        '          if (root.deleteConfirmOpen) {\n'
+        '          }\n'
+        '        }\n'
+        '  }\n'
+    )
+    menu.write_text(menu_orig)
+    subprocess.run([sys.executable, script, str(menu), str(receipt), 'menu'], check=True)
+    patched_menu = menu.read_text()
+    assert 'onContentRevealedChanged:' in patched_menu
+    assert 'event.isAutoRepeat' in patched_menu
+    assert 'Qt.callLater(function() { if (root.opened' in patched_menu
+    assert json.loads(receipt.read_text())['change'] == 'menu-focus-handoff-and-first-key-dedup'
+    # Re-applying to already-patched Menu.qml must fail closed as drift.
+    assert subprocess.run([sys.executable, script, str(menu), str(receipt), 'menu'], capture_output=True).returncode != 0
+print('PASS: targeted plugin/menu patches, provenance hashes, and drift refusal')
 PY

@@ -82,6 +82,66 @@ bootc_verify_bar() {
         "$artifacts/bar-$orientation-layers.json" "$orientation"
 }
 
+# Pure parser for P2-01: extract measured omarchy-notifications layer bounds
+# for cropped grim/tesseract OCR without guessing hard-coded screen regions.
+bootc_notification_layer_geometry() {
+    local monitors="$1" layers="$2"
+    jq -er -s '
+      (.[0] | map(select(.focused == true))[0] // .[0][0]) as $focused |
+      if ($focused | type) != "object" or ($focused.name | type) != "string" then
+        error("no valid monitor")
+      else . end |
+      [.[1][$focused.name] | .. | objects |
+        select(.namespace? == "omarchy-notifications" and
+               (.x | type == "number") and (.y | type == "number") and
+               (.w | type == "number" and . > 0) and
+               (.h | type == "number" and . > 0))] as $hits |
+      if ($hits | length) < 1 then
+        error("no valid omarchy-notifications layer bounds")
+      else . end |
+      $hits[0] as $l |
+      ($focused.x // 0) as $mx | ($focused.y // 0) as $my |
+      (if ($l.x < $mx or $l.y < $my) then
+         {x: ($mx + $l.x), y: ($my + $l.y), w: $l.w, h: $l.h}
+       else
+         {x: $l.x, y: $l.y, w: $l.w, h: $l.h}
+       end) |
+      "\(.x | floor),\(.y | floor) \(.w | ceil)x\(.h | ceil)"
+    ' "$monitors" "$layers"
+}
+
+# Pure parser for P1-13: assert a single first character (never duplicated
+# e.g. kkeybindings) and an actual Keybindings menu match rather than No matches.
+bootc_validate_menu_search() {
+    local ocr_file="$1" query="$2" expected_item="$3"
+    local dup_first="${query:0:1}${query}"
+    [[ -s "$ocr_file" && -n "$query" && -n "$expected_item" ]] || return 1
+    if grep -Fiq -- "$dup_first" "$ocr_file"; then
+        return 1
+    fi
+    if grep -Fiq -- 'No matches' "$ocr_file"; then
+        return 1
+    fi
+    grep -Fq -- "$expected_item" "$ocr_file" || return 1
+    grep -Eq '(Learn|Setup)' "$ocr_file" || return 1
+}
+
+bootc_verify_menu_search() {
+    local artifacts="$1" monitor="$2" query="$3" expected_item="$4"
+    local snapshot="$artifacts/menu-search-${monitor}-$$.png"
+    local ocr="$artifacts/menu-search-${monitor}.txt"
+    local ocr_status=0
+    if ! timeout 10 grim -o "$monitor" -s 2 "$snapshot" 2>/dev/null; then
+        rm -f "$snapshot"
+        return 1
+    fi
+    tesseract "$snapshot" stdout --psm 11 >"$ocr" 2>/dev/null || ocr_status=$?
+    cp "$snapshot" "$artifacts/menu-search-${monitor}-latest.png" || true
+    rm -f "$snapshot"
+    ((ocr_status == 0)) || return "$ocr_status"
+    bootc_validate_menu_search "$ocr" "$query" "$expected_item"
+}
+
 bootc_verify_kernel() {
     local artifacts="$1" kernel release modules headers kernel_version headers_version path mount_json
     # Re-prove root identity here: system-test.sh can run independently of session-test.sh.
@@ -134,7 +194,9 @@ bootc_acceptance_main() {
         kernel) bootc_verify_kernel "$artifacts" ;;
         bar-vertical) bootc_verify_bar "$artifacts" vertical ;;
         bar-horizontal) bootc_verify_bar "$artifacts" horizontal ;;
-        *) bootc_acceptance_fail 'usage: bootc-acceptance-helper.sh <root|kernel|bar-vertical|bar-horizontal>' ;;
+        notification-bounds) bootc_notification_layer_geometry "${2:?}" "${3:?}" ;;
+        menu-search) bootc_verify_menu_search "$artifacts" "${2:?}" "${3:?}" "${4:?}" ;;
+        *) bootc_acceptance_fail 'usage: bootc-acceptance-helper.sh <root|kernel|bar-vertical|bar-horizontal|notification-bounds|menu-search>' ;;
     esac
 }
 

@@ -71,10 +71,61 @@ REPLACEMENTS = {
       timeout 1 hyprctl -j monitors >"$ARTIFACTS/notification-first-monitors.json" 2>&1 || true
       timeout 1 hyprctl -j layers >"$ARTIFACTS/notification-first-layers.json" 2>&1 || true
     fi
+    # P2-01: when full-desktop OCR misses small toast text, crop directly from
+    # the measured omarchy-notifications layer bounds while preserving OCR errors.
+    if ((status != 0 && ocr_status == 0)); then
+      local helper_script monitors_json layers_json geom crop crop_ocr_status
+      helper_script="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helper.sh"
+      monitors_json="$ARTIFACTS/notification-latest-monitors.json"
+      layers_json="$ARTIFACTS/notification-latest-layers.json"
+      if timeout 1 hyprctl -j monitors >"$monitors_json" 2>/dev/null &&
+         timeout 1 hyprctl -j layers >"$layers_json" 2>/dev/null &&
+         geom="$(OMARCHY_ACCEPTANCE_DIR="$ARTIFACTS" bash "$helper_script" notification-bounds "$monitors_json" "$layers_json" 2>/dev/null)" &&
+         [[ -n "$geom" ]]; then
+        crop="/tmp/omarchy-acceptance-ocr-crop-$$.png"
+        if timeout 10 grim -g "$geom" -s 2 "$crop" 2>/dev/null; then
+          crop_ocr_status=0
+          tesseract "$crop" stdout --psm 6 >"$crop.txt" 2>/dev/null || crop_ocr_status=$?
+          if ((crop_ocr_status == 0)) && ! grep -Fi -- "$text" "$crop.txt" >/dev/null; then
+            tesseract "$crop" stdout --psm 11 >>"$crop.txt" 2>/dev/null || crop_ocr_status=$?
+          fi
+          cp "$crop" "$ARTIFACTS/notification-ocr-crop-latest.png" || true
+          cp "$crop.txt" "$ARTIFACTS/notification-ocr-crop-latest.txt" || true
+          if [[ ! -f "$ARTIFACTS/notification-ocr-crop-first.png" ]]; then
+            cp "$crop" "$ARTIFACTS/notification-ocr-crop-first.png" || true
+            cp "$crop.txt" "$ARTIFACTS/notification-ocr-crop-first.txt" || true
+          fi
+          if ((crop_ocr_status != 0)); then
+            status=$crop_ocr_status
+          elif grep -Fi -- "$text" "$crop.txt" >/dev/null; then
+            status=0
+          fi
+        fi
+        rm -f "$crop" "$crop.txt"
+      fi
+    fi
   fi
   rm -f "$snapshot" "$snapshot.txt"
   return $status
 }
+''',
+    ),
+    # P1-13: reject duplicated first character (e.g. kkeybindings / No matches)
+    # and require an actual Keybindings menu match on HEADLESS-2 and after recovery.
+    "test/acceptance.d/overlay-monitor-test.sh": (
+        b'''wtype "keybindings"
+wait_until "menu search renders on tall monitor" 15 monitor_contains "$virtual_monitor" "Keybindings"
+screenshot "success-overlay-monitor-04-open-search"
+remove_source_monitor
+wait_until "open menu moves to remaining monitor" 15 menu_on_monitor "$remaining_monitor"
+wait_until "open menu search renders on shorter monitor" 15 monitor_contains "$remaining_monitor" "Keybindings"
+''',
+        b'''wtype "keybindings"
+wait_until "menu search renders on tall monitor" 15 bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helper.sh" menu-search "$virtual_monitor" "keybindings" "Keybindings"
+screenshot "success-overlay-monitor-04-open-search"
+remove_source_monitor
+wait_until "open menu moves to remaining monitor" 15 menu_on_monitor "$remaining_monitor"
+wait_until "open menu search renders on shorter monitor" 15 bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helper.sh" menu-search "$remaining_monitor" "keybindings" "Keybindings"
 ''',
     ),
     # The pinned menu has Apps, Learn, Appearance, Trigger. Three Down keys

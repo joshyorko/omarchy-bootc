@@ -44,6 +44,10 @@ python3 /ctx/build/patch-quattro-plugin-reload.py \
 python3 /ctx/build/patch-quattro-plugin-reload.py \
     /usr/bin/omarchy-plugin-clone \
     /usr/share/omarchy-bootc/plugin-clone-patch.json clone
+[[ "$(pacman -Qqo /usr/share/omarchy/shell/plugins/menu/Menu.qml)" == omarchy ]]
+python3 /ctx/build/patch-quattro-plugin-reload.py \
+    /usr/share/omarchy/shell/plugins/menu/Menu.qml \
+    /usr/share/omarchy-bootc/menu-focus-patch.json menu
 
 for unit in "${BOOTC_CONFLICTING_UNITS[@]}"; do
     systemctl disable "${unit}" >/dev/null 2>&1 || true
