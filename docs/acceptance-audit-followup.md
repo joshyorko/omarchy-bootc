@@ -128,6 +128,12 @@ Small selected logs/PNGs and the parent manifest receipt are retained under
 `output/acceptance-evidence/menu-44726778692/`; the complete remote evidence is
 [artifact 14627268528](https://github.com/joshyorko/omarchy-bootc/actions/runs/44726778692/artifacts/14627268528).
 
+The next full run, 44748551892, stopped in cheap source validation before any
+image build: the adoption fixture invented UID 1000 while the unprivileged hosted
+runner had a different UID, so real `fchown` correctly failed. Non-root fixtures
+now use their actual UID/GID and assert actual seeded-file ownership; hosted root
+coverage retains distinct UID/GID 1000. Production confinement is unchanged.
+
 1. Hosted exact-head OCI candidate build + per-layer secret scan + hosted QEMU
    graphical/desktop/notification/menu + native plugin/OMP + A->B update & rollback
    qualification on the integrated head.
