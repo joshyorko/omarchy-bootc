@@ -11,6 +11,7 @@ source /usr/lib/omarchy-bootc/update-common.sh
 export OMARCHY_BOOTC_BIN=/usr/bin/bootc
 export OMARCHY_BOOTC_STATUS_FILE=
 unset OMARCHY_BOOTC_STATUS_HELPER
+readonly COSIGN_BIN=/usr/bin/cosign
 export OMARCHY_BOOTC_STATE_ROOT=/var/lib/omarchy-bootc/updates
 export OMARCHY_BOOTC_UPDATE_LOCK_FILE=/run/lock/omarchy-update.lock
 export OMARCHY_BOOTC_TRANSACTION_MARKER=/var/lib/omarchy-bootc/updates/pending-update
@@ -129,6 +130,15 @@ fi
     echo 'bootc update candidate does not have an exact digest' >&2
     exit 1
 }
+
+official_repository=0
+if [[ "$transport" == registry && ( "${tracking_ref,,}" == ghcr.io/joshyorko/omarchy-bootc:* || "${tracking_ref,,}" == ghcr.io/joshyorko/omarchy-bootc@sha256:* ) ]]; then
+    official_repository=1
+    [[ -x "$COSIGN_BIN" ]] || {
+        echo 'Official image verification requires image-owned Cosign; no update will be unlocked.' >&2
+        exit 1
+    }
+fi
 
 if (( EUID == 0 )) && [[ -n "${SUDO_USER:-}" ]]; then
     marker_user="$SUDO_USER"
@@ -249,16 +259,19 @@ if (( already_unlocked == 0 )); then
         echo "bootc --download-only did not contain staged digest ${downloaded} (downloadOnly=${downloaded_only:-unknown})" >&2
         exit 1
     fi
-    if [[ "$transport" == registry && "$tracking_ref" == ghcr.io/joshyorko/omarchy-bootc:* ]] && command -v cosign >/dev/null 2>&1; then
-        if ! run_as_root cosign verify \
-            --certificate-identity 'https://github.com/joshyorko/omarchy-bootc/.github/workflows/build.yml@refs/heads/main' \
-            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-            "ghcr.io/joshyorko/omarchy-bootc@${expected}" >/dev/null; then
-            cleanup_markers
-            echo "cosign signature verification failed for ${expected}; staged deployment remains locked" >&2
-            exit 1
-        fi
+fi
+# Verify even an already-unlocked stage before reporting it as accepted.
+if (( official_repository )); then
+    if ! run_as_root "$COSIGN_BIN" verify \
+        --certificate-identity 'https://github.com/joshyorko/omarchy-bootc/.github/workflows/build.yml@refs/heads/main' \
+        --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+        "ghcr.io/joshyorko/omarchy-bootc@${expected}" >/dev/null; then
+        cleanup_markers
+        echo "cosign signature verification failed for ${expected}; refusing to accept or unlock the staged deployment" >&2
+        exit 1
     fi
+fi
+if (( already_unlocked == 0 )); then
     run_as_root "$OMARCHY_BOOTC_BIN" upgrade --from-downloaded
 fi
 actual="$(status_staged_digest)" || {

@@ -1,8 +1,32 @@
 # Acceptance audit follow-up
 
 Review baseline: `091fbd2eb35170808034cdfc4ff276a628777ed9`.
-Source/regression evidence is not runtime acceptance. No merge, release or image
-publication is authorized. Installer Gate 6 remains separate and unaccepted.
+Source/regression evidence is not runtime acceptance. Owner now conditionally
+authorizes safe stacked merge and trusted testing-only publication after repair
+and qualification; stable must remain unchanged. Installer Gate 6 is unaccepted.
+
+## Merge-blocker repair batch
+
+- Finalization retains both transaction intents when the real pinned upstream
+  migration runner defers work, a migration fails, the pending query fails, or
+  the post-update hook/clear helper fails. It acknowledges completion only after
+  `--pending` reports no work. The checksum-guarded upstream fixture exercises
+  real discovery, execution, markers, deferred retry and idempotency; only the
+  pacman lock location and elapsed wait are isolated.
+- Official-repository updates require `/usr/bin/cosign`, including digest/case
+  variants and already-staged updates. Missing, nonexecutable or failing verifiers
+  cannot unlock a deployment. The signed package transaction installs Cosign,
+  and the immutable dependency gate requires it.
+- Archive verification canonicalizes Podman IDs to bare config hashes. Runtime
+  compares equivalent encodings without accepting another store image; promotion
+  preserves the exact accepted manifest. Behavioral fixtures exercise both ID
+  encodings and mismatch rejection. Trusted main now reuses the rootful staged
+  build/export and shared host acceptance boundary, without a second Buildah
+  build or archive export. Handoff rejects source/accepted-digest mismatches.
+
+Focused error-path regressions, ShellCheck, Python syntax and whitespace checks
+pass locally. These product changes require a newly qualified image; the passing
+9eb9418 guest remains historical evidence rather than acceptance of this batch.
 
 ## Implemented, awaiting independent re-check / relevant runtime proof
 

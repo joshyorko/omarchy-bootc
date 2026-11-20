@@ -220,7 +220,7 @@ def verify(receipt_path, archive_path, head):
                 _scan_layer_blob(layer_stream, layer_digest)
     return {'source_head': head, 'archive_sha256': actual_checksum,
             'manifest_digest': manifest_digest, 'config_digest': config_digest,
-            'image_id': receipt['image_id'], 'layers_scanned': len(layers)}
+            'image_id': config_digest.removeprefix('sha256:'), 'layers_scanned': len(layers)}
 
 
 if __name__ == '__main__':

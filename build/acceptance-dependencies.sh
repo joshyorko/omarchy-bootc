@@ -123,7 +123,7 @@ main() {
     # Product update + firstboot + guest-native + remote vm-smoke commands.
     # Host QEMU/podman/SSH transport dependencies belong to the VM harness.
     for command_name in \
-        bash sh env sudo visudo bootc skopeo jq flock getent install dirname id cut \
+        bash sh env sudo visudo bootc skopeo cosign jq flock getent install dirname id cut \
         mktemp rm cat sed readlink grep stat sha256sum python3 \
         groupadd useradd chpasswd runuser chown chmod cp touch \
         git pacman pacman-conf journalctl systemctl systemd-cat busctl \

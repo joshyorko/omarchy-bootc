@@ -7,9 +7,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if (( EUID == 0 )); then
     fixture=$(mktemp -d "${TMPDIR:-/tmp}/codex-finalizer-user-XXXXXXXX")
     trap 'rm -rf -- "$fixture"' EXIT
-    install -d -m 0755 "$fixture/tests" "$fixture/custom/bootc"
+    install -d -m 0755 "$fixture/tests/fixtures/upstream" "$fixture/custom/bootc"
     chmod 0711 "$fixture"
     cp -- "$ROOT_DIR/tests/test-update-finalizer.sh" "$fixture/tests/"
+    cp -- "$ROOT_DIR/tests/fixtures/upstream/omarchy-migrate-ac2690cd.sh" "$fixture/tests/fixtures/upstream/"
     cp -- "$ROOT_DIR/custom/bootc/omarchy-bootc-common.sh" \
         "$ROOT_DIR/custom/bootc/omarchy-bootc-finalize" "$fixture/custom/bootc/"
     runuser -u nobody -- bash "$fixture/tests/test-update-finalizer.sh"
@@ -39,6 +40,7 @@ case "$3" in
         cat "$FAKE_STATUS_JSON"
         ;;
     /usr/libexec/omarchy-bootc-clear-transaction)
+        [[ ${FAKE_CLEAR_RC:-0} == 0 ]] || exit "$FAKE_CLEAR_RC"
         rm -f -- "$FAKE_ROOT_MARKER"
         ;;
     *)
@@ -49,11 +51,13 @@ esac
 EOF
 cat >"$tmp/bin/omarchy-migrate" <<'EOF'
 #!/usr/bin/env bash
+[[ ${1:-} != --pending ]] || exit 1
 printf 'migrate\n' >>"$FAKE_ACTIONS_LOG"
 EOF
 cat >"$tmp/bin/omarchy-hook" <<'EOF'
 #!/usr/bin/env bash
 [[ ${1:-} == post-update ]] || exit 1
+[[ ${FAKE_HOOK_RC:-0} == 0 ]] || exit "$FAKE_HOOK_RC"
 printf 'hook\n' >>"$FAKE_ACTIONS_LOG"
 EOF
 chmod +x "$tmp/bin"/*
@@ -96,4 +100,64 @@ grep -Fq -- '-n -- /usr/libexec/omarchy-bootc-status' "$tmp/sudo.log" || fail 's
 grep -Fq -- '-n -- /usr/libexec/omarchy-bootc-clear-transaction' "$tmp/sudo.log" || fail 'clear helper was not invoked noninteractively'
 [[ ! -e "$HOME/.local/state/omarchy-bootc/pending-update" ]] || fail 'user marker was not removed after finalization'
 [[ ! -e "$FAKE_ROOT_MARKER" ]] || fail 'root marker was not cleared after finalization'
-printf 'PASS: bootc finalizer privilege boundary and digest gate\n'
+
+# Run the actual pinned upstream runner, not a migration double. Only its lock
+# path and elapsed wait are redirected; migration discovery/execution/markers
+# and --pending exit semantics are unchanged.
+upstream="$ROOT_DIR/tests/fixtures/upstream/omarchy-migrate-ac2690cd.sh"
+upstream_hash="$(sha256sum "$upstream")"
+[[ ${upstream_hash%% *} == 0c14cb7853174d5289172496e22c1bd444b20c00c1aefd589e1faa3ae6941abe ]] || fail 'pinned upstream migration runner drifted'
+export OMARCHY_PATH="$tmp/upstream" OMARCHY_MIGRATION_STATE="$tmp/migrations"
+export FAKE_MIGRATION_EFFECT="$tmp/migration-effect"
+mkdir -p "$OMARCHY_PATH/migrations"
+# shellcheck disable=SC2016 # The migration expands its own controlled environment.
+printf 'printf "applied\\n" >>"$FAKE_MIGRATION_EFFECT"\n' >"$OMARCHY_PATH/migrations/0001.sh"
+sed "s|local lock_file=/var/lib/pacman/db.lck|local lock_file=$tmp/pacman.lock|" "$upstream" >"$tmp/bin/omarchy-migrate"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$tmp/bin/sleep"
+chmod +x "$tmp/bin/sleep"
+printf 'status=intent\nexpected_digest=%s\n' "$b" >"$HOME/.local/state/omarchy-bootc/pending-update"
+chmod 0600 "$HOME/.local/state/omarchy-bootc/pending-update"
+: >"$FAKE_ROOT_MARKER"
+: >"$tmp/actions.log"
+: >"$tmp/pacman.lock"
+if bash "$tmp/finalize" >"$tmp/deferred.out" 2>&1; then
+    fail 'real pinned runner deferred work but finalizer reported success'
+fi
+[[ -e "$FAKE_ROOT_MARKER" && -e "$HOME/.local/state/omarchy-bootc/pending-update" ]] || fail 'deferred migration lost update intent'
+[[ ! -e "$FAKE_MIGRATION_EFFECT" && ! -e "$OMARCHY_MIGRATION_STATE/0001.sh" && ! -s "$tmp/actions.log" ]] || fail 'deferred migration ran work or post-update hook'
+rm "$tmp/pacman.lock"
+cp "$OMARCHY_PATH/migrations/0001.sh" "$tmp/successful-migration"
+printf 'exit 23\n' >"$OMARCHY_PATH/migrations/0001.sh"
+if bash "$tmp/finalize" >"$tmp/migration-error.out" 2>&1; then fail 'real migration failure certified completion'; fi
+[[ -e "$FAKE_ROOT_MARKER" && -e "$HOME/.local/state/omarchy-bootc/pending-update" ]] || fail 'failed migration lost intent'
+[[ ! -e "$OMARCHY_MIGRATION_STATE/0001.sh" && ! -s "$tmp/actions.log" ]] || fail 'failed migration was acknowledged or ran hook'
+cp "$tmp/successful-migration" "$OMARCHY_PATH/migrations/0001.sh"
+bash "$tmp/finalize" >"$tmp/retry.out" 2>&1
+grep -Fxq applied "$FAKE_MIGRATION_EFFECT" || fail 'real upstream migration did not apply on retry'
+[[ -f "$OMARCHY_MIGRATION_STATE/0001.sh" ]] || fail 'real upstream migration did not acknowledge application'
+[[ ! -e "$FAKE_ROOT_MARKER" && ! -e "$HOME/.local/state/omarchy-bootc/pending-update" ]] || fail 'successful migration retry retained intent'
+bash "$tmp/finalize"
+[[ $(wc -l <"$FAKE_MIGRATION_EFFECT") == 1 ]] || fail 'finalization replayed an already applied migration'
+for failure in hook clear; do
+    export FAKE_HOOK_RC=0 FAKE_CLEAR_RC=0
+    if [[ $failure == hook ]]; then export FAKE_HOOK_RC=24; else export FAKE_CLEAR_RC=25; fi
+    printf 'expected_digest=%s\n' "$b" >"$HOME/.local/state/omarchy-bootc/pending-update"
+    chmod 0600 "$HOME/.local/state/omarchy-bootc/pending-update"
+    : >"$FAKE_ROOT_MARKER"
+    if bash "$tmp/finalize" >"$tmp/$failure-error.out" 2>&1; then fail "$failure failure certified completion"; fi
+    [[ -e "$FAKE_ROOT_MARKER" && -e "$HOME/.local/state/omarchy-bootc/pending-update" ]] || fail "$failure failure lost intent"
+done
+unset FAKE_HOOK_RC FAKE_CLEAR_RC
+for query_status in 1 7; do
+    cat >"$tmp/bin/omarchy-migrate" <<'EOF'
+#!/usr/bin/env bash
+if [[ ${1:-} == --pending ]]; then echo 'pending query failed' >&2; exit "$FAKE_QUERY_STATUS"; fi
+EOF
+    export FAKE_QUERY_STATUS="$query_status"
+    printf 'expected_digest=%s\n' "$b" >"$HOME/.local/state/omarchy-bootc/pending-update"
+    chmod 0600 "$HOME/.local/state/omarchy-bootc/pending-update"
+    : >"$FAKE_ROOT_MARKER"
+    if bash "$tmp/finalize" >"$tmp/query-error.out" 2>&1; then fail 'pending query error certified completion'; fi
+    [[ -e "$FAKE_ROOT_MARKER" && -e "$HOME/.local/state/omarchy-bootc/pending-update" ]] || fail 'query error lost intent'
+done
+printf 'PASS: digest/privilege gate and real pinned-runner defer, retry, apply and acknowledgment\n'

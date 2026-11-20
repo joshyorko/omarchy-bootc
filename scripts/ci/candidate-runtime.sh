@@ -25,8 +25,10 @@ import_candidate() {
     manifest="$(jq -er .manifest_digest "${artifact_dir}/archive-verification.json")"
     cp "${receipt}" "${artifact_dir}/parent-candidate.receipt.json"
     sudo -n podman load -i "${archive}"
-    parent="$(jq -er .image_id "${receipt}")"
-    [[ "$(sudo -n podman inspect --type image "${parent}" --format '{{.Id}}')" == "${parent}" ]]
+    parent="$(jq -er .image_id "${artifact_dir}/archive-verification.json")"
+    local imported_id
+    imported_id="$(sudo -n podman inspect --type image "${parent}" --format '{{.Id}}')"
+    [[ "${imported_id#sha256:}" == "${parent}" ]]
     sudo -n podman run --rm --pull=never "${parent}" \
         /usr/lib/omarchy-bootc/acceptance-dependencies.sh final \
         2>&1 | tee "${artifact_dir}/candidate-dependencies.log"
@@ -34,6 +36,8 @@ import_candidate() {
 }
 
 parent="$(jq -er .image_id "${receipt}")"
+parent="${parent#sha256:}"
+[[ "$parent" =~ ^[a-f0-9]{64}$ ]]
 manifest="$(jq -er .manifest_digest "${receipt}")"
 overlay=localhost/omarchy-bootc:acceptance
 build_overlay() {

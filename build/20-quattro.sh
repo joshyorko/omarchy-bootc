@@ -112,7 +112,7 @@ phase=install-base-closure
 materialize_quattro_opt
 # PulseAudio compatibility is required by the desktop acceptance contract even
 # though upstream lists it alongside optional, mutually exclusive hardware.
-pacman -S --noconfirm --needed "${base_packages[@]}" pipewire-pulse
+pacman -S --noconfirm --needed "${base_packages[@]}" pipewire-pulse cosign
 phase=register-package-system-users
 install -D -m 0644 /ctx/build/cups-browsed.sysusers.conf \
     /usr/lib/sysusers.d/cups-browsed.conf

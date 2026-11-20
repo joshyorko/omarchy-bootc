@@ -21,7 +21,7 @@ jq -e --arg source "$source_head" --arg digest "$digest" --arg checksum "$checks
   .source_sha == $source and .acceptance.status == "passed" and
   .acceptance.overlay_scope == "disposable-test-fixture-only" and
   .candidate.oci_manifest_digest == $digest and
-  .candidate.archive_sha256 == $checksum and .candidate.local_image_id == $image_id
+  .candidate.archive_sha256 == $checksum and (.candidate.local_image_id | ltrimstr("sha256:")) == $image_id
 ' "$accepted" >/dev/null
 authfile=${REGISTRY_AUTH_FILE:-${DOCKER_CONFIG:-$HOME/.docker}/config.json}
 skopeo copy --authfile "$authfile" --preserve-digests \

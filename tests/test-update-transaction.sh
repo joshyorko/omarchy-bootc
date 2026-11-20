@@ -40,7 +40,7 @@ cat >"$tmp/bin/skopeo" <<'EOF'
 set -euo pipefail
 case "$1" in
     inspect)
-        [[ "$2" == --raw && "$3" == docker://ghcr.io/example/os:testing ]] || exit 1
+        [[ "$2" == --raw && "$3" == "docker://${TEST_TRACKING_REF:-ghcr.io/example/os:testing}" ]] || exit 1
         [[ "${RESOLVER_RC:-0}" == 0 ]] || exit "$RESOLVER_RC"
         cat "$RESOLVER_MANIFEST"
         ;;
@@ -87,6 +87,7 @@ printf '%s\n' '{"schemaVersion":2,"config":{},"layers":[]}' >"$RESOLVER_MANIFEST
 b="$(sha256sum "$RESOLVER_MANIFEST")"
 b="sha256:${b%% *}"
 export STAGE_DIGEST="$b"
+export OMARCHY_BOOTC_TEST_COSIGN_BIN="$tmp/no-cosign"
 # SUDO_USER is unrelated to these isolated per-test directories.
 unset SUDO_USER
 make_test_script() {
@@ -96,6 +97,7 @@ make_test_script() {
     sed \
         -e "s|^source /usr/lib/omarchy-bootc/update-common.sh$|source \"${ROOT_DIR}/custom/bootc/omarchy-bootc-common.sh\"|" \
         -e 's|^export OMARCHY_BOOTC_BIN=/usr/bin/bootc$|export OMARCHY_BOOTC_BIN="${OMARCHY_BOOTC_TEST_BIN:?}"|' \
+        -e 's|^readonly COSIGN_BIN=/usr/bin/cosign$|readonly COSIGN_BIN="${OMARCHY_BOOTC_TEST_COSIGN_BIN:?}"|' \
         -e 's|^export OMARCHY_BOOTC_STATUS_FILE=$|export OMARCHY_BOOTC_STATUS_FILE="${OMARCHY_BOOTC_TEST_STATUS_FILE:?}"|' \
         -e 's|^export OMARCHY_BOOTC_STATE_ROOT=/var/lib/omarchy-bootc/updates$|export OMARCHY_BOOTC_STATE_ROOT="${OMARCHY_BOOTC_TEST_STATE_ROOT:?}"|' \
         -e 's|^export OMARCHY_BOOTC_UPDATE_LOCK_FILE=/run/lock/omarchy-update.lock$|export OMARCHY_BOOTC_UPDATE_LOCK_FILE="${OMARCHY_BOOTC_TEST_UPDATE_LOCK_FILE:?}"|' \
@@ -120,6 +122,7 @@ setup_case() {
     export BOOTC_LOG="$case_dir/bootc.log"
     : >"$BOOTC_LOG"
     export CHECK_RC=0 UPGRADE_RC=0 RESOLVER_RC=0 STAGE_DIGEST="$b"
+    export TEST_TRACKING_REF=ghcr.io/example/os:testing
     jq -n --arg a "$a" '{apiVersion:"org.containers.bootc/v1",kind:"BootcHost",
       spec:{image:{image:"ghcr.io/example/os:testing",transport:"registry",signature:"containerPolicy"}},
       status:{booted:{image:{image:{image:"ghcr.io/example/os:testing",transport:"registry"},
@@ -239,4 +242,56 @@ if bash "$AVAILABLE" >"$tmp/available.out" 2>"$tmp/available.err"; then fail 'av
 [[ ! -s "$tmp/available.err" ]] || fail 'no-update result was treated as a resolver failure'
 grep -Fxq 'Omarchy image is up to date' "$tmp/available.out" ||
     fail 'availability helper did not report the no-update result'
-printf 'PASS: composefs updater transactions and availability\n'
+
+official_case() {
+    setup_case "$1"
+    export TEST_TRACKING_REF="${2:-ghcr.io/joshyorko/omarchy-bootc:testing}"
+    jq --arg ref "$TEST_TRACKING_REF" '.spec.image.image=$ref | .status.booted.image.image.image=$ref' \
+        "$OMARCHY_BOOTC_TEST_STATUS_FILE" >"$tmp/status.next"
+    mv "$tmp/status.next" "$OMARCHY_BOOTC_TEST_STATUS_FILE"
+}
+official_case missing-verifier
+# A PATH impostor must not satisfy the image-owned verifier requirement.
+printf '#!/usr/bin/env bash\nexit 0\n' >"$tmp/bin/cosign"
+chmod +x "$tmp/bin/cosign"
+if bash "$SCRIPT" -y >"$tmp/missing-verifier.out" 2>&1; then fail 'missing image-owned Cosign was accepted'; fi
+grep -Fq 'requires image-owned Cosign' "$tmp/missing-verifier.out" || fail 'missing verifier diagnostic absent'
+assert_unstaged
+official_case missing-verifier-pinned "ghcr.io/joshyorko/omarchy-bootc@$b"
+if bash "$SCRIPT" -y >"$tmp/missing-pinned.out" 2>&1; then fail 'pinned official ref bypassed missing verifier'; fi
+assert_unstaged
+official_case missing-verifier-case 'GHCR.IO/JOSHYORKO/OMARCHY-BOOTC:testing'
+if bash "$SCRIPT" -y >"$tmp/missing-case.out" 2>&1; then fail 'official ref case variant bypassed missing verifier'; fi
+assert_unstaged
+
+export OMARCHY_BOOTC_TEST_COSIGN_BIN="$tmp/verifier"
+export FAKE_COSIGN_LOG="$tmp/cosign.log"
+cat >"$tmp/verifier" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$@" >"$FAKE_COSIGN_LOG"
+[[ $# == 6 && $1 == verify && $2 == --certificate-identity && $3 == 'https://github.com/joshyorko/omarchy-bootc/.github/workflows/build.yml@refs/heads/main' && $4 == --certificate-oidc-issuer && $5 == 'https://token.actions.githubusercontent.com' && $6 == "ghcr.io/joshyorko/omarchy-bootc@$STAGE_DIGEST" ]] || exit 3
+exit "${COSIGN_RC:-0}"
+EOF
+official_case nonexecutable-verifier
+if bash "$SCRIPT" -y >"$tmp/nonexecutable.out" 2>&1; then fail 'non-executable Cosign was accepted'; fi
+assert_unstaged
+chmod +x "$tmp/verifier"
+official_case invalid-signature
+export COSIGN_RC=1
+if bash "$SCRIPT" -y >"$tmp/invalid-signature.out" 2>&1; then fail 'failed signature verification was accepted'; fi
+[[ $(jq -r '.status.staged.downloadOnly' "$OMARCHY_BOOTC_TEST_STATUS_FILE") == true ]] || fail 'unverified stage was unlocked'
+if grep -Fxq 'upgrade --from-downloaded' "$BOOTC_LOG"; then fail 'failed verifier reached unlock'; fi
+[[ ! -e "$OMARCHY_BOOTC_TEST_TRANSACTION_MARKER" ]] || fail 'signature failure retained certification intent'
+official_case valid-signature
+export COSIGN_RC=0
+bash "$SCRIPT" -y >"$tmp/valid-signature.out"
+[[ $(jq -r '.status.staged.downloadOnly' "$OMARCHY_BOOTC_TEST_STATUS_FILE") == false ]] || fail 'valid signature did not unlock stage'
+grep -Fxq "ghcr.io/joshyorko/omarchy-bootc@$b" "$FAKE_COSIGN_LOG" || fail 'verifier did not bind the exact staged digest'
+official_case already-unlocked-invalid
+jq --arg b "$b" '.status.staged={image:{imageDigest:$b},downloadOnly:false}' "$OMARCHY_BOOTC_TEST_STATUS_FILE" >"$tmp/status.next"
+mv "$tmp/status.next" "$OMARCHY_BOOTC_TEST_STATUS_FILE"
+export COSIGN_RC=1 RESOLVER_RC=1
+if bash "$SCRIPT" -y >"$tmp/already-unlocked.out" 2>&1; then fail 'already-unlocked official stage bypassed verification'; fi
+[[ $(cat "$BOOTC_LOG") == 'upgrade --check' ]] || fail 'already-unlocked path mutated stage'
+printf 'PASS: updater transactions/availability and mandatory image-owned signature verification (negative/resume controls)\n'
