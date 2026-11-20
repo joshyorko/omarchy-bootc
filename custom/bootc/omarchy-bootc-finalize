@@ -46,6 +46,19 @@ actual="$(status_booted_digest)"
 # The current deployment is now the one whose files migrations were authored
 # against. The old Omarchy package pipeline must never run before this check.
 omarchy-migrate
+# The pinned runner also returns zero when a pacman lock defers its work.
+# --pending returns 0 + names for pending work, or 1 + no output for none.
+if migration_query="$(omarchy-migrate --pending 2>&1)"; then
+    printf 'Migrations remain pending; update intent retained:\n%s\n' "$migration_query" >&2
+    exit 1
+else
+    query_status=$?
+    if (( query_status != 1 )) || [[ -n "$migration_query" ]]; then
+        printf 'Cannot confirm migration completion; update intent retained (status %s): %s\n' \
+            "$query_status" "$migration_query" >&2
+        exit 1
+    fi
+fi
 omarchy-hook post-update
 run_as_root_noninteractive /usr/libexec/omarchy-bootc-clear-transaction
 rm -f -- "$pending"

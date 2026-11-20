@@ -11,6 +11,7 @@ source /usr/lib/omarchy-bootc/update-common.sh
 export OMARCHY_BOOTC_BIN=/usr/bin/bootc
 export OMARCHY_BOOTC_STATUS_FILE=
 unset OMARCHY_BOOTC_STATUS_HELPER
+readonly COSIGN_BIN=/usr/bin/cosign
 export OMARCHY_BOOTC_STATE_ROOT=/var/lib/omarchy-bootc/updates
 export OMARCHY_BOOTC_UPDATE_LOCK_FILE=/run/lock/omarchy-update.lock
 export OMARCHY_BOOTC_TRANSACTION_MARKER=/var/lib/omarchy-bootc/updates/pending-update
@@ -95,14 +96,23 @@ staged="$(status_staged_digest)" || {
     echo 'bootc status is malformed or uses an unsupported schema' >&2
     exit 1
 }
+staged_download_only="$(status_staged_download_only)" || {
+    echo 'bootc status is malformed or uses an unsupported schema' >&2
+    exit 1
+}
 tracking_ref="$(status_tracking_ref)" || {
     echo 'bootc status is missing a valid configured image ref' >&2
     exit 1
 }
-already_staged=0
-if [[ -n "$staged" && "$staged" != "$booted" ]]; then
+transport="$(status_field transport)" || {
+    echo 'bootc status is missing a valid configured image transport' >&2
+    exit 1
+}
+already_unlocked=0
+already_downloaded=0
+if [[ -n "$staged" && "$staged" != "$booted" && "$staged_download_only" == false ]]; then
     expected="$staged"
-    already_staged=1
+    already_unlocked=1
 else
     expected="$(status_candidate_digest)" || {
         echo 'Cannot resolve the configured bootc update candidate; no update was staged.' >&2
@@ -112,11 +122,23 @@ else
         echo 'Omarchy image is up to date'
         exit 0
     fi
+    if [[ -n "$staged" && "$staged" == "$expected" && "$staged_download_only" == true ]]; then
+        already_downloaded=1
+    fi
 fi
 [[ "$expected" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
     echo 'bootc update candidate does not have an exact digest' >&2
     exit 1
 }
+
+official_repository=0
+if [[ "$transport" == registry && ( "${tracking_ref,,}" == ghcr.io/joshyorko/omarchy-bootc:* || "${tracking_ref,,}" == ghcr.io/joshyorko/omarchy-bootc@sha256:* ) ]]; then
+    official_repository=1
+    [[ -x "$COSIGN_BIN" ]] || {
+        echo 'Official image verification requires image-owned Cosign; no update will be unlocked.' >&2
+        exit 1
+    }
+fi
 
 if (( EUID == 0 )) && [[ -n "${SUDO_USER:-}" ]]; then
     marker_user="$SUDO_USER"
@@ -213,15 +235,67 @@ if ! run_as_root chown root:root "$root_marker" ||
     exit 1
 fi
 
-if (( already_staged == 0 )); then
-    run_as_root "$OMARCHY_BOOTC_BIN" upgrade
+if (( already_unlocked == 0 )); then
+    if (( already_downloaded == 0 )); then
+        run_as_root "$OMARCHY_BOOTC_BIN" upgrade --download-only
+    fi
+    downloaded="$(status_staged_digest)" || {
+        cleanup_markers
+        echo 'bootc status is malformed after download-only staging' >&2
+        exit 1
+    }
+    downloaded_only="$(status_staged_download_only)" || {
+        cleanup_markers
+        echo 'bootc status is malformed after download-only staging' >&2
+        exit 1
+    }
+    if [[ "$downloaded" != "$expected" ]]; then
+        cleanup_markers
+        echo "bootc downloaded digest ${downloaded:-none} does not match checked candidate ${expected}; unexpected stage remains contained (downloadOnly=${downloaded_only:-unknown})" >&2
+        exit 1
+    fi
+    if [[ "$downloaded_only" != true ]]; then
+        cleanup_markers
+        echo "bootc --download-only did not contain staged digest ${downloaded} (downloadOnly=${downloaded_only:-unknown})" >&2
+        exit 1
+    fi
+fi
+# Verify even an already-unlocked stage before reporting it as accepted.
+if (( official_repository )); then
+    if ! run_as_root "$COSIGN_BIN" verify \
+        --certificate-identity 'https://github.com/joshyorko/omarchy-bootc/.github/workflows/build.yml@refs/heads/main' \
+        --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+        "ghcr.io/joshyorko/omarchy-bootc@${expected}" >/dev/null; then
+        cleanup_markers
+        echo "cosign signature verification failed for ${expected}; refusing to accept or unlock the staged deployment" >&2
+        exit 1
+    fi
+fi
+if (( already_unlocked == 0 )); then
+    run_as_root "$OMARCHY_BOOTC_BIN" upgrade --from-downloaded
 fi
 actual="$(status_staged_digest)" || {
     echo 'bootc status is malformed after upgrade' >&2
     exit 1
 }
+actual_download_only="$(status_staged_download_only)" || {
+    echo 'bootc status is malformed after upgrade' >&2
+    exit 1
+}
+actual_tracking_ref="$(status_tracking_ref)" || {
+    echo 'bootc status lost configured tracking ref after upgrade' >&2
+    exit 1
+}
 [[ "$actual" == "$expected" ]] || {
     echo "bootc staged digest ${actual:-none} does not match checked candidate ${expected}" >&2
+    exit 1
+}
+[[ "$actual_download_only" == false ]] || {
+    echo "bootc staged deployment ${actual} remained locked after --from-downloaded" >&2
+    exit 1
+}
+[[ "$actual_tracking_ref" == "$tracking_ref" ]] || {
+    echo "bootc tracking ref changed unexpectedly: ${actual_tracking_ref} != ${tracking_ref}" >&2
     exit 1
 }
 

@@ -10,16 +10,21 @@ phase="${1:-}"
 ARTIFACTS="${OMARCHY_ACCEPTANCE_DIR:?Set OMARCHY_ACCEPTANCE_DIR to a persistent artifact directory}"
 OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}"
 export OMARCHY_PATH
+# Software-rendered hosted guests need a larger bounded IPC budget for QML reload.
+# Do not retry mutating calls: an IPC timeout may follow a completed mutation.
+export OMARCHY_SHELL_IPC_TIMEOUT=15s
 export PATH="$OMARCHY_PATH/bin:$HOME/.local/bin:$PATH"
 mkdir -p "$ARTIFACTS"
 
 fail() {
     echo "not ok - $*" | tee "$ARTIFACTS/native-acceptance.failure" >&2
+    # Preserve the failing boot's shell diagnostics before any later reboot.
+    journalctl --user -b --no-pager >"$ARTIFACTS/failure-user-journal.log" 2>&1 || true
     exit 1
 }
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "required command is missing: $1"; }
-for command_name in jq git pacman sha256sum stat journalctl hyprctl omarchy omarchy-shell quickshell qs inotifywait busctl; do
+for command_name in jq git pacman sha256sum stat journalctl hyprctl omarchy omarchy-shell quickshell qs inotifywait busctl grim foot setsid; do
     require_cmd "$command_name"
 done
 
@@ -112,6 +117,23 @@ snapshot_omp_state() {
     done
 }
 
+capture_native_screen() {
+    local deadline=$((SECONDS + 30)) address
+    setsid -f foot --app-id=org.omarchy.bootc-evidence --title='Omarchy bootc acceptance' \
+        bash -c 'omarchy-version; pacman -Q omarchy omarchy-settings; sudo -n bootc status --format=json; omarchy default agent; omarchy plugin list --json; sleep 60' \
+        >"$ARTIFACTS/visual-terminal.log" 2>&1
+    while ((SECONDS < deadline)); do
+        address=$(hyprctl -j clients | jq -r '.[] | select(.class == "org.omarchy.bootc-evidence") | .address' | head -1)
+        [[ -z $address ]] || break
+        sleep 1
+    done
+    [[ -n $address ]] || fail 'evidence terminal did not open'
+    sleep 1
+    grim "$ARTIFACTS/$phase-version-plugins-omp.png" || fail 'native PNG capture failed'
+    hyprctl dispatch "hl.dsp.window.close({ window = \"address:$address\" })" >/dev/null 2>&1 ||
+        hyprctl dispatch closewindow "address:$address" >/dev/null
+}
+
 verify_skills() {
     local dir skill name link profile
     local -a dirs=(.agents/skills .claude/skills .codex/skills .pi/agent/skills .hermes/skills)
@@ -163,7 +185,10 @@ QML
     marker="OMARCHY_ACCEPTANCE_NATIVE_PLUGIN ${run_token}-v1"
     wait_for_journal_marker "$marker" || fail "native plugin load had no observable journal marker"
 
-    sed -i "s/${run_token}-v1/${run_token}-v2/" "$HOME/.config/omarchy/plugins/acceptance.native/Service.qml"
+    # Write the existing file in place. sed -i exposes a temporary file's
+    # close_write before rename, making the watcher reload the old QML first.
+    changed_service="$(sed "s/${run_token}-v1/${run_token}-v2/" "$HOME/.config/omarchy/plugins/acceptance.native/Service.qml")"
+    printf '%s\n' "$changed_service" >"$HOME/.config/omarchy/plugins/acceptance.native/Service.qml"
     changed_marker="OMARCHY_ACCEPTANCE_NATIVE_PLUGIN ${run_token}-v2"
     wait_for_journal_marker "$changed_marker" || fail "native hot reload is unproved: changed fixture marker was absent"
     printf '%s\n' passed >"$ARTIFACTS/plugin-hot-reload.receipt"
@@ -206,7 +231,7 @@ QML
         mv "$HOME/.local/bin/omp" "$ARTIFACTS/omp-original"
     fi
 # This cleanup function is called indirectly by the EXIT trap.
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
     restore_omp() {
         rm -f "$HOME/.local/bin/omp"
         if [[ -e "$ARTIFACTS/omp-original" || -L "$ARTIFACTS/omp-original" ]]; then
@@ -238,6 +263,7 @@ STUB
     cmp -s "$ARTIFACTS/omp-state.before" "$ARTIFACTS/omp-state.after" || fail "agent selection changed OMP credential/config state"
     verify_skills
     compare_package_files
+    capture_native_screen
     echo "ok - native prepare passed; owner must reboot and invoke verify"
     exit 0
 fi
@@ -261,4 +287,5 @@ omarchy-shell shell ping >/dev/null || fail "native Quickshell IPC is not reacha
 [[ $(omarchy default agent) == omp ]] || fail "OMP selection did not survive reboot"
 verify_skills
 compare_package_files
+capture_native_screen
 echo "ok - native verify passed; clock clone and package-owned hashes/owners persisted"

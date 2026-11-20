@@ -69,6 +69,7 @@ ARTIFACT_DIR="${CI_ARTIFACT_DIR:-${RUNNER_TEMP:-/tmp}/omarchy-bootc-artifacts}"
 QEMU_WORK_DIR=""
 QEMU_PIDFILE=""
 QEMU_LOG=""
+QMP_SOCKET=""
 QEMU_AS_ROOT=0
 QEMU_OVMF_VARS=""
 REGISTRY_CONTAINER=""
@@ -328,8 +329,10 @@ EOF
     run_guest 'sudo -n cat /run/omarchy-bootc-update-trace/calls.log' >"${ARTIFACT_DIR}/omarchy-update-bootc-trace.log"
     grep -Fxq 'upgrade --check' "${ARTIFACT_DIR}/omarchy-update-bootc-trace.log" \
         || fail "omarchy update did not invoke bootc upgrade --check"
-    grep -Fxq 'upgrade' "${ARTIFACT_DIR}/omarchy-update-bootc-trace.log" \
-        || fail "omarchy update did not invoke bootc upgrade to stage B"
+    grep -Fxq 'upgrade --download-only' "${ARTIFACT_DIR}/omarchy-update-bootc-trace.log" \
+        || fail "omarchy update did not invoke bootc upgrade --download-only"
+    grep -Fxq 'upgrade --from-downloaded' "${ARTIFACT_DIR}/omarchy-update-bootc-trace.log" \
+        || fail "omarchy update did not invoke bootc upgrade --from-downloaded"
     run_guest 'test -s "$HOME/.local/state/omarchy-bootc/pending-update" &&
         cat "$HOME/.local/state/omarchy-bootc/pending-update"' \
         >"${ARTIFACT_DIR}/update-pending-marker.txt"
@@ -343,6 +346,7 @@ EOF
         '.status.staged.image.imageDigest == $digest and .status.staged.downloadOnly == false' \
         "${ARTIFACT_DIR}/update-staged-status.json" >/dev/null \
         || fail "the updater did not stage exact unlocked B"
+    capture_vm_screen update-staged-pending-reboot
     reboot_guest || fail "lifecycle B update reboot was not observed"
     run_guest 'sudo -n bootc status --format=json' >"${ARTIFACT_DIR}/update-booted-status.json"
     cp "${ARTIFACT_DIR}/update-booted-status.json" "${ARTIFACT_DIR}/lifecycle-b-booted-status.json"
@@ -353,6 +357,7 @@ EOF
         || fail "lifecycle B payload was not present after reboot"
     verify_update_finalized 2>&1 | tee "${ARTIFACT_DIR}/update-finalized.log"
     verify_lifecycle_user_state update-b
+    capture_vm_screen update-b-desktop
 
     run_guest 'sudo -n bootc rollback' 2>&1 | tee "${ARTIFACT_DIR}/lifecycle-rollback.log"
     reboot_guest || fail "rollback reboot was not observed"
@@ -361,7 +366,33 @@ EOF
         "${ARTIFACT_DIR}/lifecycle-a-rollback-status.json" >/dev/null \
         || fail "rollback did not restore exact lifecycle A digest"
     verify_lifecycle_user_state rollback-a
+    capture_vm_screen rollback-a-desktop
     printf '%s\n' passed >"${ARTIFACT_DIR}/gate-3-5.receipt"
+}
+
+capture_vm_screen() {
+    local stage="$1"
+    if [[ "$QEMU_AS_ROOT" == 1 ]]; then
+        host_root python3 "$SCRIPT_DIR/capture-vm-screen.py" "$QMP_SOCKET" "$ARTIFACT_DIR/screenshots/$stage.png"
+    else
+        python3 "$SCRIPT_DIR/capture-vm-screen.py" "$QMP_SOCKET" "$ARTIFACT_DIR/screenshots/$stage.png"
+    fi
+}
+
+capture_sddm_greeter() {
+    local ready=0
+    # Boot into the greeter before any graphical user session owns its VT.
+    # Restarting an active desktop into a greeter races logind's VT release.
+    for _ in $(seq 1 90); do
+        if run_guest 'pgrep -f "^/usr/bin/sddm-greeter" >/dev/null' 2>/dev/null; then
+            ready=1
+            break
+        fi
+        sleep 1
+    done
+    ((ready)) || fail 'SDDM greeter did not start before fixture autologin'
+    capture_vm_screen sddm-greeter
+    run_guest 'sudo -n install -m 0644 /usr/lib/omarchy-acceptance/autologin.conf /etc/sddm.conf.d/90-omarchy-acceptance.conf && sudo -n systemctl restart sddm'
 }
 
 write_artifact() {
@@ -378,6 +409,7 @@ capture_guest_diagnostics() {
 
     write_artifact guest-uname.txt run_guest 'uname -a'
     write_artifact guest-id.txt run_guest 'id'
+    write_artifact guest-cups-policy.txt run_guest 'id; sudo -n cat /etc/cups/cups-files.conf /etc/cups/cupsd.conf; LC_ALL=C timeout 10 lpinfo -v </dev/null'
     write_artifact guest-systemd-failed.txt run_guest 'systemctl --failed --no-pager --full'
     write_artifact guest-sddm-status.txt run_guest 'systemctl status sddm --no-pager --full'
     write_artifact guest-sshd-status.txt run_guest 'systemctl status sshd --no-pager --full'
@@ -386,6 +418,10 @@ capture_guest_diagnostics() {
         >"${ARTIFACT_DIR}/guest-bootc-status.json" 2>"${ARTIFACT_DIR}/guest-bootc-status.stderr" || true
     run_guest 'test ! -d "$HOME/acceptance-receipts" || tar -C "$HOME" -czf - acceptance-receipts' \
         >"${ARTIFACT_DIR}/guest-acceptance-receipts.tar.gz" 2>"${ARTIFACT_DIR}/guest-acceptance-receipts.stderr" || true
+    sshpass -p "${SSH_PASSWORD}" scp -r -P "${SSH_PORT}" \
+        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "${SSH_USER}@127.0.0.1:acceptance-receipts" "${ARTIFACT_DIR}/guest-receipts" \
+        >"${ARTIFACT_DIR}/guest-receipts-copy.log" 2>&1 || true
     write_artifact guest-firstboot.txt run_guest 'systemctl status omarchy-acceptance-firstboot --no-pager --full; ls -l /var/lib/omarchy-acceptance /home/omarchy/.local/state/omarchy/done'
     write_artifact guest-home-config.txt run_guest 'find /home/omarchy/.config -maxdepth 2 -mindepth 1 -type d | sort'
     write_artifact guest-update-trace.log run_guest 'sudo -n cat /run/omarchy-bootc-update-trace/calls.log'
@@ -417,6 +453,7 @@ fail() {
     local message="${1}"
 
     echo "${message}" >&2
+    capture_vm_screen failure >"${ARTIFACT_DIR}/screenshot-failure.log" 2>&1 || true
     capture_host_diagnostics || true
     capture_guest_diagnostics || true
     if [[ -f "${QEMU_LOG}" ]]; then
@@ -584,6 +621,7 @@ echo "Using QEMU accelerator: ${QEMU_ACCEL}" | tee -a "${ARTIFACT_DIR}/qemu-acce
 # Retain runner ownership even when only QEMU needs root to open /dev/kvm.
 : >"${QEMU_LOG}"
 : >"${QEMU_PIDFILE}"
+QMP_SOCKET="${QEMU_WORK_DIR}/qmp.sock"
 "${QEMU_COMMAND[@]}" \
     -name omarchy-bootc-smoke \
     -machine q35,accel="${QEMU_ACCEL}" \
@@ -595,6 +633,7 @@ echo "Using QEMU accelerator: ${QEMU_ACCEL}" | tee -a "${ARTIFACT_DIR}/qemu-acce
     -display none \
     -serial file:"${QEMU_LOG}" \
     -monitor none \
+    -qmp "unix:${QMP_SOCKET},server=on,wait=off" \
     -drive if=virtio,format=qcow2,file="${QCOW_PATH}" \
     -netdev user,id=net0,hostfwd=tcp:127.0.0.1:"${SSH_PORT}"-:22 \
     -device virtio-net-pci,netdev=net0 \
@@ -632,6 +671,10 @@ if [[ "${VM_PROFILE}" == omarchy ]]; then
         2>&1 | tee "${ARTIFACT_DIR}/guest-dependencies.log"
 fi
 
+capture_vm_screen first-boot-display
+if [[ "${VM_PROFILE}" == omarchy ]]; then
+    capture_sddm_greeter
+fi
 echo "::group::Run in-VM smoke checks"
 if [[ "${VM_PROFILE}" == omarchy ]]; then
     run_guest 'set -euo pipefail
@@ -709,10 +752,10 @@ if [[ "${VM_PROFILE}" == omarchy && -n "${NATIVE_ACCEPTANCE_SCRIPT:-}" ]]; then
     fi
 fi
 
+((acceptance_status == 0)) || fail "One or more graphical/native acceptance checks failed; inspect individual receipts."
 if [[ "${VM_PROFILE}" == omarchy ]]; then
     run_lifecycle_acceptance
 fi
 capture_host_diagnostics
 capture_guest_diagnostics
-((acceptance_status == 0)) || fail "One or more graphical/native acceptance checks failed; inspect individual receipts."
 echo "Requested first-boot/runtime and A/B lifecycle checks passed. Dakota round-trip remains a separate transition gate."

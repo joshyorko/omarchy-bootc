@@ -15,6 +15,21 @@ expect_failure() {
     grep -Fq -- "$expected" "$fixture/output"
 }
 
+mkdir -p "$fixture/cups-root/usr/share/omarchy/etc-overrides" "$fixture/cups-root/etc/cups"
+# Invoked indirectly by the sourced policy verifier.
+# shellcheck disable=SC2317,SC2329
+sudo() {
+    [[ "$1" == -n && "$2" == cmp ]] || return 2
+    shift
+    "$@"
+}
+printf 'SystemGroup cups-browsed sys root\nPeerCred on\n' >"$fixture/cups-root/usr/share/omarchy/etc-overrides/cups-cups-files.conf"
+printf 'SystemGroup sys root wheel\nPeerCred on\n' >"$fixture/cups-root/etc/cups/cups-files.conf"
+expect_failure 'CUPS authorization differs' require_cups_policy "$fixture/cups-root"
+cp "$fixture/cups-root/usr/share/omarchy/etc-overrides/cups-cups-files.conf" "$fixture/cups-root/etc/cups/cups-files.conf"
+require_cups_policy "$fixture/cups-root"
+unset -f sudo
+
 expect_failure 'Usage:' main
 expect_failure 'Usage:' main unknown
 expect_failure 'Usage:' main final extra
@@ -60,10 +75,20 @@ printf '%s\n' \
     '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-status ""' \
     '%wheel ALL=(root) NOPASSWD: /usr/libexec/omarchy-bootc-clear-transaction ""' \
     >"$fixture/scoped-sudoers"
+# Exercise the privilege boundary without invoking host sudo or changing policy.
+# shellcheck disable=SC2317,SC2329
+sudo() {
+    [[ "$1" == -n && "$2" == grep ]] || return 2
+    printf '%s\n' "$*" >"$fixture/sudo-read"
+    shift
+    "$@"
+}
 require_scoped_sudo_command /usr/libexec/omarchy-bootc-status "$fixture"
+[[ -s "$fixture/sudo-read" ]] || { echo 'scoped sudo policy was read without elevation' >&2; exit 1; }
 require_scoped_sudo_command /usr/libexec/omarchy-bootc-clear-transaction "$fixture"
 expect_failure 'missing scoped sudo command' \
     require_scoped_sudo_command /usr/libexec/omarchy-bootc-status "$fixture/absent"
+unset -f sudo
 
 
 # Package metadata is isolated; payload files and offline systemd enablement
@@ -150,5 +175,16 @@ PATH="$fixture/bin:$host_path" expect_failure 'UFW configuration is not enabled'
 printf 'ENABLED=yes\n' >"$service_root/etc/ufw/ufw.conf"
 rm "$service_root/usr/lib/systemd/user/pipewire-pulse.service"
 PATH="$fixture/bin:$host_path" expect_failure 'missing pipewire-pulse user service' require_desktop_services "$service_root"
+printf '[Service]\nExecStart=/usr/bin/pipewire-pulse\n' >"$service_root/usr/lib/systemd/user/pipewire-pulse.service"
+
+mkdir -p "$service_root/usr/lib/systemd/network"
+printf '[Match]\nType=ether\n[Network]\nDHCP=yes\n' >"$service_root/usr/lib/systemd/network/20-wired.network"
+PATH="$fixture/bin:$host_path" expect_failure 'wildcard networkd Ethernet rule conflicts with NetworkManager' require_desktop_services "$service_root"
+rm "$service_root/usr/lib/systemd/network/20-wired.network"
+
+ln -s /usr/lib/systemd/system/systemd-networkd.service "$service_root/etc/systemd/system/multi-user.target.wants/systemd-networkd.service"
+PATH="$fixture/bin:$host_path" expect_failure 'systemd-networkd.service conflicts with NetworkManager' require_desktop_services "$service_root"
+rm "$service_root/etc/systemd/system/multi-user.target.wants/systemd-networkd.service"
+PATH="$fixture/bin:$host_path" require_desktop_services "$service_root"
 
 printf 'acceptance dependency boundaries, kernel headers and desktop services passed\n'

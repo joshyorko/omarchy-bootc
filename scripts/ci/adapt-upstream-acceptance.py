@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Adapt exactly two installer premises; never waive an upstream acceptance gate."""
+"""Adapt installer premises and pinned menu/bar proofs; never waive a gate."""
 
 import argparse
 import difflib
@@ -7,22 +7,230 @@ import hashlib
 import json
 from pathlib import Path
 
-REVISION = "c668141e9c42b13c80c9ca4ea108e11708c5e8a5"
+REVISION = "ac2690cd7be4f47e4a255f5e2e78d904d436b068"
 # Full-suite guards deliberately require review on ANY upstream acceptance drift.
 UPSTREAM_SHA256 = {
     "test/acceptance": "08773f0771e24d72687941063d4968de10a16ef81a22b554c46b785420d2fd86",
     "test/acceptance.d/apps-test.sh": "f2b4250a9f4e4d47cc08a449b8e89de8f9942a5bad54607a2159f8f53ab637ad",
-    "test/acceptance.d/base-test.sh": "c74718f9ac4e322a53f172db91a5a09a7cfa615ce2c08b7c6e9e9a2c7f6f7ef8",
+    "test/acceptance.d/base-test.sh": "66177a7ba966eb6a552fb76f3e600442ff07988757d7db5a12c193b945679aaa",
     "test/acceptance.d/cups-test.sh": "98cc07d62d8720c2c5b0990f192fac654b96a0bc4d22d003901e62f3b452a184",
-    "test/acceptance.d/menu-test.sh": "8a181890b195de41a7830adc5ceeb23bc8863fc18cd7ff73be7fc7dcdabef98d",
+    "test/acceptance.d/input-method-notifications.py": "d715f84284c594396eceb1f7c4a02ebbb2e730fbbaede11375d33297d67a3c9a",
+    "test/acceptance.d/input-method-state.py": "19510ad3263efdaea02c9b7a6a2a6ea266e3ad8fd2368187714d9d22ff39a0c6",
+    "test/acceptance.d/input-methods-test.sh": "4bd143706dc5db76c310ad8e03979adc235c67b9fd8e72c3d57c2bc3377b3734",
+    "test/acceptance.d/menu-test.sh": "90113adc1702ed96d7af22b1a290388c3a9f79566bab7f86f394fa96157cc225",
+    "test/acceptance.d/overlay-monitor-test.sh": "bfc109915e7de1ce3428cb724a301105c4f1b3a5f465a38312ba55f9a014e26f",
     "test/acceptance.d/panels-test.sh": "1bc77bebb339a01a5c9fbacdba2e27bba1a3722b2855c051440baeafe17acc94",
     "test/acceptance.d/security-test.sh": "f1a899620c84ce45e39fc5860fbddbd26dec34e9c35c29e3518fe83f478c9400",
     "test/acceptance.d/session-test.sh": "f04af8cf2cd6e77ec8192b9eb16c8ef08967096cef1723a8e906a2cabbec4b5e",
-    "test/acceptance.d/shell-surfaces-test.sh": "3d6f95297057fe7cbe7786fa073760d2d9e7a27006674fc800128b6b5717f4aa",
+    "test/acceptance.d/shell-surfaces-test.sh": "2d7fb57ae0b5682473ecb7c1420cfde08c1d5f622993d093671ebd00715f1b97",
     "test/acceptance.d/system-test.sh": "ba02d03388c9084de57f7e7d55f666041fba16cc6c8847ab93328ed9c77965b1",
 }
 HELPER_PATH = "test/acceptance.d/bootc-acceptance-helper.sh"
 REPLACEMENTS = {
+    # Diagnostic capture preserves OCR matching and failure propagation.
+    "test/acceptance.d/base-test.sh": (
+        b'''screen_contains() {
+  local text="$1"
+  local snapshot="/tmp/omarchy-acceptance-ocr-$$.png"
+
+  # Capture at 2x scale: tesseract routinely drops small caption text at
+  # native resolution (the weather panel's detail labels, for one).
+  if ! timeout 10 grim -s 2 "$snapshot" 2>/dev/null; then
+    rm -f "$snapshot"
+    return 1
+  fi
+  tesseract "$snapshot" stdout --psm 11 2>/dev/null | grep -Fi -- "$text" >/dev/null
+  local status=$?
+  rm -f "$snapshot"
+  return $status
+}
+''',
+        b'''screen_contains() {
+  local text="$1"
+  local snapshot="/tmp/omarchy-acceptance-ocr-$$.png"
+
+  # Capture at 2x scale: tesseract routinely drops small caption text at
+  # native resolution (the weather panel's detail labels, for one).
+  if ! timeout 10 grim -s 2 "$snapshot" 2>/dev/null; then
+    rm -f "$snapshot"
+    return 1
+  fi
+  tesseract "$snapshot" stdout --psm 11 >"$snapshot.txt" 2>/dev/null
+  local ocr_status=$?
+  grep -Fi -- "$text" "$snapshot.txt" >/dev/null
+  local status=$?
+  ((ocr_status == 0)) || status=$ocr_status
+  if [[ $text == "Acceptance notification" ]]; then
+    # Retain the actual OCR inputs before the short-lived toast expires.
+    cp "$snapshot" "$ARTIFACTS/notification-ocr-latest.png" || true
+    cp "$snapshot.txt" "$ARTIFACTS/notification-ocr-latest.txt" || true
+    if [[ ! -f "$ARTIFACTS/notification-ocr-first.png" ]]; then
+      cp "$snapshot" "$ARTIFACTS/notification-ocr-first.png" || true
+      cp "$snapshot.txt" "$ARTIFACTS/notification-ocr-first.txt" || true
+      timeout 2 omarchy-shell notifications probe >"$ARTIFACTS/notification-first-probe.json" 2>"$ARTIFACTS/notification-first-probe.stderr" || true
+      timeout 1 hyprctl -j monitors >"$ARTIFACTS/notification-first-monitors.json" 2>&1 || true
+      timeout 1 hyprctl -j layers >"$ARTIFACTS/notification-first-layers.json" 2>&1 || true
+    fi
+    # P2-01: when full-desktop OCR misses small toast text, crop directly from
+    # the measured omarchy-notifications layer bounds while preserving OCR errors.
+    if ((status != 0 && ocr_status == 0)); then
+      local helper_script monitors_json layers_json geom crop crop_ocr_status
+      helper_script="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helper.sh"
+      monitors_json="$ARTIFACTS/notification-latest-monitors.json"
+      layers_json="$ARTIFACTS/notification-latest-layers.json"
+      if timeout 1 hyprctl -j monitors >"$monitors_json" 2>/dev/null &&
+         timeout 1 hyprctl -j layers >"$layers_json" 2>/dev/null &&
+         geom="$(OMARCHY_ACCEPTANCE_DIR="$ARTIFACTS" bash "$helper_script" notification-bounds "$monitors_json" "$layers_json" 2>/dev/null)" &&
+         [[ -n "$geom" ]]; then
+        crop="/tmp/omarchy-acceptance-ocr-crop-$$.png"
+        if timeout 10 grim -g "$geom" -s 2 "$crop" 2>/dev/null; then
+          crop_ocr_status=0
+          tesseract "$crop" stdout --psm 6 >"$crop.txt" 2>/dev/null || crop_ocr_status=$?
+          if ((crop_ocr_status == 0)) && ! grep -Fi -- "$text" "$crop.txt" >/dev/null; then
+            tesseract "$crop" stdout --psm 11 >>"$crop.txt" 2>/dev/null || crop_ocr_status=$?
+          fi
+          cp "$crop" "$ARTIFACTS/notification-ocr-crop-latest.png" || true
+          cp "$crop.txt" "$ARTIFACTS/notification-ocr-crop-latest.txt" || true
+          if [[ ! -f "$ARTIFACTS/notification-ocr-crop-first.png" ]]; then
+            cp "$crop" "$ARTIFACTS/notification-ocr-crop-first.png" || true
+            cp "$crop.txt" "$ARTIFACTS/notification-ocr-crop-first.txt" || true
+          fi
+          if ((crop_ocr_status != 0)); then
+            status=$crop_ocr_status
+          elif grep -Fi -- "$text" "$crop.txt" >/dev/null; then
+            status=0
+          fi
+        fi
+        rm -f "$crop" "$crop.txt"
+      fi
+    fi
+  fi
+  rm -f "$snapshot" "$snapshot.txt"
+  return $status
+}
+''',
+    ),
+    # P1-13: reject duplicated first character (e.g. kkeybindings / No matches)
+    # and require an actual Keybindings menu match on HEADLESS-2 and after recovery.
+    "test/acceptance.d/overlay-monitor-test.sh": (
+        b'''wtype "keybindings"
+wait_until "menu search renders on tall monitor" 15 monitor_contains "$virtual_monitor" "Keybindings"
+screenshot "success-overlay-monitor-04-open-search"
+remove_source_monitor
+wait_until "open menu moves to remaining monitor" 15 menu_on_monitor "$remaining_monitor"
+wait_until "open menu search renders on shorter monitor" 15 monitor_contains "$remaining_monitor" "Keybindings"
+''',
+        b'''wtype "keybindings"
+wait_until "menu search renders on tall monitor" 15 bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helper.sh" menu-search "$virtual_monitor" "keybindings" "Keybindings"
+screenshot "success-overlay-monitor-04-open-search"
+remove_source_monitor
+wait_until "open menu moves to remaining monitor" 15 menu_on_monitor "$remaining_monitor"
+wait_until "open menu search renders on shorter monitor" 15 bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helper.sh" menu-search "$remaining_monitor" "keybindings" "Keybindings"
+''',
+    ),
+    # The pinned menu has Apps, Learn, Appearance, Trigger. Three Down keys
+    # select Trigger, not Appearance. Menu Bar is the fourth appearance item;
+    # Position follows Hide/Show Bar. Preserve every assertion and screenshot.
+    # Its transparent bar layer spans the screen; prove orientation by the
+    # compositor-reserved edge, with the bar present on that same monitor.
+    "test/acceptance.d/menu-test.sh": (
+        b'''bar_is_vertical() {
+  local width height
+
+  read -r width height < <(hyprctl -j layers | jq -r '
+    [.. | objects | select(.namespace? == "omarchy-bar")][0]
+    | [.w, .h] | @tsv
+  ')
+
+  [[ $width =~ ^[0-9]+$ && $height =~ ^[0-9]+$ ]] && ((width < height))
+}
+
+bar_is_horizontal() {
+  local width height
+
+  read -r width height < <(hyprctl -j layers | jq -r '
+    [.. | objects | select(.namespace? == "omarchy-bar")][0]
+    | [.w, .h] | @tsv
+  ')
+
+  [[ $width =~ ^[0-9]+$ && $height =~ ^[0-9]+$ ]] && ((width > height))
+}
+
+bar_position_is() {
+  local expected="$1"
+
+  [[ $(jq -r '.bar.position // "top"' "$CONFIG_FILE") == $expected ]]
+}
+
+source_file=$DEFAULTS_FILE
+((config_existed)) && source_file=$CONFIG_FILE
+original_position=$(jq -r '.bar.position // "top"' "$source_file")
+
+omarchy-shell shell summon omarchy.menu '{"menu":"root"}' >/dev/null
+wait_until "root menu opens" 15 layer_on_overlay "omarchy-menu"
+wait_until "root menu content is visible" 15 screen_contains "Apps"
+screenshot "success-menu-01-root"
+
+wtype -k Down -k Down -k Down
+sleep 1
+screenshot "success-menu-02-style-selected"
+wtype -k Return
+
+wait_until "style submenu is visible" 15 screen_contains "Theme"
+screenshot "success-menu-03-style-submenu"
+
+wtype -k Down -k Down -k Down -k Down -k Return
+sleep 1
+screenshot "success-menu-04-menu-bar-submenu"
+
+wtype -k Return
+sleep 1
+screenshot "success-menu-05-position-submenu"
+
+wtype -k Down -k Down -k Return
+''',
+        b'''bar_is_vertical() {
+  bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helper.sh" bar-vertical
+}
+
+bar_is_horizontal() {
+  bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helper.sh" bar-horizontal
+}
+
+bar_position_is() {
+  local expected="$1"
+
+  [[ $(jq -r '.bar.position // "top"' "$CONFIG_FILE") == $expected ]]
+}
+
+source_file=$DEFAULTS_FILE
+((config_existed)) && source_file=$CONFIG_FILE
+original_position=$(jq -r '.bar.position // "top"' "$source_file")
+
+omarchy-shell shell summon omarchy.menu '{"menu":"root"}' >/dev/null
+wait_until "root menu opens" 15 layer_on_overlay "omarchy-menu"
+wait_until "root menu content is visible" 15 screen_contains "Apps"
+screenshot "success-menu-01-root"
+
+wtype -k Down -k Down
+sleep 1
+screenshot "success-menu-02-style-selected"
+wtype -k Return
+
+wait_until "style submenu is visible" 15 screen_contains "Theme"
+screenshot "success-menu-03-style-submenu"
+
+wtype -k Down -k Down -k Down -k Return
+sleep 1
+screenshot "success-menu-04-menu-bar-submenu"
+
+wtype -k Down -k Return
+sleep 1
+screenshot "success-menu-05-position-submenu"
+
+wtype -k Down -k Down -k Return
+''',
+    ),
     "test/acceptance.d/session-test.sh": (
         b'''# Root filesystem is btrfs as installed
 [[ $(findmnt -no FSTYPE /) == "btrfs" ]] || fail "root filesystem is btrfs"
@@ -56,6 +264,55 @@ bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helpe
 ''',
     ),
 }
+
+# The pinned default Apps action is omarchy-shell omarchy.dock apps;
+# AppGrid.qml names its overlay omarchy-dock-apps, not omarchy-menu.
+REPLACEMENTS["test/acceptance.d/shell-surfaces-test.sh"] = (
+    b'''# The menu's Apps submenu does the full launcher loop: open, search by
+# typing, launch the top hit.
+if window_present "(?i)omawrite" >/dev/null 2>&1; then
+  fail "app launch test starts with no Omawrite window" "an Omawrite window is already open"
+fi
+
+omarchy-menu summon apps >/dev/null
+wait_until "apps menu opens" 15 layer_on_overlay "omarchy-menu"
+sleep 1
+screenshot "success-apps-menu-open"
+
+wtype "omawrite"
+sleep 1
+screenshot "success-apps-menu-search"
+wtype -k Return
+
+wait_until "apps menu launches the top search hit" 60 window_present "(?i)omawrite"
+wait_until "apps menu closes after launching" 15 layer_absent "omarchy-menu"
+
+close_windows "(?i)omawrite"
+wait_until "Omawrite window closes" 30 window_absent "(?i)omawrite"
+''',
+    b'''# The pinned Apps action redirects to omarchy.dock's application grid.
+# Prove its specific overlay, search, top-hit launch and closure.
+if window_present "(?i)omawrite" >/dev/null 2>&1; then
+  fail "app launch test starts with no Omawrite window" "an Omawrite window is already open"
+fi
+
+omarchy-menu summon apps >/dev/null
+wait_until "apps menu opens" 15 layer_on_overlay "omarchy-dock-apps"
+sleep 1
+screenshot "success-apps-menu-open"
+
+wtype "omawrite"
+sleep 1
+screenshot "success-apps-menu-search"
+wtype -k Return
+
+wait_until "apps menu launches the top search hit" 60 window_present "(?i)omawrite"
+wait_until "apps menu closes after launching" 15 layer_absent "omarchy-dock-apps"
+
+close_windows "(?i)omawrite"
+wait_until "Omawrite window closes" 30 window_absent "(?i)omawrite"
+''',
+)
 
 
 def sha256(data):
@@ -110,7 +367,7 @@ def adapt(root, revision, artifacts):
         "schema": "omarchy-bootc.upstream-acceptance-adaptation/v1",
         "upstream_revision": revision,
         "status": "adapted-not-executed",
-        "scope": "root-filesystem-and-declared-kernel-only",
+        "scope": "root-filesystem-declared-kernel-menu-navigation-apps-grid-bar-reservations-and-ocr-evidence",
         "changes": changes,
         "helper": {"path": HELPER_PATH, "sha256": sha256(helper)},
         "patch": patch_name,
@@ -137,7 +394,7 @@ def main():
         receipt = adapt(args.upstream_root, args.revision, args.artifacts)
     except (OSError, ValueError) as error:
         parser.exit(1, f"acceptance adaptation refused: {error}\n")
-    print(f"Adapted exactly two assertions; patch {receipt['patch_sha256']}")
+    print(f"Adapted {len(receipt['changes'])} recorded spans; patch {receipt['patch_sha256']}")
 
 
 if __name__ == "__main__":

@@ -67,6 +67,8 @@ if (( EUID == 0 )); then
         target_gid="$(id -g nobody)"
         tmp="$(mktemp -d)"
         trap 'rm -rf -- "$tmp"' EXIT
+        # The helper owns receipts, not this root-owned fixture ancestor.
+        chmod 0711 "$tmp"
         install -d -m 0700 "$tmp/receipts/private"
         printf 'root serial receipt\n' >"$tmp/receipts/private/serial.log"
         chmod 0600 "$tmp/receipts/private/serial.log"

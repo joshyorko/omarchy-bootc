@@ -17,6 +17,15 @@ Password-required wheel administration is distinct from these bounded desktop
 operations. Final rejects acceptance credentials and unrestricted literal
 `NOPASSWD: ALL` grants, not every `NOPASSWD` tag.
 
+All three sudo-policy writers (foundation, update integration and disposable
+firstboot) create `/etc/sudoers.d` with mode `0750`, matching `omarchy-settings`
+and `asdcontrol`. Pacman preserves an existing directory's mode: creating it
+with `0755` in foundation caused assembly's strict payload audit to fail in
+Actions run `36440180513`. `tests/test-sudoers-directory-mode.sh` executes each
+writer's directory command against absent and existing directories and verifies
+that existing policy bytes and `0440` file permissions survive. The payload
+verifier still rejects unexpected permission drift.
+
 | Script | Effective purpose |
 |---|---|
 | `20-quattro.sh` | Install the official package, authoritative base manifest and required desktop PulseAudio compatibility; resolve the optional manifest |

@@ -1,0 +1,149 @@
+name: Dagger candidate parity
+on:
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        default: probe
+      candidate_run_id:
+        type: string
+        default: ''
+      candidate_source_head:
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [probe, build, accept]
+        default: probe
+      candidate_run_id:
+        description: Existing candidate run for accept mode
+        type: string
+      candidate_source_head:
+        description: Full immutable candidate source SHA for accept mode
+        type: string
+permissions:
+  contents: read
+jobs:
+  dagger:
+    if: inputs.mode != 'accept'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140
+        continue-on-error: true
+        with:
+          target-dir: /var/lib/containers
+          mount-opts: compress-force=zstd:2
+      - name: Prepare shared engine and immutable Git metadata
+        run: |
+          bash scripts/ci/dagger-engine.sh >> "$GITHUB_ENV"
+          git bundle create "$RUNNER_TEMP/source.bundle" HEAD
+      - name: Probe actual nested Podman and overlay cache
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: v0.20.6
+          call: nested-probe --git-bundle=${{ runner.temp }}/source.bundle --source-head=${{ github.sha }} --execution-id=${{ github.run_id }}-${{ github.run_attempt }} export --path=${{ runner.temp }}/probe
+      - name: Require successful nested probe
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: v0.20.6
+          call: check-result --status=${{ runner.temp }}/probe/exit-code
+      - name: Shared Dagger source contracts
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: v0.20.6
+          call: source-contracts --git-bundle=${{ runner.temp }}/source.bundle --source-head=${{ github.sha }} --execution-id=${{ github.run_id }}-${{ github.run_attempt }}-source export --path=${{ runner.temp }}/dagger-source
+      - name: Require successful source contracts
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: v0.20.6
+          call: check-result --status=${{ runner.temp }}/dagger-source/exit-code
+      - name: Build exact-head candidate through shared Dagger stages
+        if: inputs.mode == 'build'
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: v0.20.6
+          call: candidate-build --git-bundle=${{ runner.temp }}/source.bundle --source-head=${{ github.sha }} --execution-id=${{ github.run_id }}-${{ github.run_attempt }} export --path=${{ runner.temp }}/dagger-result
+      - name: Require successful candidate execution and identity import
+        if: inputs.mode == 'build'
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: v0.20.6
+          call: check-result --status=${{ runner.temp }}/dagger-result/exit-code
+      - name: Retain candidate for exact-identity runtime reuse
+        if: success() && inputs.mode == 'build'
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-bootc-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/dagger-result/final/*
+          compression-level: 0
+      - name: Retain all available diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dagger-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/probe
+            ${{ runner.temp }}/dagger-source
+            ${{ runner.temp }}/dagger-result/*.log
+            ${{ runner.temp }}/dagger-result/*.tsv
+            ${{ runner.temp }}/dagger-result/*.resources
+            ${{ runner.temp }}/dagger-result/exit-code
+            ${{ runner.temp }}/dagger-result/candidate/logs
+          if-no-files-found: warn
+  host-runtime:
+    if: inputs.mode == 'accept'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Validate immutable candidate reuse before download
+        env:
+          CANDIDATE_SOURCE_HEAD: ${{ inputs.candidate_source_head }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+        run: |
+          [[ "$CANDIDATE_RUN" =~ ^[0-9]+$ ]]
+          bash scripts/ci/verify-candidate-reuse.sh "$CANDIDATE_SOURCE_HEAD" HEAD
+      - uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140
+        continue-on-error: true
+        with:
+          target-dir: /var/lib/containers
+          mount-opts: compress-force=zstd:2
+      - name: Prepare Ubuntu host capabilities
+        run: bash scripts/ci/prepare-ubuntu-runner.sh
+      - name: Verify immutable Actions producer before privileged reuse
+        id: candidate_producer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCER_RUN: ${{ inputs.candidate_run_id }}
+          PRODUCER_HEAD: ${{ inputs.candidate_source_head }}
+        run: python3 scripts/ci/verify-candidate-producer.py "$PRODUCER_RUN" "$PRODUCER_HEAD" "$RUNNER_TEMP/runtime-receipts/actions-producer.json"
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.candidate_producer.outputs.artifact_id }}
+          merge-multiple: true
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/candidate
+      - name: Shared privileged host boundary
+        env:
+          CANDIDATE_SOURCE_HEAD: ${{ inputs.candidate_source_head }}
+          CI_ARTIFACT_DIR: ${{ runner.temp }}/runtime-receipts
+        run: bash scripts/ci/dagger-host-runtime.sh "$RUNNER_TEMP/candidate"
+      - name: Retain boot, PNG and lifecycle receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dagger-host-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runtime-receipts
+          if-no-files-found: warn

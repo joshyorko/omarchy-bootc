@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Called only at the two adapted upstream assertions. This is not a desktop-test runner.
+# Read-only proofs used by the bounded upstream acceptance adaptations.
 # Pinned bootc fa0d3f9c crates/initramfs/src/lib.rs mounts the root and sysroot clone
 # readonly. Its composefs-rs f720d6c7 crates/composefs/src/mount.rs creates overlay
-# source composefs:<SHA-512 hex>, metacopy=on, redirect_dir=on, without an upperdir.
+# source composefs:<SHA-512 hex>, without an upperdir. Kernel mount reporting
+# can expose verity=require instead of metacopy=on,redirect_dir=on.
 
 bootc_acceptance_fail() { printf 'not ok - bootc acceptance: %s\n' "$*" >&2; return 1; }
 
@@ -23,7 +24,8 @@ bootc_validate_root() {
       ($booted.image.imageDigest | test("^sha256:[0-9a-f]{64}$")) and
       ($roots[0] | .target == "/" and .fstype == "overlay" and readonly and
         .source == ("composefs:" + $booted.composefs.verity) and
-        (opts | index("metacopy=on") != null and index("redirect_dir=on") != null) and
+        (opts | index("verity=require") != null or
+          (index("metacopy=on") != null and index("redirect_dir=on") != null)) and
         (opts | all(.[]; (startswith("upperdir=") or startswith("workdir=")) | not))) and
       ($backings[0] | .target == "/sysroot" and .fstype == "btrfs" and readonly)
     ' "$root_json" "$backing_json" "$status_json" >/dev/null
@@ -54,6 +56,90 @@ bootc_kernel_headers_path_allowed() {
             ;;
         *) return 1 ;;
     esac
+}
+
+bootc_validate_bar() {
+    local monitors="$1" layers="$2" orientation="$3"
+    jq -e -s --arg orientation "$orientation" '
+      [.[0][] | select(.focused == true)] as $m |
+      ($m | length) == 1 and
+      ($m[0].reserved | type == "array" and length == 4 and all(.[]; type == "number" and . >= 0)) and
+      ([.[1][$m[0].name] | .. | objects | select(.namespace? == "omarchy-bar")] | length) > 0 and
+      ($m[0].reserved as $r |
+        if $orientation == "vertical" then $r[0] + $r[2] > 0 and $r[1] + $r[3] == 0
+        elif $orientation == "horizontal" then $r[1] + $r[3] > 0 and $r[0] + $r[2] == 0
+        else false end)
+    ' "$monitors" "$layers" >/dev/null
+}
+
+bootc_verify_bar() {
+    local artifacts="$1" orientation="$2"
+    # The transparent bar layer spans the whole screen in either orientation.
+    # Measure its compositor-reserved edge, not the full surface aspect ratio.
+    hyprctl -j monitors >"$artifacts/bar-$orientation-monitors.json" || return 1
+    hyprctl -j layers >"$artifacts/bar-$orientation-layers.json" || return 1
+    bootc_validate_bar "$artifacts/bar-$orientation-monitors.json" \
+        "$artifacts/bar-$orientation-layers.json" "$orientation"
+}
+
+# Pure parser for P2-01: extract measured omarchy-notifications layer bounds
+# for cropped grim/tesseract OCR without guessing hard-coded screen regions.
+bootc_notification_layer_geometry() {
+    local monitors="$1" layers="$2"
+    jq -er -s '
+      (.[0] | map(select(.focused == true))[0] // .[0][0]) as $focused |
+      if ($focused | type) != "object" or ($focused.name | type) != "string" then
+        error("no valid monitor")
+      else . end |
+      [.[1][$focused.name] | .. | objects |
+        select(.namespace? == "omarchy-notifications" and
+               (.x | type == "number") and (.y | type == "number") and
+               (.w | type == "number" and . > 0) and
+               (.h | type == "number" and . > 0))] as $hits |
+      if ($hits | length) < 1 then
+        error("no valid omarchy-notifications layer bounds")
+      else . end |
+      $hits[0] as $l |
+      ($focused.x // 0) as $mx | ($focused.y // 0) as $my |
+      (if ($l.x < $mx or $l.y < $my) then
+         {x: ($mx + $l.x), y: ($my + $l.y), w: $l.w, h: $l.h}
+       else
+         {x: $l.x, y: $l.y, w: $l.w, h: $l.h}
+       end) |
+      "\(.x | floor),\(.y | floor) \(.w | ceil)x\(.h | ceil)"
+    ' "$monitors" "$layers"
+}
+
+# Pure parser for P1-13: assert a single first character (never duplicated
+# e.g. kkeybindings) and an actual Keybindings menu match rather than No matches.
+bootc_validate_menu_search() {
+    local ocr_file="$1" query="$2" expected_item="$3"
+    local dup_first="${query:0:1}${query}"
+    [[ -s "$ocr_file" && -n "$query" && -n "$expected_item" ]] || return 1
+    if grep -Fiq -- "$dup_first" "$ocr_file"; then
+        return 1
+    fi
+    if grep -Fiq -- 'No matches' "$ocr_file"; then
+        return 1
+    fi
+    grep -Fq -- "$expected_item" "$ocr_file" || return 1
+    grep -Eq '(Learn|Setup)' "$ocr_file" || return 1
+}
+
+bootc_verify_menu_search() {
+    local artifacts="$1" monitor="$2" query="$3" expected_item="$4"
+    local snapshot="$artifacts/menu-search-${monitor}-$$.png"
+    local ocr="$artifacts/menu-search-${monitor}.txt"
+    local ocr_status=0
+    if ! timeout 10 grim -o "$monitor" -s 2 "$snapshot" 2>/dev/null; then
+        rm -f "$snapshot"
+        return 1
+    fi
+    tesseract "$snapshot" stdout --psm 11 >"$ocr" 2>/dev/null || ocr_status=$?
+    cp "$snapshot" "$artifacts/menu-search-${monitor}-latest.png" || true
+    rm -f "$snapshot"
+    ((ocr_status == 0)) || return "$ocr_status"
+    bootc_validate_menu_search "$ocr" "$query" "$expected_item"
 }
 
 bootc_verify_kernel() {
@@ -106,7 +192,11 @@ bootc_acceptance_main() {
     case "$mode" in
         root) bootc_verify_root "$artifacts" ;;
         kernel) bootc_verify_kernel "$artifacts" ;;
-        *) bootc_acceptance_fail 'usage: bootc-acceptance-helper.sh <root|kernel>' ;;
+        bar-vertical) bootc_verify_bar "$artifacts" vertical ;;
+        bar-horizontal) bootc_verify_bar "$artifacts" horizontal ;;
+        notification-bounds) bootc_notification_layer_geometry "${2:?}" "${3:?}" ;;
+        menu-search) bootc_verify_menu_search "$artifacts" "${2:?}" "${3:?}" "${4:?}" ;;
+        *) bootc_acceptance_fail 'usage: bootc-acceptance-helper.sh <root|kernel|bar-vertical|bar-horizontal|notification-bounds|menu-search>' ;;
     esac
 }
 

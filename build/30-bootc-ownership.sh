@@ -14,11 +14,40 @@ BOOTC_CONFLICTING_UNITS=(
 export OMARCHY_PATH=/usr/share/omarchy
 export OMARCHY_INSTALL=/usr/share/omarchy/install
 bash "${OMARCHY_INSTALL}/config/enable-services.sh"
+# NetworkManager owns desktop networking once enabled; remove Bootcrew's
+# wildcard Ethernet networkd profile and mask networkd to avoid dual ownership.
+[[ "$(systemctl is-enabled NetworkManager.service)" == enabled ]]
+for unit in systemd-networkd.service systemd-networkd.socket systemd-networkd-wait-online.service; do
+    systemctl disable "${unit}" >/dev/null 2>&1 || true
+    systemctl mask "${unit}"
+    [[ "$(systemctl is-enabled "${unit}")" == masked ]]
+done
+rm -f /usr/lib/systemd/network/20-wired.network
+[[ ! -e /usr/lib/systemd/network/20-wired.network ]]
 # Upstream writes UFW configuration and enables its unit without activating the
 # build host's firewall. Product policy keeps incoming SSH closed.
 grep -Fxq ENABLED=no /etc/ufw/ufw.conf
 bash "${OMARCHY_INSTALL}/config/firewall.sh"
 bash "${OMARCHY_INSTALL}/login/sddm.sh"
+
+# The base CUPS configuration grants wheel local peer-credential administration.
+# Apply the signed settings package's policy, as the Quattro installer does.
+[[ "$(pacman -Qqo /usr/share/omarchy/etc-overrides/cups-cups-files.conf)" == omarchy-settings ]]
+install -o root -g cups -m 0640 \
+    /usr/share/omarchy/etc-overrides/cups-cups-files.conf /etc/cups/cups-files.conf
+
+[[ "$(pacman -Qqo /usr/share/omarchy/shell/shell.qml)" == omarchy ]]
+python3 /ctx/build/patch-quattro-plugin-reload.py \
+    /usr/share/omarchy/shell/shell.qml \
+    /usr/share/omarchy-bootc/plugin-reload-patch.json
+[[ "$(pacman -Qqo /usr/bin/omarchy-plugin-clone)" == omarchy ]]
+python3 /ctx/build/patch-quattro-plugin-reload.py \
+    /usr/bin/omarchy-plugin-clone \
+    /usr/share/omarchy-bootc/plugin-clone-patch.json clone
+[[ "$(pacman -Qqo /usr/share/omarchy/shell/plugins/menu/Menu.qml)" == omarchy ]]
+python3 /ctx/build/patch-quattro-plugin-reload.py \
+    /usr/share/omarchy/shell/plugins/menu/Menu.qml \
+    /usr/share/omarchy-bootc/menu-focus-patch.json menu
 
 for unit in "${BOOTC_CONFLICTING_UNITS[@]}"; do
     systemctl disable "${unit}" >/dev/null 2>&1 || true

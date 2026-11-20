@@ -10,9 +10,15 @@ require_executable() {
     [[ -f "$1" && -x "$1" ]] || fail "missing executable: $1"
 }
 
+require_cups_policy() {
+    local root="${1:-}"
+    sudo -n cmp -s "$root/usr/share/omarchy/etc-overrides/cups-cups-files.conf" \
+        "$root/etc/cups/cups-files.conf" || fail 'CUPS authorization differs from package-owned Quattro policy'
+}
+
 require_scoped_sudo_command() {
     local command="$1" sudoers_dir="${2:-/etc/sudoers.d}"
-    grep -R -F -xq -- "%wheel ALL=(root) NOPASSWD: ${command} \"\"" "$sudoers_dir" \
+    sudo -n grep -R -F -xq -- "%wheel ALL=(root) NOPASSWD: ${command} \"\"" "$sudoers_dir" \
         || fail "missing scoped sudo command: ${command}"
 }
 
@@ -93,6 +99,11 @@ require_desktop_services() {
         [[ "$state" == enabled ]] || fail "required service is not enabled: $unit ($state)"
     done
     grep -Fxq ENABLED=yes "$root/etc/ufw/ufw.conf" || fail 'UFW configuration is not enabled'
+    [[ ! -e "$root/usr/lib/systemd/network/20-wired.network" ]] \
+        || fail 'wildcard networkd Ethernet rule conflicts with NetworkManager'
+    if [[ "$(systemctl --root="${root:-/}" is-enabled systemd-networkd.service 2>/dev/null || true)" == enabled ]]; then
+        fail 'systemd-networkd.service conflicts with NetworkManager'
+    fi
     [[ -s "$root/usr/lib/systemd/user/pipewire-pulse.service" ]] || fail 'missing pipewire-pulse user service'
     [[ "$(pacman -Qqo "$root/usr/lib/systemd/user/pipewire-pulse.service")" == pipewire-pulse ]] \
         || fail 'pipewire-pulse user service is not package-owned'
@@ -112,8 +123,8 @@ main() {
     # Product update + firstboot + guest-native + remote vm-smoke commands.
     # Host QEMU/podman/SSH transport dependencies belong to the VM harness.
     for command_name in \
-        bash sh env sudo visudo bootc skopeo jq flock getent install dirname id cut \
-        mktemp rm cat sed readlink grep stat sha256sum \
+        bash sh env sudo visudo bootc skopeo cosign jq flock getent install dirname id cut \
+        mktemp rm cat sed readlink grep stat sha256sum python3 \
         groupadd useradd chpasswd runuser chown chmod cp touch \
         git pacman pacman-conf journalctl systemctl systemd-cat busctl \
         timeout logger pgrep find sort head tail awk xargs cmp mkdir mv date \
@@ -145,6 +156,7 @@ main() {
     for path in \
         /usr/bin/true /usr/bin/test \
         /usr/lib/omarchy-bootc/update-common.sh \
+        /usr/lib/omarchy/omarchy-adoption-filesystem.py \
         /usr/lib/omarchy-bootc/omarchy-bootc-update \
         /usr/lib/omarchy-bootc/omarchy-bootc-update-available \
         /usr/lib/omarchy-bootc/omarchy-wrapper \
@@ -237,6 +249,7 @@ main() {
         /usr/share/wayland-sessions/omarchy.desktop || fail 'session projection differs from upstream'
     require_kernel_headers /usr/share/omarchy-bootc/kernel-package /usr/lib/modules
     require_desktop_services /
+    require_cups_policy /
     perl -MEncode -MJSON::PP -e 1 || fail 'clipboard Perl modules missing'
 
     # These help probes execute the actual pinned binary without staging an
@@ -244,11 +257,15 @@ main() {
     bootc --version
     sudo --version >/dev/null
     require_bootc_options status '' --format
-    require_bootc_options upgrade '' --check
+    require_bootc_options upgrade '' --check --download-only --from-downloaded
     require_bootc_options switch '' --transport
     require_bootc_options rollback ''
     require_bootc_options install to-disk --source-imgref --target-imgref \
         --target-transport --composefs-backend --via-loopback --filesystem --wipe --bootloader
+    jq -e '.default == [{"type":"reject"}]' /etc/containers/policy.json >/dev/null \
+        || fail 'container signature policy is missing fail-closed default'
+    grep -Fq 'use-sigstore-attachments: true' /etc/containers/registries.d/omarchy-bootc.yaml \
+        || fail 'sigstore attachment discovery is not configured for omarchy-bootc'
     getent group wheel >/dev/null || fail 'wheel group is missing'
 
     if [[ "$phase" == guest ]]; then

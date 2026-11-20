@@ -47,6 +47,11 @@ status_field() {
           if .status.booted == null then error("missing booted BootEntry") else digest(.status.booted) end
         elif $key == "staged" or $key == "rollback" then
           if .status[$key] == null then "" else digest(.status[$key]) end
+        elif $key == "staged_download_only" then
+          if .status.staged == null then ""
+          elif (.status.staged|has("downloadOnly")|not) or .status.staged.downloadOnly == null then "false"
+          elif (.status.staged.downloadOnly|type) == "boolean" then (.status.staged.downloadOnly|tostring)
+          else error("invalid staged downloadOnly flag") end
         elif $key == "cached" then
           if .status.booted == null then ""
           elif (.status.booted|type) != "object" then error("invalid booted BootEntry")
@@ -67,6 +72,7 @@ status_field() {
 
 status_booted_digest() { status_field booted; }
 status_staged_digest() { status_field staged; }
+status_staged_download_only() { status_field staged_download_only; }
 status_rollback_digest() { status_field rollback; }
 status_cached_digest() { status_field cached; }
 status_tracking_ref() { status_field tracking; }
@@ -107,10 +113,11 @@ status_resolved_digest() (
 )
 
 status_candidate_digest() {
-    local booted staged candidate
+    local booted staged staged_dl_only candidate
     booted="$(status_booted_digest)" || return
     staged="$(status_staged_digest)" || return
-    if [[ -n "$staged" && "$staged" != "$booted" ]]; then
+    staged_dl_only="$(status_staged_download_only)" || return
+    if [[ -n "$staged" && "$staged" != "$booted" && "$staged_dl_only" == false ]]; then
         printf '%s\n' "$staged"
         return 0
     fi

@@ -4,20 +4,46 @@ on:
   pull_request:
     branches:
       - main
+      - feat/quattro-daily-driver
   workflow_dispatch:
+    inputs:
+      validation_only:
+        description: 'Run shared Dagger source/nesting checks without building or booting a candidate'
+        type: boolean
+        default: false
+      candidate_run_id:
+        description: 'Existing candidate workflow run (empty builds a new candidate)'
+        type: string
+        default: ''
+      candidate_source_head:
+        description: 'Full source SHA of the existing candidate (harness-only differences allowed)'
+        type: string
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  validation:
+    name: Dagger source and nesting validation only
+    if: ${{ inputs.validation_only }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/dagger-parity.yml
+    with:
+      mode: probe
+
   candidate:
     name: Build exact-head candidate
+    if: ${{ !inputs.validation_only && !inputs.candidate_run_id }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:
       contents: read
     env:
+      BOOTCREW_IMAGE_REF: localhost/omarchy-bootc:bootcrew-system
       FOUNDATION_IMAGE_REF: localhost/omarchy-bootc:foundation
       ASSEMBLY_IMAGE_REF: localhost/omarchy-bootc:assembly
       INTEGRATION_IMAGE_REF: localhost/omarchy-bootc:integration
@@ -27,7 +53,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Validate source contracts
         run: |
@@ -58,6 +84,28 @@ jobs:
           target-dir: /var/lib/containers
           mount-opts: compress-force=zstd:2
 
+      - name: Prepare Dagger source-contract execution
+        run: |
+          bash scripts/ci/dagger-engine.sh >> "$GITHUB_ENV"
+          git bundle create "$RUNNER_TEMP/source.bundle" HEAD
+      - name: Dagger source contracts (migration parity)
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: v0.20.6
+          call: source-contracts --git-bundle=${{ runner.temp }}/source.bundle --source-head=${{ github.event.pull_request.head.sha || github.sha }} --execution-id=${{ github.run_id }}-${{ github.run_attempt }} export --path=${{ runner.temp }}/dagger-source
+      - name: Require Dagger source-contract success
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: v0.20.6
+          call: check-result --status=${{ runner.temp }}/dagger-source/exit-code
+      - name: Retain Dagger source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dagger-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dagger-source
+          if-no-files-found: warn
+
       - name: Probe runner and rootful Podman
         env:
           CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
@@ -67,53 +115,50 @@ jobs:
       - name: Check the published optional package graph before compiling bootc
         run: timeout --signal=TERM --kill-after=30s 5m ./scripts/ci/candidate-build.sh packages
 
-      - name: Build and export immutable bootc foundation
+      - name: Build and verify bootcrew-system and foundation sibling
         env:
           CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
         run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh foundation
 
-      - name: Upload immutable foundation handoff
+      - name: Upload foundation verification sibling receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: omarchy-bootc-foundation-${{ github.event.pull_request.head.sha || github.sha }}
+          name: omarchy-bootc-foundation-receipt-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
-            ${{ runner.temp }}/omarchy-bootc-candidate/*foundation*
+            ${{ runner.temp }}/omarchy-bootc-candidate/*foundation*.receipt.json
           if-no-files-found: warn
-          compression-level: 0
-          retention-days: 30
+          retention-days: 7
 
-      - name: Build and export Omarchy package assembly
+      - name: Build and verify Omarchy package assembly
         env:
           CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
         run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh assembly
 
-      - name: Upload immutable assembly handoff
+      - name: Upload assembly receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: omarchy-bootc-assembly-${{ github.event.pull_request.head.sha || github.sha }}
+          name: omarchy-bootc-assembly-receipt-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
-            ${{ runner.temp }}/omarchy-bootc-candidate/*assembly*
+            ${{ runner.temp }}/omarchy-bootc-candidate/*assembly*.receipt.json
           if-no-files-found: warn
-          compression-level: 0
-          retention-days: 30
+          retention-days: 7
 
-      - name: Build and export integration layer
+      - name: Build and verify integration layer
         env:
           CANDIDATE_ARTIFACT_DIR: ${{ runner.temp }}/omarchy-bootc-candidate
         run: timeout --signal=TERM --kill-after=60s 60m ./scripts/ci/candidate-build.sh integration
 
-      - name: Upload immutable integration handoff
+      - name: Upload integration receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: omarchy-bootc-integration-${{ github.event.pull_request.head.sha || github.sha }}
+          name: omarchy-bootc-integration-receipt-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
-            ${{ runner.temp }}/omarchy-bootc-candidate/*integration*
+            ${{ runner.temp }}/omarchy-bootc-candidate/*integration*.receipt.json
           if-no-files-found: warn
-          compression-level: 0
-          retention-days: 30
+          retention-days: 7
 
       - name: Build, lint, and export candidate
         env:
@@ -142,43 +187,126 @@ jobs:
           compression-level: 0
           retention-days: 7
 
+  runtime-pending:
+    name: Report pending runtime acceptance
+    needs: candidate
+    if: ${{ always() && !inputs.validation_only && (needs.candidate.result == 'success' || (needs.candidate.result == 'skipped' && inputs.candidate_run_id != '')) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+    steps:
+      - name: Expose runtime acceptance on the PR head
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$STATUS_SHA" \
+            -f state=pending -f context='Quattro runtime acceptance' \
+            -f description='Hosted runtime acceptance is running' \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
   runtime:
     name: Boot the accepted candidate with a disposable acceptance overlay
-    needs: candidate
+    needs: [candidate, runtime-pending]
+    if: ${{ always() && !inputs.validation_only && (needs.candidate.result == 'success' || (needs.candidate.result == 'skipped' && inputs.candidate_run_id != '')) }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     permissions:
       contents: read
+      actions: read
+    env:
+      CANDIDATE_SOURCE_HEAD: ${{ inputs.candidate_source_head || github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact pull request head
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Validate harness and reused candidate source
+        run: |
+          set -euo pipefail
+          echo "CI_ARTIFACT_DIR=${RUNNER_TEMP}/runtime-receipts" >> "$GITHUB_ENV"
+          git fetch --depth=1 origin "$CANDIDATE_SOURCE_HEAD"
+          bash scripts/ci/verify-candidate-reuse.sh "$CANDIDATE_SOURCE_HEAD" HEAD
+          bash tests/test-candidate-reuse.sh
+          bash tests/test-acceptance-overlay.sh
+          bash tests/test-sddm-capture.sh
+          bash tests/test-runtime-acceptance-contract.sh
+          bash tests/test-upstream-acceptance-adapter.sh
+          bash tests/test-plugin-reload-patch.sh
+          bash -n scripts/ci/candidate-runtime.sh
+          shellcheck scripts/ci/candidate-runtime.sh scripts/ci/verify-candidate-reuse.sh
       - name: Prepare storage for the archive, imported image, and VM disk
         uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140 # main
         continue-on-error: true
         with:
           target-dir: /var/lib/containers
           mount-opts: compress-force=zstd:2
+      - name: Verify immutable Actions producer before privileged reuse
+        id: candidate_producer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCER_RUN: ${{ inputs.candidate_run_id || github.run_id }}
+        run: python3 scripts/ci/verify-candidate-producer.py "$PRODUCER_RUN" "$CANDIDATE_SOURCE_HEAD" "$RUNNER_TEMP/runtime-receipts/actions-producer.json"
       - name: Download the one built candidate
         uses: actions/download-artifact@v4
         with:
-          name: omarchy-bootc-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          artifact-ids: ${{ steps.candidate_producer.outputs.artifact_id }}
+          merge-multiple: true
+          run-id: ${{ inputs.candidate_run_id || github.run_id }}
+          github-token: ${{ github.token }}
           path: ${{ runner.temp }}/candidate
       - name: Install hosted VM dependencies
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ovmf qemu-system-x86 qemu-utils sshpass skopeo
-      - name: Verify artifact identity and boot
-        env:
-          CI_ARTIFACT_DIR: ${{ runner.temp }}/runtime-receipts
-        run: bash scripts/ci/candidate-runtime.sh "$RUNNER_TEMP/candidate"
+          set -euo pipefail
+          apt_options=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
+          # QEMU runs with -display none; avoid optional GUI/Mesa downloads.
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends ovmf qemu-system-x86 qemu-utils sshpass skopeo
+      - name: Verify archive identity and import candidate
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          mkdir -p "$CI_ARTIFACT_DIR"
+          df -h > "$CI_ARTIFACT_DIR/host-disk-before.txt"
+          free -h > "$CI_ARTIFACT_DIR/host-memory-before.txt"
+          bash -x scripts/ci/candidate-runtime.sh "$RUNNER_TEMP/candidate" import 2>&1 | tee "$CI_ARTIFACT_DIR/import.log"
+      - name: Retain import evidence before overlay
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-import-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runtime-receipts
+          if-no-files-found: warn
+      - name: Build and check disposable overlay
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          bash -x scripts/ci/candidate-runtime.sh "$RUNNER_TEMP/candidate" overlay 2>&1 | tee "$CI_ARTIFACT_DIR/overlay.log"
+      - name: Retain overlay evidence before VM
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-overlay-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runtime-receipts
+          if-no-files-found: warn
+      - name: Install boot and exercise candidate
+        timeout-minutes: 155
+        run: |
+          set -euo pipefail
+          bash -x scripts/ci/candidate-runtime.sh "$RUNNER_TEMP/candidate" boot 2>&1 | tee "$CI_ARTIFACT_DIR/boot.log"
       - name: Upload runtime receipts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: omarchy-bootc-runtime-${{ github.event.pull_request.head.sha || github.sha }}
-          path: ${{ runner.temp }}/runtime-receipts
+          path: |
+            ${{ runner.temp }}/runtime-receipts
+            !${{ runner.temp }}/runtime-receipts/**/*.raw
+            !${{ runner.temp }}/runtime-receipts/**/*.qcow2
+            !${{ runner.temp }}/runtime-receipts/**/*.img
+            !${{ runner.temp }}/runtime-receipts/**/*.oci.tar
           retention-days: 7
           if-no-files-found: warn
 
@@ -190,3 +318,27 @@ jobs:
           path: ${{ runner.temp }}/runtime-receipts/accepted-candidate.receipt.json
           retention-days: 90
           if-no-files-found: error
+
+  runtime-status:
+    name: Report runtime acceptance to PR watcher
+    needs: runtime
+    if: ${{ always() && !inputs.validation_only && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+    steps:
+      - name: Publish terminal runtime result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUNTIME_RESULT: ${{ needs.runtime.result }}
+        run: |
+          case "$RUNTIME_RESULT" in
+            success) state=success ;;
+            failure) state=failure ;;
+            *) state=error ;;
+          esac
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$STATUS_SHA" \
+            -f state="$state" -f context='Quattro runtime acceptance' \
+            -f description="Hosted runtime acceptance: $RUNTIME_RESULT" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

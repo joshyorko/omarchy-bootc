@@ -12,8 +12,8 @@ ARG SELINUX_LIBSELINUX_SHA256="73d419c6e20e874adaa4019372cbd097eecf4d276e13f27ec
 ARG COREUTILS_VERSION="9.11"
 ARG COREUTILS_SHA256="394024eda0a5955217ceda9cd1201e65dc8fa3aa29c2951135a49521d57c3cc3"
 ARG COREUTILS_SOURCE_URL="https://github.com/coreutils/coreutils/releases/download/v9.11/coreutils-9.11.tar.xz"
-ARG OMARCHY_QUATTRO_REVISION="c668141e9c42b13c80c9ca4ea108e11708c5e8a5"
-ARG OMARCHY_VERSION="4.0.4-1"
+ARG OMARCHY_QUATTRO_REVISION="ac2690cd7be4f47e4a255f5e2e78d904d436b068"
+ARG OMARCHY_VERSION="4.5.0-3"
 
 
 # Current Arch is only a disposable pacstrap tool. No package from this image
@@ -60,15 +60,19 @@ RUN --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \
         -Sy base pacman-mirrorlist && \
     install -D -m 0644 \
         /tmp/stable-pacman.conf \
-        /stable-root/etc/pacman.conf
+        /stable-root/etc/pacman.conf && \
+    rm -rf /stable-root/etc/pacman.d/gnupg
 
 # The final Arch root begins empty and is populated only by Omarchy stable.
 FROM scratch AS stable-base
 COPY --from=stable-bootstrap /stable-root /
-RUN systemd-sysusers && \
+COPY build/pacman-public-keyring.sh /usr/lib/omarchy-bootc/pacman-public-keyring.sh
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
+    systemd-sysusers && \
     update-ca-trust && \
-    pacman-key --init && \
-    pacman-key --populate archlinux
+    bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh init && \
+    bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh export
+RUN bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh restore
 
 FROM scratch AS bootcrew-ctx
 COPY vendor/bootcrew /
@@ -82,7 +86,8 @@ ARG SELINUX_LIBSELINUX_SHA256
 ARG COREUTILS_VERSION
 ARG COREUTILS_SHA256
 ARG COREUTILS_SOURCE_URL
-RUN pacman -Syu --noconfirm curl flex clang gcc gperf python make git diffutils inetutils rust go-md2man ostree glibc pkgconf pcre2 && \
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh init && \
+    pacman -Syu --noconfirm curl flex clang gcc gperf python make git diffutils inetutils rust go-md2man ostree glibc pkgconf pcre2 && \
     workdir="$(mktemp -d)" && \
     curl --fail --location --retry 3 --retry-delay 2 \
         "https://github.com/SELinuxProject/selinux/releases/download/${SELINUX_USERSPACE_VERSION}/libsepol-${SELINUX_USERSPACE_VERSION}.tar.gz" \
@@ -142,7 +147,10 @@ COPY --from=bootc-builder /output /
 RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | xargs -n1 sh -c 'mkdir -p "/usr/lib/sysimage/$(dirname $(echo $1 | sed "s@/var/@@"))" && mv -v "$1" "/usr/lib/sysimage/$(echo "$1" | sed "s@/var/@@")"' '' && \
     sed -i -e "/= *\/var/ s/^#//" -e "s@= */var@= /usr/lib/sysimage@g" -e "/DownloadUser/d" /etc/pacman.conf
 
-RUN pacman -Syu --noconfirm
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh init && \
+    pacman -Syu --noconfirm && \
+    bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh export
+RUN bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh restore
 
 RUN pacman -Sy --noconfirm \
         base bubblewrap dracut linux linux-headers linux-firmware ostree btrfs-progs \
@@ -155,7 +163,7 @@ RUN pacman -Sy --noconfirm \
 RUN getent group wheel >/dev/null || groupadd wheel
 
 # Product updates elevate through sudo; only disposable acceptance uses NOPASSWD.
-RUN install -d -m 0755 /etc/sudoers.d && \
+RUN install -d -m 0750 /etc/sudoers.d && \
     printf '%s\n' '%wheel ALL=(ALL:ALL) PASSWD: ALL' \
         > /etc/sudoers.d/10-omarchy-wheel && \
     chmod 0440 /etc/sudoers.d/10-omarchy-wheel && \
@@ -207,8 +215,14 @@ RUN --mount=type=bind,from=bootcrew-ctx,source=/,target=/ctx \
     install -d -m 0755 /usr/share/omarchy-bootc && \
     pacman -Q > /usr/share/omarchy-bootc/bootcrew-stable-package-manifest.txt && \
     pacman -Qi > /usr/share/omarchy-bootc/bootcrew-stable-package-provenance.txt && \
-    find /var/lib/pacman/sync -maxdepth 1 -type f -name '*.db*' -print0 | sort -z | \
+    db_path="$(pacman-conf DBPath)" && \
+    test -n "${db_path}" && \
+    test -d "${db_path}/sync" && \
+    find "${db_path}/sync" -maxdepth 1 -type f -name '*.db*' -print0 | sort -z | \
         xargs -0 -r sha256sum > /usr/share/omarchy-bootc/bootcrew-repository-database-sha256sums.txt && \
+    test -s /usr/share/omarchy-bootc/bootcrew-repository-database-sha256sums.txt && \
+    grep -Eq '/core\.db$' /usr/share/omarchy-bootc/bootcrew-repository-database-sha256sums.txt && \
+    grep -Eq '/extra\.db$' /usr/share/omarchy-bootc/bootcrew-repository-database-sha256sums.txt && \
     test -z "$(pacman -Qu)"
 
 LABEL org.opencontainers.image.bootcrew.revision="${BOOTCREW_MONO_REVISION}"
@@ -239,6 +253,7 @@ COPY build/verify-quattro-payload.sh /build/verify-quattro-payload.sh
 
 FROM scratch AS boot-ownership-ctx
 COPY build/30-bootc-ownership.sh /build/30-bootc-ownership.sh
+COPY build/patch-quattro-plugin-reload.py /build/patch-quattro-plugin-reload.py
 COPY build/bootc-disabled-hooks.txt /build/bootc-disabled-hooks.txt
 COPY build/lib/bootc-initramfs.sh /build/lib/bootc-initramfs.sh
 
@@ -257,6 +272,7 @@ COPY build/verify-publishable-image.sh /build/verify-publishable-image.sh
 
 FROM scratch AS adoption-ctx
 COPY custom/first-boot/omarchy-adopt-existing-user.sh /custom/first-boot/omarchy-adopt-existing-user.sh
+COPY custom/first-boot/omarchy-adoption-filesystem.py /custom/first-boot/omarchy-adoption-filesystem.py
 COPY custom/first-boot/omarchy-adoption-rollback.sh /custom/first-boot/omarchy-adoption-rollback.sh
 COPY systemd/system/omarchy-adopt-existing-user.service /systemd/system/omarchy-adopt-existing-user.service
 
@@ -265,10 +281,12 @@ COPY transition/omarchy-transition.sh /transition/omarchy-transition.sh
 
 FROM bootcrew-system AS quattro-assembly
 
-RUN --mount=type=bind,from=install-ctx,source=/,target=/ctx \
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg --mount=type=bind,from=install-ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/usr/lib/sysimage/cache/pacman/pkg,sharing=locked \
     --mount=type=tmpfs,dst=/tmp \
-    bash /ctx/build/20-quattro.sh
+    bash /ctx/build/20-quattro.sh && \
+    bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh export
+RUN bash /usr/lib/omarchy-bootc/pacman-public-keyring.sh restore
 
 RUN --mount=type=bind,from=provenance-ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/tmp \
@@ -285,6 +303,9 @@ RUN --mount=type=bind,from=adoption-ctx,source=/,target=/ctx \
     install -D -m 0755 \
         /ctx/custom/first-boot/omarchy-adopt-existing-user.sh \
         /usr/lib/omarchy/omarchy-adopt-existing-user.sh && \
+    install -D -m 0755 \
+        /ctx/custom/first-boot/omarchy-adoption-filesystem.py \
+        /usr/lib/omarchy/omarchy-adoption-filesystem.py && \
     install -D -m 0644 \
         /ctx/systemd/system/omarchy-adopt-existing-user.service \
         /usr/lib/systemd/system/omarchy-adopt-existing-user.service && \

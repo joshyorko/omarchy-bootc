@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OMARCHY_VERSION="${OMARCHY_VERSION:-4.0.4-1}"
+OMARCHY_VERSION="${OMARCHY_VERSION:-4.5.0-3}"
 PROVENANCE_DIR="/usr/share/omarchy-bootc"
 PROVENANCE_REPORT="${PROVENANCE_DIR}/package-provenance.txt"
 
 declare -A EXPECTED_OWNERS=(
+    [/opt/superwhisper/VERSION]=superwhisper-bin
     [/usr/bin/omarchy]=omarchy
     [/usr/bin/omarchy-menu]=omarchy
     [/usr/bin/omarchy-theme-list]=omarchy
@@ -48,10 +49,12 @@ for path in "${!EXPECTED_OWNERS[@]}"; do
     printf '%s -> %s\n' "${path}" "${actual_owner}" >>"${PROVENANCE_REPORT}"
 done
 
-printf '\nbootc projection exception: %s -> %s (byte-identical)\n' \
-    "${canonical_session}" "${projected_session}" >>"${PROVENANCE_REPORT}"
-
-pacman -Qkk omarchy >>"${PROVENANCE_REPORT}"
+{
+    printf '\nbootc projection exception: %s -> %s (byte-identical)\n' \
+        "${canonical_session}" "${projected_session}"
+    pacman -Qkk omarchy
+    pacman -Qkk superwhisper-bin
+} >>"${PROVENANCE_REPORT}"
 settings_audit="$(pacman -Qkk omarchy-settings 2>&1 || true)"
 printf '%s\n' "${settings_audit}" >>"${PROVENANCE_REPORT}"
 unexpected_drift="$(printf '%s\n' "${settings_audit}" \

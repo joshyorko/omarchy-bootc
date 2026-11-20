@@ -17,6 +17,22 @@ on:
   workflow_dispatch:
 
 jobs:
+  adoption-filesystem:
+    name: Root adoption filesystem confinement
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Real root filesystem races, ownership and adoption retry fixtures
+        run: |
+          sudo -n env PYTHONDONTWRITEBYTECODE=1 bash tests/test-adoption-filesystem.sh
+          sudo -n env PYTHONDONTWRITEBYTECODE=1 bash tests/test-adoption-resume.sh
+
   shellcheck:
     name: shellcheck
     runs-on: ubuntu-24.04

@@ -1,6 +1,6 @@
 # Technical status: Omarchy Quattro bootc
 
-_Last updated: 2026-09-28_
+_Last updated: 2026-11-18_
 
 ## Architecture of record
 
@@ -15,14 +15,66 @@ The final image is an Omarchy-stable empty-root build. A digest-pinned current A
 
 Bootcrew's published Arch image is not the final base and is not package authority. Bootcrew mono commit `5f048fa65a94daefc814d3cdd941d8d1e113c09e` is the source reference for pacman relocation, dracut, composefs, `/usr`/`/var`, tmpfiles, and bootc filesystem construction. Bootc is built from exact commit `fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60`; an unpinned clone is forbidden.
 
-The frozen Omarchy package set is stable `4.0.4-1`, paired with upstream Omarchy tag commit `c668141e9c42b13c80c9ca4ea108e11708c5e8a5` and Omarchy ISO Quattro commit `86c07785cb0f63be78edb1349843d5817b5c0e66`. The moving Omarchy Quattro head is tracked as drift only. Images record exact installed package versions, package repository fields, repository database checksums, and repository configuration. Stable core repositories use the Omarchy stable mirror only; missing packages fail resolution instead of falling through to rolling Arch mirrors. Omarchy packages require signatures from the pinned `40DFB630FF42BCFFB047046CF0134EE680CAC571` key.
+The acceptance target is latest stable Quattro RS `4.5.0-3`, upstream tag
+`v4.5.0` at commit `ac2690cd7be4f47e4a255f5e2e78d904d436b068`.
+The observed Quattro branch head `33e9f56c6d71a62bff6fdfbdf6dd3288b3ac46e5`
+is distinct from that published release; it is not claimed as the package source.
+The OS test fixture's upstream ISO reference is
+`2d0b3ecdec2dd40c82cb8c3d6034b2ac5ab3ae92`; downstream Dudley remains separate.
+Both official package archives were authenticated against pinned signer
+`40DFB630FF42BCFFB047046CF0134EE680CAC571` before recording their SHA-256 pins.
+The packaged version file, base and optional manifests, and `omarchy-version`
+were compared byte-for-byte against that release commit. This is bounded payload
+correspondence, not a claim to have reproduced the publisher's build.
+
+The earlier `4.0.4-1` work remains diagnostic history. Candidate run `44307915565`
+failed before foundation because the mutable index served `4.5.0-3` instead.
+The shared archive helper now selects the authenticated target pair explicitly;
+there is no latest-version fallback. The wider dependency closure still uses
+live Omarchy stable databases. Two pinned archives do not imply a fully frozen
+closure, reproducible image, or proven runtime compatibility.
+
+## Upgrade and visual acceptance gap
+
+The 4.5 optional manifest includes `asus-proart-p14-speaker-firmware`, but
+upstream packaging commit `b8130965da4c88f94a836d2f647517466e90201e` renamed it
+to `asus-proart-p14-audio` with `arch=('aarch64')`, providing/replacing the old
+name for NVIDIA N1x hardware. On x86_64 only, an exact target-not-found result
+is recorded as `not-applicable-architecture`, never `resolvable` or a hardware
+test PASS. Native ARM resolution and unrelated failures remain fatal. The
+package-owned manifest stays intact; no repository or replacement is injected.
+Candidate run `44314946741` exposed this mismatch before foundation. Its signed
+4.5 package verification passed; no image lint or installed-OS evidence ran.
+
+The 4.5 suite retains every upstream file and adds real input-method/composition
+and monitor-overlay tests. Only the existing root-filesystem and declared-kernel
+assertions are adapted. The complete original suite is checksum guarded at the
+new release commit; neither new test is waived. Optional upstream security
+subchecks may still report skips and must not be promoted to PASS.
+
+The VM harness captures the actual QEMU display over a private QMP Unix socket:
+first boot, SDDM greeter with fixture autologin disabled, staged update, rebooted
+B and rollback A. Native captures show a real terminal with version, package,
+bootc, plugin and OMP selection data. Upstream menu/app/theme PNGs and native
+PNGs are copied directly into runtime artifacts as well as retained in receipt
+archives. These capture points are not evidence until the built candidate boots
+and the corresponding images are inspected. The terminal uses a controlled OMP
+launcher recorder; it does not prove a provider call.
+
+Local capability probe: QEMU, qemu-img and virsh exist; virt-manager and
+`/dev/kvm` are absent. Libvirt session access fails because its cache path is
+read-only. A bounded diskless QEMU/TCG run verified PNG capture only. Expensive
+OS acceptance remains hosted. The existing direct-to-disk smoke is not a GUI
+installer: installer first screen/disk/progress/completion and Gate 6 remain
+BLOCKED until an accepted exact image is available to downstream Dudley ISO.
+No upstream ISO or stock qcow2 screenshot may stand in for our bootc evidence.
 
 ## Implemented in the current branch
 
 - Official stable repository topology for `core`, `extra`, `multilib`, and `omarchy`.
 - Empty-root base package resolution; no inherited rolling Bootcrew package state and no bulk downgrade.
 - Recorded Bootcrew and bootc source URLs, revisions, vendored checksums, OCI labels, and in-image revision files.
-- Official `omarchy-keyring`, `omarchy-settings=4.0.4-1`, `omarchy=4.0.4-1`, and the current Quattro `omarchy-base.packages` closure at revision `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`.
+- Official `omarchy-keyring`, `omarchy-settings=4.5.0-3`, `omarchy=4.5.0-3`, and the current Quattro `omarchy-base.packages` closure at revision `ac2690cd7be4f47e4a255f5e2e78d904d436b068`.
 - Dependency-resolution report for `omarchy-other.packages` without installing mutually exclusive hardware stacks.
 - Complete optional dependency resolution using the pinned official ISO's `arch-mact2` repository only in a temporary resolver config; the four-repository foundation remains unchanged.
 - The current `arch-mact2` index omits `apple-bcm-firmware` still required by Omarchy. Resolve the checksum-pinned native `14.0-1` archive from that same configured mirror with `pacman -Up`, recording `resolvable-archive`, URL and checksum distinctly from indexed resolution. No extra repository is added, no hardware package is installed into the base, and the incompatible macOS-volume firmware fetcher is not substituted.

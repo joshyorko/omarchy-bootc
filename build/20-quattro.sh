@@ -7,8 +7,8 @@ trap 'status=$?; printf "Quattro assembly failed (status %s, phase %s, line %s):
 # shellcheck disable=SC1091
 source /ctx/build/lib/quattro-packages.sh
 
-OMARCHY_VERSION="${OMARCHY_VERSION:-4.0.4-1}"
-OMARCHY_QUATTRO_REVISION="${OMARCHY_QUATTRO_REVISION:-c668141e9c42b13c80c9ca4ea108e11708c5e8a5}"
+OMARCHY_VERSION="${OMARCHY_VERSION:-4.5.0-3}"
+OMARCHY_QUATTRO_REVISION="${OMARCHY_QUATTRO_REVISION:-ac2690cd7be4f47e4a255f5e2e78d904d436b068}"
 OMARCHY_SOURCE="/ctx/sources/omarchy-quattro.source"
 OMARCHY_REVISION_FILE="/ctx/sources/omarchy-quattro.revision"
 OMARCHY_VERSION_FILE="/ctx/sources/omarchy-quattro-version"
@@ -47,6 +47,10 @@ done <"${HOOK_INVENTORY}"
 sed -i "/^\[options\]$/a HookDir = ${BOOTC_HOOK_DIR}" /etc/pacman.conf
 
 phase=refresh-signing-keys
+[[ "$(findmnt -T /etc/pacman.d/gnupg -no FSTYPE)" == tmpfs ]] || {
+    echo 'Refusing to initialize pacman signing keys outside build-only tmpfs' >&2
+    exit 1
+}
 pacman-key --init
 pacman-key --populate archlinux
 omarchy_key_file=/ctx/sources/omarchy-package-signing-key.asc
@@ -81,7 +85,12 @@ rm /usr/local
 install -d -m 0755 /usr/local
 
 phase=install-quattro-packages
-pacman -S --noconfirm --needed omarchy-settings omarchy
+fetch_frozen_quattro_packages /ctx/sources /tmp/omarchy-package
+install -D -m 0644 /ctx/sources/omarchy-packages.sha256 \
+    /usr/share/omarchy-bootc/sources/omarchy-packages.sha256
+pacman -U --noconfirm --needed \
+    "/tmp/omarchy-package/omarchy-settings-${OMARCHY_VERSION}-x86_64.pkg.tar.zst" \
+    "/tmp/omarchy-package/omarchy-${OMARCHY_VERSION}-x86_64.pkg.tar.zst"
 
 while IFS= read -r hook_name; do
     [[ -f "${BOOTC_HOOK_DIR}/${hook_name}" ]]
@@ -98,9 +107,12 @@ mapfile -t other_packages < <(read_quattro_package_manifest "${OMARCHY_OTHER_MAN
 [[ ${#other_packages[@]} -gt 0 ]]
 
 phase=install-base-closure
+# Superwhisper ships a package-owned /opt/superwhisper tree. Keep it in
+# the immutable deployment instead of writing into Bootcrew's mutable /var.
+materialize_quattro_opt
 # PulseAudio compatibility is required by the desktop acceptance contract even
 # though upstream lists it alongside optional, mutually exclusive hardware.
-pacman -S --noconfirm --needed "${base_packages[@]}" pipewire-pulse
+pacman -S --noconfirm --needed "${base_packages[@]}" pipewire-pulse cosign
 phase=register-package-system-users
 install -D -m 0644 /ctx/build/cups-browsed.sysusers.conf \
     /usr/lib/sysusers.d/cups-browsed.conf
@@ -164,13 +176,24 @@ pacman -Q >"${provenance_dir}/quattro-package-manifest.txt"
 pacman -Qi >"${provenance_dir}/quattro-package-provenance.txt"
 pacman -Qm >"${provenance_dir}/quattro-foreign-package-manifest.txt" || [[ "$?" -eq 1 ]]
 cp /etc/pacman.conf "${provenance_dir}/pacman.conf"
-if [[ -d /var/lib/pacman/sync ]]; then
-    find /var/lib/pacman/sync -maxdepth 1 -type f -name '*.db*' -print0 \
-        | sort -z \
-        | xargs -0 -r sha256sum >"${provenance_dir}/repository-database-sha256sums.txt"
-else
-    : >"${provenance_dir}/repository-database-sha256sums.txt"
-fi
+db_path="$(pacman-conf DBPath)"
+[[ -n "${db_path}" && -d "${db_path}/sync" ]] || {
+    echo "Configured pacman DBPath sync directory is missing: ${db_path:-unset}" >&2
+    exit 1
+}
+find "${db_path}/sync" -maxdepth 1 -type f -name '*.db*' -print0 \
+    | sort -z \
+    | xargs -0 -r sha256sum >"${provenance_dir}/repository-database-sha256sums.txt"
+[[ -s "${provenance_dir}/repository-database-sha256sums.txt" ]] || {
+    echo 'Repository database SHA-256 provenance is empty' >&2
+    exit 1
+}
+for expected_db in core.db extra.db omarchy.db; do
+    grep -Eq "/${expected_db//./\\.}$" "${provenance_dir}/repository-database-sha256sums.txt" || {
+        echo "Missing expected repository database hash: ${expected_db}" >&2
+        exit 1
+    }
+done
 
 phase=clean-pacman-cache
 pacman -Scc --noconfirm

@@ -34,7 +34,11 @@ if [[ "$1" == verify-attestation ]]; then
           acceptance_overlay:"not-applied"}')"
     statement="$(jq -cn --argjson predicate "${predicate}" '{predicate:$predicate}')"
     payload="$(printf '%s' "${statement}" | base64 -w0)"
-    printf '[{"payload":"%s"}]\n' "${payload}"
+    if [[ ${TRUST_EXTRA_ENVELOPE:-0} == 1 ]]; then
+        printf '{"payload":"%s"}\n' "$(printf '%s' '{"predicate":{}}' | base64 -w0)"
+    fi
+    printf '{"payload":"%s"}\n' "${payload}"
+    [[ ${TRUST_MALFORMED_STREAM:-0} != 1 ]] || printf 'not-json\n'
 fi
 EOF
 chmod +x "${stub_dir}/cosign"
@@ -58,3 +62,10 @@ if "${verifier}" "${test_image}@${test_digest}" aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 fi
 grep -Fq -- '--certificate-identity https://github.com/joshyorko/omarchy-bootc/.github/workflows/build.yml@refs/heads/main' "${COSIGN_CALLS}"
 grep -Fq -- '--certificate-oidc-issuer https://token.actions.githubusercontent.com' "${COSIGN_CALLS}"
+
+TRUST_EXTRA_ENVELOPE=1 "${verifier}" "${test_image}@${test_digest}" "${test_source_sha}" >/dev/null
+if TRUST_MALFORMED_STREAM=1 "${verifier}" "${test_image}@${test_digest}" "${test_source_sha}" >/dev/null 2>&1; then
+    echo 'trust verifier accepted a malformed attestation stream' >&2
+    exit 1
+fi
+printf 'PASS: verified Cosign envelope stream, multiple predicates, and fail-closed mismatch/malformed input\n'
