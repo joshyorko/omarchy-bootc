@@ -18,6 +18,8 @@ const (
 )
 
 var artifactNamePattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+var immutableRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*@sha256:[0-9a-f]{64}$`)
+var trackingRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*:[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 type OmarchyBootc struct {
 	Source *dagger.Directory
@@ -52,42 +54,61 @@ func (m *OmarchyBootc) Validate(ctx context.Context) (string, error) {
 
 // Render the installer hook scripts used by the ISO build.
 func (m *OmarchyBootc) RenderIsoHooks(
-	// Full OCI image reference installed by the ISO.
+	// Verified immutable OCI image reference (@sha256:...) installed by the ISO.
 	installImageRef string,
-) *dagger.Directory {
-	installImageRef = defaultString(installImageRef, defaultRepoImage+":"+defaultImageTag)
+	// Mutable tracking stream reference for future bootc upgrades.
+	// +optional
+	trackingImageRef string,
+) (*dagger.Directory, error) {
+	if !immutableRefPattern.MatchString(installImageRef) {
+		return nil, fmt.Errorf("installImageRef must be an immutable digest reference: %q", installImageRef)
+	}
+	trackingImageRef = defaultString(trackingImageRef, defaultRepoImage+":"+defaultImageTag)
+	if !trackingRefPattern.MatchString(trackingImageRef) || strings.Contains(trackingImageRef, "@sha256:") {
+		return nil, fmt.Errorf("trackingImageRef must be a mutable channel tag reference: %q", trackingImageRef)
+	}
 
 	return dag.Container().
 		From("debian:bookworm-slim").
 		WithMountedDirectory("/src", m.Source).
 		WithWorkdir("/src").
 		WithEnvVariable("INSTALL_IMAGE_REF", installImageRef).
+		WithEnvVariable("TRACKING_IMAGE_REF", trackingImageRef).
 		WithExec([]string{"bash", "-lc", strings.Join([]string{
 			"set -euo pipefail",
 			"mkdir -p /out",
-			`replacement="$(printf '%s' "${INSTALL_IMAGE_REF}" | sed 's/[\\&|]/\\&/g')"`,
-			`sed "s|@@INSTALL_IMAGE_REF@@|${replacement}|g" iso_files/configure_iso_anaconda.sh.in > /out/configure_iso_anaconda.sh`,
+			`install_rep="$(printf '%s' "${INSTALL_IMAGE_REF}" | sed 's/[\\&|]/\\&/g')"`,
+			`track_rep="$(printf '%s' "${TRACKING_IMAGE_REF}" | sed 's/[\\&|]/\\&/g')"`,
+			`sed -e "s|@@INSTALL_IMAGE_REF@@|${install_rep}|g" -e "s|@@TRACKING_IMAGE_REF@@|${track_rep}|g" iso_files/configure_iso_anaconda.sh.in > /out/configure_iso_anaconda.sh`,
 			"cp iso_files/pre_initramfs_enable_repos.sh /out/pre_initramfs_enable_repos.sh",
 			"chmod +x /out/configure_iso_anaconda.sh /out/pre_initramfs_enable_repos.sh",
 		}, "\n")}).
-		Directory("/out")
+		Directory("/out"), nil
 }
 
 // Build the installer ISO with Titanoboa and return an exportable output directory.
 func (m *OmarchyBootc) BuildIso(
-	// OCI image tag used for artifact naming when installImageRef is empty.
+	// OCI image tag used for artifact naming and default tracking stream.
 	// +optional
 	imageTag string,
-	// Full OCI image reference installed by the ISO. Defaults to ghcr.io/joshyorko/omarchy-bootc:<imageTag>.
-	// +optional
+	// Verified immutable OCI image reference (@sha256:...) installed by the ISO.
 	installImageRef string,
+	// Mutable tracking stream reference for future bootc upgrades.
+	// +optional
+	trackingImageRef string,
 	// Fedora-based live rootfs image used for the installer environment.
 	// +optional
 	liveRootfsImage string,
 ) (*dagger.Directory, error) {
 	imageTag = defaultString(imageTag, defaultImageTag)
 	liveRootfsImage = defaultString(liveRootfsImage, defaultLiveRootfsImage)
-	installImageRef = defaultString(installImageRef, defaultRepoImage+":"+imageTag)
+	if !immutableRefPattern.MatchString(installImageRef) {
+		return nil, fmt.Errorf("installImageRef must be an immutable digest reference: %q", installImageRef)
+	}
+	trackingImageRef = defaultString(trackingImageRef, defaultRepoImage+":"+imageTag)
+	if !trackingRefPattern.MatchString(trackingImageRef) || strings.Contains(trackingImageRef, "@sha256:") {
+		return nil, fmt.Errorf("trackingImageRef must be a mutable channel tag reference: %q", trackingImageRef)
+	}
 
 	artifactName := sanitizeArtifactName(fmt.Sprintf("omarchy-bootc-%s-installer-x86_64", imageTag))
 	script := strings.Join([]string{
@@ -95,8 +116,9 @@ func (m *OmarchyBootc) BuildIso(
 		"command -v git",
 		"command -v just",
 		"mkdir -p /tmp/iso-hooks /out",
-		`replacement="$(printf '%s' "${INSTALL_IMAGE_REF}" | sed 's/[\\&|]/\\&/g')"`,
-		`sed "s|@@INSTALL_IMAGE_REF@@|${replacement}|g" /src/iso_files/configure_iso_anaconda.sh.in > /tmp/iso-hooks/configure_iso_anaconda.sh`,
+		`install_rep="$(printf '%s' "${INSTALL_IMAGE_REF}" | sed 's/[\\&|]/\\&/g')"`,
+		`track_rep="$(printf '%s' "${TRACKING_IMAGE_REF}" | sed 's/[\\&|]/\\&/g')"`,
+		`sed -e "s|@@INSTALL_IMAGE_REF@@|${install_rep}|g" -e "s|@@TRACKING_IMAGE_REF@@|${track_rep}|g" /src/iso_files/configure_iso_anaconda.sh.in > /tmp/iso-hooks/configure_iso_anaconda.sh`,
 		"chmod +x /tmp/iso-hooks/configure_iso_anaconda.sh",
 		"git clone --depth 1 https://github.com/ublue-os/titanoboa.git /tmp/titanoboa",
 		`git -C /tmp/titanoboa fetch --depth 1 origin "${TITANOBOA_REF}"`,
@@ -114,6 +136,7 @@ func (m *OmarchyBootc) BuildIso(
 		WithMountedDirectory("/src", m.Source).
 		WithWorkdir("/src").
 		WithEnvVariable("INSTALL_IMAGE_REF", installImageRef).
+		WithEnvVariable("TRACKING_IMAGE_REF", trackingImageRef).
 		WithEnvVariable("LIVE_ROOTFS_IMAGE", liveRootfsImage).
 		WithEnvVariable("OUTPUT_NAME", artifactName).
 		WithEnvVariable("TITANOBOA_REF", titanoboaRef).

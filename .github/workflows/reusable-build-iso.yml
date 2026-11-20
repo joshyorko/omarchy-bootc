@@ -5,15 +5,23 @@ on:
   workflow_call:
     inputs:
       image_tag:
-        description: OCI image tag to build the installer from
+        description: Intended tracking stream tag (for artifact naming and future bootc updates)
         type: string
         default: testing
       install_image_ref:
-        description: Full OCI image reference to install. Overrides image_tag when set.
+        description: Verified immutable OCI image reference (@sha256:...) to install
+        required: true
+        type: string
+      install_source_sha:
+        description: Exact 40-hex Git commit SHA attested by the signed image
+        required: true
+        type: string
+      tracking_image_ref:
+        description: Optional mutable tracking stream reference (defaults to ghcr.io/<repo>:<image_tag>)
         type: string
         default: ""
       checkout_ref:
-        description: Git ref to check out for hook scripts and workflow files
+        description: Git commit SHA to check out (must match install_source_sha)
         type: string
         default: ""
       upload_artifacts:
@@ -34,30 +42,74 @@ jobs:
       packages: read
 
     steps:
-      - name: Checkout
+      - name: Checkout exact attested source commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
-          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.sha }}
+          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || inputs.install_source_sha }}
 
-      - name: Prepare image references
+      - name: Prepare and validate immutable ISO inputs
         id: image_refs
         env:
           INSTALL_IMAGE_REF_INPUT: ${{ inputs.install_image_ref }}
+          INSTALL_SOURCE_SHA_INPUT: ${{ inputs.install_source_sha }}
+          TRACKING_IMAGE_REF_INPUT: ${{ inputs.tracking_image_ref }}
+          IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+          CHECKOUT_REF_INPUT: ${{ inputs.checkout_ref }}
         run: |
           set -euo pipefail
-          if [[ -n "${INSTALL_IMAGE_REF_INPUT}" ]]; then
-            install_image_ref="${INSTALL_IMAGE_REF_INPUT}"
+          repo_lc="${GITHUB_REPOSITORY,,}"
+          expected_repo="ghcr.io/${repo_lc}"
+          if [[ ! "${INSTALL_IMAGE_REF_INPUT}" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]]; then
+            echo "Refusing mutable or malformed install_image_ref: ${INSTALL_IMAGE_REF_INPUT}" >&2
+            exit 1
+          fi
+          if [[ "${INSTALL_IMAGE_REF_INPUT%@*}" != "${expected_repo}" ]]; then
+            echo "Refusing foreign install_image_ref repository: ${INSTALL_IMAGE_REF_INPUT}" >&2
+            exit 1
+          fi
+          if [[ ! "${INSTALL_SOURCE_SHA_INPUT}" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "Refusing malformed install_source_sha: ${INSTALL_SOURCE_SHA_INPUT}" >&2
+            exit 1
+          fi
+          if [[ -n "${CHECKOUT_REF_INPUT}" && "${CHECKOUT_REF_INPUT}" != "${INSTALL_SOURCE_SHA_INPUT}" ]]; then
+            echo "Refusing checkout_ref (${CHECKOUT_REF_INPUT}) differing from install_source_sha (${INSTALL_SOURCE_SHA_INPUT})" >&2
+            exit 1
+          fi
+          actual_head="$(git rev-parse HEAD)"
+          if [[ "${actual_head}" != "${INSTALL_SOURCE_SHA_INPUT}" ]]; then
+            echo "Checked-out HEAD (${actual_head}) differs from install_source_sha (${INSTALL_SOURCE_SHA_INPUT})" >&2
+            exit 1
+          fi
+          if [[ -n "${TRACKING_IMAGE_REF_INPUT}" ]]; then
+            tracking_image_ref="${TRACKING_IMAGE_REF_INPUT}"
           else
-            install_image_ref="ghcr.io/${GITHUB_REPOSITORY,,}:${{ inputs.image_tag }}"
+            tracking_image_ref="${expected_repo}:${IMAGE_TAG_INPUT}"
+          fi
+          if [[ ! "${tracking_image_ref}" =~ ^ghcr\.io/[a-z0-9._/-]+:[A-Za-z0-9][A-Za-z0-9._-]*$ || "${tracking_image_ref}" == *@sha256:* ]]; then
+            echo "Refusing invalid or digest-frozen tracking_image_ref: ${tracking_image_ref}" >&2
+            exit 1
           fi
           image_name="${GITHUB_REPOSITORY##*/}"
           image_name="${image_name,,}"
-          artifact_name="${image_name}-${{ inputs.image_tag }}-installer-x86_64"
+          artifact_name="${image_name}-${IMAGE_TAG_INPUT}-installer-x86_64"
           {
-            echo "install_image_ref=${install_image_ref}"
+            echo "install_image_ref=${INSTALL_IMAGE_REF_INPUT}"
+            echo "install_source_sha=${INSTALL_SOURCE_SHA_INPUT}"
+            echo "tracking_image_ref=${tracking_image_ref}"
             echo "live_rootfs_image=${{ inputs.live_rootfs_image }}"
             echo "artifact_name=${artifact_name}"
           } >> "${GITHUB_OUTPUT}"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+        with:
+          cosign-release: v2.6.0
+
+      - name: Verify signed immutable image and source attestation
+        run: |
+          bash scripts/ci/verify-published-image-trust.sh \
+            "${{ steps.image_refs.outputs.install_image_ref }}" \
+            "${{ steps.image_refs.outputs.install_source_sha }}"
 
       - name: Build installer ISO with Dagger
         uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
@@ -68,6 +120,7 @@ jobs:
             build-iso
             --image-tag ${{ inputs.image_tag }}
             --install-image-ref ${{ steps.image_refs.outputs.install_image_ref }}
+            --tracking-image-ref ${{ steps.image_refs.outputs.tracking_image_ref }}
             --live-rootfs-image ${{ steps.image_refs.outputs.live_rootfs_image }}
             export --path=output/iso
 

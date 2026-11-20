@@ -5,12 +5,20 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: OCI image tag to build the installer from
+        description: Intended tracking stream tag (testing or stable)
         required: false
         default: testing
         type: string
       install_image_ref:
-        description: Full OCI image reference to install. Overrides image_tag when set.
+        description: Verified immutable OCI image reference (ghcr.io/<repo>@sha256:...)
+        required: true
+        type: string
+      install_source_sha:
+        description: Exact 40-hex Git commit SHA attested by the signed image
+        required: true
+        type: string
+      tracking_image_ref:
+        description: Optional mutable tracking stream reference (defaults to ghcr.io/<repo>:<image_tag>)
         required: false
         default: ""
         type: string
@@ -28,5 +36,7 @@ jobs:
     with:
       image_tag: ${{ inputs.image_tag }}
       install_image_ref: ${{ inputs.install_image_ref }}
-      checkout_ref: ${{ github.sha }}
+      install_source_sha: ${{ inputs.install_source_sha }}
+      tracking_image_ref: ${{ inputs.tracking_image_ref }}
+      checkout_ref: ${{ inputs.install_source_sha }}
       upload_artifacts: true

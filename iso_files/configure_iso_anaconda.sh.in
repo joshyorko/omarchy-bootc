@@ -3,6 +3,16 @@
 set -eoux pipefail
 
 INSTALL_IMAGE_REF="@@INSTALL_IMAGE_REF@@"
+TRACKING_IMAGE_REF="@@TRACKING_IMAGE_REF@@"
+
+if [[ ! "${INSTALL_IMAGE_REF}" =~ @sha256:[a-f0-9]{64}$ ]]; then
+    echo "Refusing mutable or malformed INSTALL_IMAGE_REF: ${INSTALL_IMAGE_REF}" >&2
+    exit 1
+fi
+if [[ -z "${TRACKING_IMAGE_REF}" || "${TRACKING_IMAGE_REF}" == *@sha256:* ]]; then
+    echo "Refusing empty or pinned TRACKING_IMAGE_REF (future updates would freeze): ${TRACKING_IMAGE_REF}" >&2
+    exit 1
+fi
 
 enable_fedora_iso_repos() {
     local repo_dirs=(
@@ -113,13 +123,11 @@ default_partitioning =
     /home (min 500 MiB, free 50 GiB)
     /var  (btrfs)
 
+# Keep initial account creation UI visible (UserSpoke, PasswordSpoke, and
+# anaconda-screen-accounts) so blank-media installs create a login account.
 [User Interface]
 hidden_spokes =
     NetworkSpoke
-    PasswordSpoke
-    UserSpoke
-hidden_webui_pages =
-    anaconda-screen-accounts
 
 [Localization]
 use_geolocation = False
@@ -136,6 +144,9 @@ EOF
 
 tee /usr/share/anaconda/post-scripts/install-configure-upgrade.ks <<EOF
 %post --erroronfail
-bootc switch --mutate-in-place --transport registry ${INSTALL_IMAGE_REF}
+install -d -m 0755 /var/lib/omarchy-bootc
+printf 'origin=anaconda-iso\ninstall_image_ref=%s\ntracking_image_ref=%s\n' \
+    '${INSTALL_IMAGE_REF}' '${TRACKING_IMAGE_REF}' > /var/lib/omarchy-bootc/installer-origin
+bootc switch --mutate-in-place --transport registry ${TRACKING_IMAGE_REF}
 %end
 EOF

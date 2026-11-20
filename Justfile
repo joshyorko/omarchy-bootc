@@ -424,6 +424,7 @@ build-iso-local $tag=default_tag $install_image_ref="" $install_source_sha="":
     "$runner" call build-iso \
         --image-tag "$tag" \
         --install-image-ref "$install_image_ref" \
+        --tracking-image-ref "ghcr.io/joshyorko/omarchy-bootc:${tag}" \
         export --path="$destination"
     printf 'Installer artifacts: %s\n' "$destination"
 
