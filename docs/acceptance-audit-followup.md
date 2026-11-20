@@ -100,8 +100,10 @@ publication is authorized. Installer Gate 6 remains separate and unaccepted.
   The repair routes backup, restore, seeding and rollback through the installed
   `omarchy-adoption-filesystem.py` helper: component-by-component no-follow
   descriptor traversal, descriptor-relative recursion, and no-clobber publication.
-  Local race and preservation tests pass; real-root hosted verification and a new
-  image/guest qualification remain required before this gate can be closed.
+  Local race and preservation tests pass. Hosted real-root run 44728719656 passed
+  descriptor races, UID/GID handling and adoption retry/skills preservation on
+  bba1c8f. Separate-mount move coverage is being added; a new image/guest
+  qualification remains required before this gate can be closed.
 
 1. Hosted exact-head OCI candidate build + per-layer secret scan + hosted QEMU
    graphical/desktop/notification/menu + native plugin/OMP + A->B update & rollback

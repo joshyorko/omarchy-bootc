@@ -104,5 +104,38 @@ with tempfile.TemporaryDirectory(prefix='codex-adoption-fd-', dir='/tmp') as tem
         assert (state/'seed-owner/link').lstat().st_uid==65534
         assert (outside/'hypr/secret').stat().st_uid==0
         print('PASS: real root helper preserves intended seeding UID/GID')
+        # Exercise real EXDEV, not a mocked rename error: existing homes can
+        # live on a different mount from the root-owned adoption backup.
+        with tempfile.TemporaryDirectory(prefix='codex-adoption-crossfs-', dir='/dev/shm') as mount:
+            separate=Path(mount)
+            assert separate.stat().st_dev!=home.stat().st_dev, 'root fixture needs a separate filesystem'
+            (home/'crossfs').mkdir()
+            payload=home/'crossfs/settings'
+            payload.write_text('cross-filesystem original')
+            payload.chmod(0o640)
+            os.chown(payload,65534,65534)
+            (home/'crossfs/link').symlink_to(outside)
+            (separate/'occupied').write_text('existing backup')
+            try:
+                operation('move',home,'crossfs',separate,'occupied')
+            except OSError:
+                pass
+            else:
+                raise AssertionError('cross-filesystem move overwrote existing backup')
+            assert payload.read_text()=='cross-filesystem original'
+            assert (separate/'occupied').read_text()=='existing backup'
+            operation('move',home,'crossfs',separate,'backup')
+            assert not (home/'crossfs').exists()
+            saved=separate/'backup/settings'
+            assert saved.read_text()=='cross-filesystem original'
+            assert (saved.stat().st_uid,saved.stat().st_gid)==(65534,65534)
+            assert saved.stat().st_mode & 0o777==0o640
+            assert (separate/'backup/link').is_symlink()
+            operation('copy',separate,'backup',home,'crossfs-restored')
+            assert (home/'crossfs-restored/settings').read_text()=='cross-filesystem original'
+            operation('move',home,'crossfs-restored',separate,'rollback-current')
+            assert saved.read_text()=='cross-filesystem original'
+            assert (outside/'hypr/secret').read_text()=='outside'
+        print('PASS: real root cross-filesystem preservation, no-clobber failure, restore and rollback moves')
 print('PASS: descriptor-confined backup/restore/seed/rollback, source/destination races, leaf links and no-clobber publication')
 PY
