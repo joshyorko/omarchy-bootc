@@ -1,0 +1,5 @@
+90-mkinitcpio-install.hook
+10-limine-snapper-lock.hook
+60-limine-mkinitcpio-remove-pre.hook
+80-limine-efi-deploy.hook
+90-limine-mkinitcpio-remove-post.hook

@@ -1,0 +1,22 @@
+---
+name: Track Omarchy Quattro upstream drift
+
+on:
+  schedule:
+    - cron: '17 09 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  advisory:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Compare pinned Quattro source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/ci/check-upstream-drift.sh

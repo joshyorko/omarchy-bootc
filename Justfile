@@ -1,5 +1,5 @@
 export image_name := env("IMAGE_NAME", "omarchy-bootc")
-export default_tag := env("DEFAULT_TAG", "stable")
+export default_tag := env("DEFAULT_TAG", "testing")
 export bib_image := env("BIB_IMAGE", "quay.io/centos-bootc/bootc-image-builder:latest")
 export local_image := env("LOCAL_IMAGE", "localhost/" + image_name)
 
@@ -59,6 +59,21 @@ fix:
 
 # ── Utility ───────────────────────────────────────────────────────────────────
 
+# Validate the pinned Bootcrew and official Quattro assembly contract.
+[group('Utility')]
+test-contract:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bash tests/test-quattro-source-contract.sh
+    bash tests/test-transition-contract.sh
+
+# Validate the state-aware cross-distro switch boundary.
+[group('Utility')]
+test-transition:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bash tests/test-transition-contract.sh
+
 # Validate host prerequisites and required repository files.
 [group('Utility')]
 validate:
@@ -83,12 +98,55 @@ validate:
 
     REQUIRED_FILES=(
         Containerfile
-        custom/packages/base.packages
-        custom/packages/omarchy.packages
         image/disk.toml
-        build/10-base.sh
-        build/20-omarchy.sh
-        build/30-services.sh
+        build/lib/quattro-packages.sh
+        build/lib/bootc-initramfs.sh
+        build/configure-quattro-repositories.sh
+        build/20-quattro.sh
+        build/25-quattro-user.sh
+        build/30-bootc-ownership.sh
+        build/acceptance-firstboot.sh
+        build/acceptance-firstboot.service
+        build/bootc-disabled-hooks.txt
+        build/stage-acceptance-node.sh
+        build/verify-publishable-image.sh
+        build/verify-quattro-payload.sh
+        build/install-bootc-update.sh
+        build/cups-browsed.sysusers.conf
+        custom/bootc/omarchy-bootc-common.sh
+        custom/bootc/omarchy-bootc-update
+        custom/bootc/omarchy-bootc-update-available
+        custom/bootc/omarchy-bootc-finalize
+        sources/omarchy-quattro.source
+        sources/omarchy-quattro.revision
+        sources/omarchy-quattro-version
+        sources/omarchy-package-signing-key.asc
+        sources/omarchy-package-signing-key.fingerprint
+        sources/omarchy-package-signing-key.sha256
+        sources/omarchy-package-signing-key.source
+        sources/omarchy-iso-quattro.source
+        sources/omarchy-iso-quattro.revision
+        transition/omarchy-transition.sh
+        custom/first-boot/omarchy-adopt-existing-user.sh
+        custom/first-boot/omarchy-adoption-rollback.sh
+        systemd/system/omarchy-adopt-existing-user.service
+        custom/pacman/quattro-repositories.conf
+        custom/pacman/quattro-optional-resolver.conf
+        docs/installer-parity-contract.md
+        docs/transition-contract.md
+        vendor/bootcrew/REVISION
+        vendor/bootcrew/SOURCE
+        vendor/bootcrew/BOOTC_REVISION
+        vendor/bootcrew/BOOTC_VERSION
+        vendor/bootcrew/BOOTC_SOURCE
+        vendor/bootcrew/SHA256SUMS
+        vendor/bootcrew/shared/build.sh
+        vendor/bootcrew/shared/initramfs.sh
+        vendor/bootcrew/shared/bootc-rootfs.sh
+        tests/test-quattro-source-contract.sh
+        tests/test-published-image-trust.sh
+        scripts/ci/verify-published-image-trust.sh
+        scripts/ci/candidate-runtime.sh
     )
 
     for f in "${REQUIRED_FILES[@]}"; do
@@ -123,7 +181,7 @@ lint:
         echo "shellcheck not found — please install it."
         exit 1
     fi
-    find . -iname "*.sh" -not -path './.git/*' -exec shellcheck "{}" ';'
+    find . -iname "*.sh" -not -path './.git/*' -not -path './vendor/*' -exec shellcheck "{}" ';'
 
 # Format all shell scripts with shfmt
 [group('Utility')]
@@ -310,7 +368,7 @@ build-qcow2 $target_image=local_image $tag=default_tag filesystem="btrfs" size="
         -v /etc/containers:/etc/containers \
         -v "$(pwd):/data" \
         "{{ target_image }}:{{ tag }}" \
-        bootc install to-disk --source-imgref "${source_imgref}" --composefs-backend --via-loopback "/data/${raw_path}" --filesystem "{{ filesystem }}" --wipe --bootloader systemd
+        bootc install to-disk --source-imgref "${source_imgref}" --composefs-backend --via-loopback --filesystem "{{ filesystem }}" --wipe --bootloader systemd "/data/${raw_path}"
 
     if ! command -v qemu-img >/dev/null 2>&1; then
         echo "ERROR: qemu-img not found; install qemu-img or use build-raw. Raw image available at ${raw_path}."
@@ -349,7 +407,7 @@ build-raw $target_image=local_image $tag=default_tag size="20G": validate && (bu
         -v /etc/containers:/etc/containers \
         -v "$(pwd):/data" \
         "{{ target_image }}:{{ tag }}" \
-        bootc install to-disk --source-imgref "${source_imgref}" --composefs-backend --via-loopback "/data/${raw_path}" --filesystem "btrfs" --wipe --bootloader systemd
+        bootc install to-disk --source-imgref "${source_imgref}" --composefs-backend --via-loopback --filesystem "btrfs" --wipe --bootloader systemd "/data/${raw_path}"
 
 # Rebuild (OCI + qcow2) in one step using bootc install-to-disk
 [group('Build Virtual Machine Image')]

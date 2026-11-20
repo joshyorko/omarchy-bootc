@@ -7,7 +7,7 @@ on:
       image_tag:
         description: OCI image tag to build the installer from
         type: string
-        default: stable
+        default: testing
       install_image_ref:
         description: Full OCI image reference to install. Overrides image_tag when set.
         type: string
