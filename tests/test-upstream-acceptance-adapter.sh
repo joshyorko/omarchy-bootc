@@ -53,7 +53,7 @@ with tempfile.TemporaryDirectory() as temporary:
     receipt = json.loads((artifacts / "upstream-acceptance-adaptation.json").read_bytes())
     assert receipt["patch_sha256"] == adapter.sha256((artifacts / receipt["patch"]).read_bytes())
     assert receipt["status"] == "adapted-not-executed"
-    assert len(receipt["changes"]) == 5 and receipt["skipped_tests"] == []
+    assert len(receipt["changes"]) == 6 and receipt["skipped_tests"] == []
     # Exercise the adapted OCR function at its external capture/recognition
     # boundaries. Diagnostic failures must never turn an OCR miss into a pass.
     import os
@@ -90,7 +90,7 @@ with tempfile.TemporaryDirectory() as temporary:
     def gates(lines):
         return [line for line in lines if line.strip().startswith(('wait_until ', 'pass ', 'fail ', 'screenshot '))]
     assert gates(menu_before) == gates(menu_after), "menu correction removed or changed a gate"
-    # Enforce the consumer-visible boundary: every original byte outside the four
+    # Enforce the consumer-visible boundary: every original byte outside the selected
     # selected assertion spans survives, and runner discovery includes every gate.
     for name, before in fixture.items():
         after = (target / name).read_bytes()
@@ -276,5 +276,5 @@ with tempfile.TemporaryDirectory(prefix="notif-menu-fixtures-") as directory:
         ["bash", "-c", 'source "$1"; bootc_validate_menu_search "$2" keybindings Keybindings',
          "menu-test", helper, str(ocr_txt)], capture_output=True
     ).returncode == 0
-print("PASS: bounded five-span adaptation, preserved gates, drift refusal, root/bar/notification/menu parser boundaries (not a VM pass)")
+print("PASS: bounded six-span adaptation, preserved gates, drift refusal, root/bar/notification/menu parser boundaries (not a VM pass)")
 PY

@@ -102,8 +102,31 @@ publication is authorized. Installer Gate 6 remains separate and unaccepted.
   descriptor traversal, descriptor-relative recursion, and no-clobber publication.
   Local race and preservation tests pass. Hosted real-root run 44728719656 passed
   descriptor races, UID/GID handling and adoption retry/skills preservation on
-  bba1c8f. Separate-mount move coverage is being added; a new image/guest
+  bba1c8f. Hosted run 44729355664 passed real separate-mount EXDEV move,
+  no-clobber, metadata, restore and rollback coverage at d31a69f; a new image/guest
   qualification remains required before this gate can be closed.
+
+### Apps launcher runtime diagnosis
+
+Run [44726778692](https://github.com/joshyorko/omarchy-bootc/actions/runs/44726778692)
+built bc6eff9 successfully and booted the installed guest with KVM. Native plugin
+and persistence checks passed, but upstream acceptance stopped at the 15-second
+Apps visibility wait, before lifecycle qualification. The retained
+`failure-apps-menu-opens.png` visibly shows the application grid. At pinned upstream
+ac2690c, `default/omarchy/omarchy-menu.jsonc` routes Apps to `omarchy.dock apps`,
+and `shell/plugins/dock/AppGrid.qml` declares `omarchy-dock-apps`; the test instead
+waited for the dismissed `omarchy-menu` layer.
+
+The checksum-guarded adapter now checks the exact dock-grid namespace for open
+and close. Search, actual Omawrite window launch/closure, screenshots and all
+original deadlines remain required. The focused behavioral regression rejects
+the old assertion, a missing grid and a missing writer window. This is harness
+evidence, not a new guest pass. A fresh full image must include the later adoption
+repair before it can qualify.
+
+Small selected logs/PNGs and the parent manifest receipt are retained under
+`output/acceptance-evidence/menu-44726778692/`; the complete remote evidence is
+[artifact 14627268528](https://github.com/joshyorko/omarchy-bootc/actions/runs/44726778692/artifacts/14627268528).
 
 1. Hosted exact-head OCI candidate build + per-layer secret scan + hosted QEMU
    graphical/desktop/notification/menu + native plugin/OMP + A->B update & rollback

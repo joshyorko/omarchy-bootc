@@ -265,6 +265,55 @@ bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/bootc-acceptance-helpe
     ),
 }
 
+# The pinned default Apps action is omarchy-shell omarchy.dock apps;
+# AppGrid.qml names its overlay omarchy-dock-apps, not omarchy-menu.
+REPLACEMENTS["test/acceptance.d/shell-surfaces-test.sh"] = (
+    b'''# The menu's Apps submenu does the full launcher loop: open, search by
+# typing, launch the top hit.
+if window_present "(?i)omawrite" >/dev/null 2>&1; then
+  fail "app launch test starts with no Omawrite window" "an Omawrite window is already open"
+fi
+
+omarchy-menu summon apps >/dev/null
+wait_until "apps menu opens" 15 layer_on_overlay "omarchy-menu"
+sleep 1
+screenshot "success-apps-menu-open"
+
+wtype "omawrite"
+sleep 1
+screenshot "success-apps-menu-search"
+wtype -k Return
+
+wait_until "apps menu launches the top search hit" 60 window_present "(?i)omawrite"
+wait_until "apps menu closes after launching" 15 layer_absent "omarchy-menu"
+
+close_windows "(?i)omawrite"
+wait_until "Omawrite window closes" 30 window_absent "(?i)omawrite"
+''',
+    b'''# The pinned Apps action redirects to omarchy.dock's application grid.
+# Prove its specific overlay, search, top-hit launch and closure.
+if window_present "(?i)omawrite" >/dev/null 2>&1; then
+  fail "app launch test starts with no Omawrite window" "an Omawrite window is already open"
+fi
+
+omarchy-menu summon apps >/dev/null
+wait_until "apps menu opens" 15 layer_on_overlay "omarchy-dock-apps"
+sleep 1
+screenshot "success-apps-menu-open"
+
+wtype "omawrite"
+sleep 1
+screenshot "success-apps-menu-search"
+wtype -k Return
+
+wait_until "apps menu launches the top search hit" 60 window_present "(?i)omawrite"
+wait_until "apps menu closes after launching" 15 layer_absent "omarchy-dock-apps"
+
+close_windows "(?i)omawrite"
+wait_until "Omawrite window closes" 30 window_absent "(?i)omawrite"
+''',
+)
+
 
 def sha256(data):
     return "sha256:" + hashlib.sha256(data).hexdigest()
@@ -318,7 +367,7 @@ def adapt(root, revision, artifacts):
         "schema": "omarchy-bootc.upstream-acceptance-adaptation/v1",
         "upstream_revision": revision,
         "status": "adapted-not-executed",
-        "scope": "root-filesystem-declared-kernel-menu-navigation-and-bar-reservations-and-ocr-evidence",
+        "scope": "root-filesystem-declared-kernel-menu-navigation-apps-grid-bar-reservations-and-ocr-evidence",
         "changes": changes,
         "helper": {"path": HELPER_PATH, "sha256": sha256(helper)},
         "patch": patch_name,
