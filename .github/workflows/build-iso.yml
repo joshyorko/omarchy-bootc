@@ -22,6 +22,11 @@ on:
         required: false
         default: ""
         type: string
+      acceptance_artifact_run_id:
+        description: 'Test an existing trusted main ISO artifact without rebuilding it (empty builds ISO)'
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -29,6 +34,7 @@ concurrency:
 
 jobs:
   build-installer-iso:
+    if: inputs.acceptance_artifact_run_id == ''
     permissions:
       contents: read
       packages: read
@@ -40,3 +46,90 @@ jobs:
       tracking_image_ref: ${{ inputs.tracking_image_ref }}
       checkout_ref: ${{ inputs.install_source_sha }}
       upload_artifacts: true
+
+  installer-acceptance:
+    if: inputs.acceptance_artifact_run_id != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Verify trusted ISO producer before downloading
+        id: iso_producer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISO_RUN: ${{ inputs.acceptance_artifact_run_id }}
+          ISO_SOURCE: ${{ inputs.install_source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ISO_RUN" =~ ^[0-9]+$ && "$ISO_SOURCE" =~ ^[a-f0-9]{40}$ ]]
+          mkdir -p "$RUNNER_TEMP/iso-install"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ISO_RUN" >"$RUNNER_TEMP/iso-install/producer-run.json"
+          jq -e --arg sha "$ISO_SOURCE" '.head_sha == $sha and .head_branch == "main" and .conclusion == "success" and (.path == ".github/workflows/build.yml" or .path == ".github/workflows/build-iso.yml")' "$RUNNER_TEMP/iso-install/producer-run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ISO_RUN/jobs?per_page=100" >"$RUNNER_TEMP/iso-install/producer-jobs.json"
+          jq -e 'any(.jobs[]; (.name | endswith("Build installer ISO")) and .conclusion == "success")' "$RUNNER_TEMP/iso-install/producer-jobs.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ISO_RUN/artifacts?per_page=100" >"$RUNNER_TEMP/iso-install/producer-artifacts.json"
+          id=$(jq -er '[.artifacts[] | select(.name == "omarchy-bootc-testing-installer-x86_64" and .expired == false)] | if length == 1 then .[0].id else error("expected one immutable ISO artifact") end' "$RUNNER_TEMP/iso-install/producer-artifacts.json")
+          echo "artifact_id=$id" >> "$GITHUB_OUTPUT"
+      - name: Prepare hosted KVM tools
+        run: |
+          bash scripts/ci/prepare-ubuntu-runner.sh
+          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends xorriso openssl
+      - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+        with:
+          cosign-release: v2.6.0
+      - name: Verify exact signed image and source
+        env:
+          INSTALL_IMAGE_REF: ${{ inputs.install_image_ref }}
+          INSTALL_SOURCE_SHA: ${{ inputs.install_source_sha }}
+        run: bash scripts/ci/verify-published-image-trust.sh "$INSTALL_IMAGE_REF" "$INSTALL_SOURCE_SHA"
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.iso_producer.outputs.artifact_id }}
+          run-id: ${{ inputs.acceptance_artifact_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/installer-iso
+          merge-multiple: true
+      - name: Record hosted job identity for screenshot provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" --jq '.jobs[] | select(.name == "installer-acceptance" and .status == "in_progress") | .id')
+          [[ "$id" =~ ^[0-9]+$ ]]
+          echo "CI_JOB_ID=$id" >> "$GITHUB_ENV"
+      - name: Install the ISO on a blank disk and log into the installed desktop
+        env:
+          CI_ARTIFACT_DIR: ${{ runner.temp }}/iso-install
+          INSTALL_IMAGE_REF: ${{ inputs.install_image_ref }}
+          INSTALL_SOURCE_SHA: ${{ inputs.install_source_sha }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_TAG" == testing ]]
+          cd "$RUNNER_TEMP/installer-iso"
+          shopt -s nullglob
+          images=(*.iso)
+          checksums=(*.iso-CHECKSUM)
+          [[ ${#images[@]} == 1 && ${#checksums[@]} == 1 ]]
+          sha256sum -c "${checksums[0]}"
+          iso="$PWD/${images[0]}"
+          cd "$GITHUB_WORKSPACE"
+          timeout --kill-after=30s 90m bash scripts/ci/iso-install-acceptance.sh "$iso"
+      - name: Retain installer receipts and real PNGs, excluding whole disks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iso-install-${{ inputs.install_source_sha }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/iso-install/*.json
+            ${{ runner.temp }}/iso-install/*.log
+            ${{ runner.temp }}/iso-install/*.txt
+            ${{ runner.temp }}/iso-install/*.md
+            ${{ runner.temp }}/iso-install/screenshots/*.png
+            ${{ runner.temp }}/iso-install/screenshots/*.json
+          if-no-files-found: warn
+          retention-days: 30
