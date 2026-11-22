@@ -13,10 +13,20 @@ work=$(mktemp -d "$RUNNER_TEMP/interactive-work.XXXXXXXX")
 mkdir -p "$out" "$work/ctx/build"
 pidfile="$work/qemu.pid"
 cleanup() {
+    local status=$? pid path
+    if ((status != 0)) && [[ -S $work/qmp.sock ]]; then
+        sudo -n python3 scripts/ci/capture-vm-screen.py "$work/qmp.sock" "$out/failure.png" || true
+    fi
     if [[ -s $pidfile ]]; then
-        pid=$(cat "$pidfile")
+        pid=$(sudo -n cat "$pidfile")
         if [[ $pid =~ ^[0-9]+$ ]] && sudo -n cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ' | grep -Fq -- "$work/test.qcow2"; then sudo -n kill "$pid" || true; fi
     fi
+    # QMP can create/replace screenshot files as root. Preserve only task-owned
+    # evidence for the unprivileged artifact uploader, including failed boots.
+    for path in "$out/guest-serial.log" "$out/desktop.png" "$out/failure.png"; do
+        if sudo -n test -f "$path"; then sudo -n chown --no-dereference "$(id -u):$(id -g)" "$path" || true; fi
+    done
+    exit "$status"
 }
 trap cleanup EXIT
 df -Pk "$RUNNER_TEMP" | awk 'NR==2 {exit !($4 >= 30*1024*1024)}'
@@ -91,21 +101,27 @@ qemu-img convert -f raw -O qcow2 "$work/disk.raw" "$work/test.qcow2"
 sudo -n rm -- "$work/disk.raw" "$work/interactive.oci.tar"
 cp /usr/share/OVMF/OVMF_VARS_4M.fd "$work/vars.fd"
 [[ -c /dev/kvm ]] && sudo -n test -w /dev/kvm
+# Keep runner ownership even when QEMU opens these files with a root umask.
+: >"$out/guest-serial.log"
+: >"$pidfile"
 sudo -n qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 2 -m 4096 \
     -drive "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd" \
     -drive "if=pflash,format=raw,file=$work/vars.fd" \
     -drive "if=virtio,format=qcow2,file=$work/test.qcow2" \
     -netdev user,id=net0 -device virtio-net-pci,netdev=net0 -vga virtio -display none \
     -serial "file:$out/guest-serial.log" -qmp "unix:$work/qmp.sock,server=on,wait=off" -pidfile "$pidfile" -daemonize
+qemu_pid=$(sudo -n cat "$pidfile")
+[[ $qemu_pid =~ ^[0-9]+$ ]]
 deadline=$((SECONDS+720))
 until grep -Fq OMARCHY_INTERACTIVE_READY "$out/guest-serial.log"; do
     ((SECONDS < deadline))
-    sudo -n kill -0 "$(cat "$pidfile")"
+    sudo -n kill -0 "$qemu_pid"
     sleep 3
 done
 sed -n 's/^.*OMARCHY_BOOTED=//p' "$out/guest-serial.log" | tail -n1 >"$out/booted-status.json"
 jq -e --arg digest "$overlay_digest" '.status.booted.image.imageDigest==$digest' "$out/booted-status.json" >/dev/null
 sudo -n python3 scripts/ci/capture-vm-screen.py "$work/qmp.sock" "$out/desktop.png"
+sudo -n chown --no-dereference "$(id -u):$(id -g)" "$out/desktop.png"
 sudo -n python3 - "$work/qmp.sock" <<'PY'
 import json,socket,sys
 with socket.socket(socket.AF_UNIX) as c:
@@ -115,7 +131,7 @@ with socket.socket(socket.AF_UNIX) as c:
   while json.loads(s.readline()).get('id')!=i:pass
 PY
 deadline=$((SECONDS+120))
-while sudo -n kill -0 "$(cat "$pidfile")" 2>/dev/null; do ((SECONDS < deadline)); sleep 2; done
+while sudo -n kill -0 "$qemu_pid" 2>/dev/null; do ((SECONDS < deadline)); sleep 2; done
 qemu-img check "$work/test.qcow2" >"$out/qcow-check.txt"
 qemu-img convert -c -f qcow2 -O qcow2 "$work/test.qcow2" "$out/omarchy-341dbb8-interactive-x86_64.qcow2"
 qemu-img check "$out/omarchy-341dbb8-interactive-x86_64.qcow2" >>"$out/qcow-check.txt"

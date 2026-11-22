@@ -17,5 +17,17 @@ with tempfile.TemporaryDirectory(prefix='codex-interactive-user-',dir='/tmp') as
  result=p.read_text()
  assert 'chpasswd' not in result and 'passwd -l omarchy' in result
  assert '/usr/bin/omarchy-provision-user --first-install' in result
+ # Run the actual setup immediately before QEMU, then use a restrictive
+ # writer to verify that opening existing files preserves readable ownership.
+ out=Path(t)/'receipts';out.mkdir();pid=Path(t)/'qemu.pid'
+ setup=script.split('# Keep runner ownership even when QEMU opens these files with a root umask.\n',1)[1].split('sudo -n qemu-system-x86_64',1)[0]
+ subprocess.run(['bash','-eu','-c',setup],env=dict(os.environ,out=str(out),pidfile=str(pid)),check=True)
+ for target in [out/'guest-serial.log',pid]:
+  assert target.exists() and target.stat().st_uid==os.getuid()
+  old=os.umask(0o077)
+  try:
+   with target.open('w') as f:f.write('runner-readable')
+  finally:os.umask(old)
+  assert target.read_text()=='runner-readable' and target.stat().st_uid==os.getuid()
 print('PASS: workstation refusal and removal of reusable password from actual firstboot fixture; no VM proof claimed')
 PY
