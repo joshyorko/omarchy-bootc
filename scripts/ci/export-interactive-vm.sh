@@ -62,6 +62,12 @@ for ((i=0;i<180;i++)); do
         printf 'OMARCHY_BOOTED=' >/dev/ttyS0
         bootc status --format=json | jq -Mc . >/dev/ttyS0
         printf 'OMARCHY_INTERACTIVE_READY\n' >/dev/ttyS0
+        # Keep renderer/monitor evidence if processes start but pixels stay blank.
+        uid=$(id -u omarchy)
+        signature=$(find "/run/user/$uid/hypr" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | head -n1)
+        runuser -u omarchy -- env XDG_RUNTIME_DIR="/run/user/$uid" HYPRLAND_INSTANCE_SIGNATURE="$signature" \
+            hyprctl -j monitors >/dev/ttyS0 2>&1 || true
+        journalctl -b -u sddm.service -u omarchy-acceptance-firstboot.service -n 40 --no-pager >/dev/ttyS0 2>&1 || true
         exit 0
     fi
     sleep 2
