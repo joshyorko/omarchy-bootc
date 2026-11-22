@@ -41,6 +41,11 @@ assert re.search(r'^\s+install_source_sha:\n(?:.*\n){0,4}?\s+required:\s*true\b'
 assert 'tracking_image_ref:' in reusable_text
 assert 'verify-published-image-trust.sh' in reusable_text
 assert '--tracking-image-ref' in reusable_text
+assert '--source=.iso-source' in reusable_text
+assert 'git -C .iso-source rev-parse HEAD' in reusable_text
+assert 'ref: ${{ github.workflow_sha }}' in reusable_text
+assert 'iso.receipt.json' in reusable_text
+assert 'verify-iso-receipt.sh' in dispatch_text
 assert 'Refusing mutable or malformed install_image_ref' in reusable_text
 
 # Manual dispatch ISO workflow requires immutable image ref + source SHA.
