@@ -57,6 +57,7 @@ PY
 cat >"$work/ctx/build/desktop-proof.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+exec 2>/dev/ttyS0
 for ((i=0;i<180;i++)); do
     if pgrep -u omarchy -x Hyprland >/dev/null && pgrep -u omarchy -x quickshell >/dev/null; then
         printf 'OMARCHY_BOOTED=' >/dev/ttyS0
@@ -70,9 +71,14 @@ for ((i=0;i<180;i++)); do
         journalctl -b -u sddm.service -u omarchy-acceptance-firstboot.service -n 40 --no-pager >/dev/ttyS0 2>&1 || true
         # The desktop handles ACPI power buttons as a menu action. A private
         # serial control port requests systemd shutdown without SSH credentials.
-        stty -F /dev/ttyS1 -echo
-        read -r -t 300 command </dev/ttyS1
+        printf 'OMARCHY_CONTROL_OPENING\n' >/dev/ttyS0
+        exec 3<>/dev/ttyS1
+        stty raw -echo clocal <&3
+        printf 'OMARCHY_CONTROL_READY\n' >&3
+        printf 'OMARCHY_CONTROL_READY\n' >/dev/ttyS0
+        read -r -t 300 command <&3
         [[ $command == OMARCHY_INTERACTIVE_POWEROFF ]]
+        printf 'OMARCHY_CONTROL_ACK\n' >&3
         printf 'OMARCHY_INTERACTIVE_POWEROFF_REQUESTED\n' >/dev/ttyS0
         systemctl poweroff --no-block
         exit 0
