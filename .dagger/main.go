@@ -15,6 +15,7 @@ const (
 	defaultRepoImage       = "ghcr.io/joshyorko/omarchy-bootc"
 	titanoboaImage         = "ghcr.io/ublue-os/devcontainer@sha256:69f158620fc2677a6da14e385494be0d028030221c413287ddfedb12a0b75bd0"
 	titanoboaRef           = "840217d97bd0bc9a52466508c54d8dda5c5ba2fd"
+	isoContainersConfig    = "[containers]\ncgroups=\"disabled\"\n"
 )
 
 var artifactNamePattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
@@ -89,6 +90,8 @@ func (m *OmarchyBootc) RenderIsoHooks(
 // Check the actual nested Podman/TTY/mount path before a costly ISO build.
 func (m *OmarchyBootc) IsoBuilderPreflight(ctx context.Context) (string, error) {
 	return dag.Container().From(titanoboaImage).
+		// Dagger does not delegate nested cgroup controllers to Podman.
+		WithNewFile("/etc/containers/containers.conf.d/90-omarchy-dagger.conf", isoContainersConfig).
 		WithExec([]string{"bash", "-lc", strings.Join([]string{
 			"set -euo pipefail",
 			"just --version",
@@ -148,6 +151,7 @@ func (m *OmarchyBootc) BuildIso(
 
 	return dag.Container().
 		From(titanoboaImage).
+		WithNewFile("/etc/containers/containers.conf.d/90-omarchy-dagger.conf", isoContainersConfig).
 		WithMountedDirectory("/src", m.Source).
 		WithWorkdir("/src").
 		WithEnvVariable("INSTALL_IMAGE_REF", installImageRef).
