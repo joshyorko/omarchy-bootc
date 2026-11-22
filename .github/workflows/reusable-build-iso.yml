@@ -42,10 +42,18 @@ jobs:
       packages: read
 
     steps:
-      - name: Checkout exact attested source commit
+      - name: Checkout ISO orchestrator from the workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - name: Checkout exact attested installer source separately
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || inputs.install_source_sha }}
+          path: .iso-source
+          persist-credentials: false
 
       - name: Prepare and validate immutable ISO inputs
         id: image_refs
@@ -75,7 +83,7 @@ jobs:
             echo "Refusing checkout_ref (${CHECKOUT_REF_INPUT}) differing from install_source_sha (${INSTALL_SOURCE_SHA_INPUT})" >&2
             exit 1
           fi
-          actual_head="$(git rev-parse HEAD)"
+          actual_head="$(git -C .iso-source rev-parse HEAD)"
           if [[ "${actual_head}" != "${INSTALL_SOURCE_SHA_INPUT}" ]]; then
             echo "Checked-out HEAD (${actual_head}) differs from install_source_sha (${INSTALL_SOURCE_SHA_INPUT})" >&2
             exit 1
@@ -117,12 +125,32 @@ jobs:
           version: v0.20.6
           verb: call
           args: >-
+            --source=.iso-source
             build-iso
             --image-tag ${{ inputs.image_tag }}
             --install-image-ref ${{ steps.image_refs.outputs.install_image_ref }}
             --tracking-image-ref ${{ steps.image_refs.outputs.tracking_image_ref }}
             --live-rootfs-image ${{ steps.image_refs.outputs.live_rootfs_image }}
             export --path=output/iso
+
+      - name: Bind ISO checksum to payload, orchestrator and producer
+        env:
+          INSTALL_IMAGE_REF: ${{ steps.image_refs.outputs.install_image_ref }}
+          INSTALL_SOURCE_SHA: ${{ steps.image_refs.outputs.install_source_sha }}
+          TRACKING_IMAGE_REF: ${{ steps.image_refs.outputs.tracking_image_ref }}
+        run: |
+          set -euo pipefail
+          cd output/iso
+          shopt -s nullglob
+          images=(*.iso)
+          [[ ${#images[@]} == 1 ]]
+          image=${images[0]}
+          sha256sum -c "$image-CHECKSUM"
+          digest=$(sha256sum "$image" | cut -d ' ' -f1)
+          jq -n --arg file "$image" --arg digest "$digest" \
+            --arg source "$INSTALL_SOURCE_SHA" --arg image "$INSTALL_IMAGE_REF" \
+            --arg tracking "$TRACKING_IMAGE_REF" --arg builder "${{ github.workflow_sha }}" --arg run "$GITHUB_RUN_ID" \
+            '{schema:"omarchy-bootc.installer-iso/v1",iso_filename:$file,iso_sha256:$digest,install_source_sha:$source,install_image_ref:$image,tracking_image_ref:$tracking,builder_source_sha:$builder,run_id:$run}' > iso.receipt.json
 
       - name: Upload ISO artifacts
         if: inputs.upload_artifacts

@@ -13,8 +13,9 @@ const (
 	defaultLiveRootfsImage = "ghcr.io/ublue-os/bluefin-dx:stable"
 	defaultImageTag        = "stable"
 	defaultRepoImage       = "ghcr.io/joshyorko/omarchy-bootc"
-	titanoboaImage         = "ghcr.io/ublue-os/devcontainer:titanoboa"
+	titanoboaImage         = "ghcr.io/ublue-os/devcontainer@sha256:69f158620fc2677a6da14e385494be0d028030221c413287ddfedb12a0b75bd0"
 	titanoboaRef           = "840217d97bd0bc9a52466508c54d8dda5c5ba2fd"
+	isoContainersConfig    = "[containers]\ncgroups=\"disabled\"\n"
 )
 
 var artifactNamePattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
@@ -86,6 +87,20 @@ func (m *OmarchyBootc) RenderIsoHooks(
 		Directory("/out"), nil
 }
 
+// Check the actual nested Podman/TTY/mount path before a costly ISO build.
+func (m *OmarchyBootc) IsoBuilderPreflight(ctx context.Context) (string, error) {
+	return dag.Container().From(titanoboaImage).
+		// Dagger does not delegate nested cgroup controllers to Podman.
+		WithNewFile("/etc/containers/containers.conf.d/90-omarchy-dagger.conf", isoContainersConfig).
+		WithExec([]string{"bash", "-lc", strings.Join([]string{
+			"set -euo pipefail",
+			"just --version",
+			"if command -v sudo >/dev/null 2>&1; then run=(sudo -n env); else run=(env); fi",
+			`"${run[@]}" podman info --format=json`,
+			`"${run[@]}" podman run --rm -it --privileged --security-opt label=disable docker.io/library/alpine:3.21 sh -ceu 'test "$(id -u)" = 0; mount -t tmpfs tmpfs /mnt; umount /mnt; echo ISO_BUILDER_NESTED_OK'`,
+		}, "\n")}, dagger.ContainerWithExecOpts{InsecureRootCapabilities: true}).Stdout(ctx)
+}
+
 // Build the installer ISO with Titanoboa and return an exportable output directory.
 func (m *OmarchyBootc) BuildIso(
 	// OCI image tag used for artifact naming and default tracking stream.
@@ -123,7 +138,10 @@ func (m *OmarchyBootc) BuildIso(
 		"git clone --depth 1 https://github.com/ublue-os/titanoboa.git /tmp/titanoboa",
 		`git -C /tmp/titanoboa fetch --depth 1 origin "${TITANOBOA_REF}"`,
 		`git -C /tmp/titanoboa checkout "${TITANOBOA_REF}"`,
+		// Pinned Titanoboa uses which()/||, gated by lists in current Just.
+		`sed -i '1i set lists' /tmp/titanoboa/Justfile`,
 		"cd /tmp/titanoboa",
+		"just --summary",
 		"if command -v sudo >/dev/null 2>&1; then run=(sudo env); else run=(env); fi",
 		`"${run[@]}" PATH="$PATH" CI=true HOOK_post_rootfs=/tmp/iso-hooks/configure_iso_anaconda.sh HOOK_pre_initramfs=/src/iso_files/pre_initramfs_enable_repos.sh TITANOBOA_BUILDER_DISTRO=fedora just build "${LIVE_ROOTFS_IMAGE}" 1 none squashfs NONE "${INSTALL_IMAGE_REF}" 1`,
 		`mv /tmp/titanoboa/output.iso "/out/${OUTPUT_NAME}.iso"`,
@@ -133,6 +151,7 @@ func (m *OmarchyBootc) BuildIso(
 
 	return dag.Container().
 		From(titanoboaImage).
+		WithNewFile("/etc/containers/containers.conf.d/90-omarchy-dagger.conf", isoContainersConfig).
 		WithMountedDirectory("/src", m.Source).
 		WithWorkdir("/src").
 		WithEnvVariable("INSTALL_IMAGE_REF", installImageRef).

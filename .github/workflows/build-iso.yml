@@ -68,7 +68,7 @@ jobs:
           [[ "$ISO_RUN" =~ ^[0-9]+$ && "$ISO_SOURCE" =~ ^[a-f0-9]{40}$ ]]
           mkdir -p "$RUNNER_TEMP/iso-install"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ISO_RUN" >"$RUNNER_TEMP/iso-install/producer-run.json"
-          jq -e --arg sha "$ISO_SOURCE" '.head_sha == $sha and .head_branch == "main" and .conclusion == "success" and (.path == ".github/workflows/build.yml" or .path == ".github/workflows/build-iso.yml")' "$RUNNER_TEMP/iso-install/producer-run.json"
+          jq -e '.head_branch == "main" and (.head_sha | test("^[a-f0-9]{40}$")) and .conclusion == "success" and (.path == ".github/workflows/build.yml" or .path == ".github/workflows/build-iso.yml")' "$RUNNER_TEMP/iso-install/producer-run.json"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ISO_RUN/jobs?per_page=100" >"$RUNNER_TEMP/iso-install/producer-jobs.json"
           jq -e 'any(.jobs[]; (.name | endswith("Build installer ISO")) and .conclusion == "success")' "$RUNNER_TEMP/iso-install/producer-jobs.json"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ISO_RUN/artifacts?per_page=100" >"$RUNNER_TEMP/iso-install/producer-artifacts.json"
@@ -107,6 +107,7 @@ jobs:
           INSTALL_IMAGE_REF: ${{ inputs.install_image_ref }}
           INSTALL_SOURCE_SHA: ${{ inputs.install_source_sha }}
           IMAGE_TAG: ${{ inputs.image_tag }}
+          ISO_RUN: ${{ inputs.acceptance_artifact_run_id }}
         run: |
           set -euo pipefail
           [[ "$IMAGE_TAG" == testing ]]
@@ -118,6 +119,8 @@ jobs:
           sha256sum -c "${checksums[0]}"
           iso="$PWD/${images[0]}"
           cd "$GITHUB_WORKSPACE"
+          builder=$(jq -er .head_sha "$RUNNER_TEMP/iso-install/producer-run.json")
+          bash scripts/ci/verify-iso-receipt.sh "$RUNNER_TEMP/installer-iso" "$builder" "$INSTALL_SOURCE_SHA" "$INSTALL_IMAGE_REF" "$ISO_RUN"
           timeout --kill-after=30s 90m bash scripts/ci/iso-install-acceptance.sh "$iso"
       - name: Retain installer receipts and real PNGs, excluding whole disks
         if: always()

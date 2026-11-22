@@ -57,10 +57,10 @@ assert 'screenshots/*.json' in workflow and 'iso-install/*.md' in workflow
 # transport. Reject foreign/failed producers and expired/ambiguous artifacts.
 block=workflow.split('      - name: Verify trusted ISO producer before downloading\n',1)[1].split('      - name: Prepare hosted KVM tools\n',1)[0]
 producer='\n'.join(line[10:] for line in block.split('        run: |\n',1)[1].splitlines())
-for bad in ('', 'source', 'workflow', 'run-failed', 'job-skipped', 'expired', 'duplicate'):
+for bad in ('', 'different-builder', 'malformed-head', 'branch', 'workflow', 'run-failed', 'job-skipped', 'expired', 'duplicate'):
  with tempfile.TemporaryDirectory(prefix='codex-iso-producer-',dir='/tmp') as temp:
   base=Path(temp);bin_dir=base/'bin';bin_dir.mkdir()
-  run={'head_sha':('b' if bad=='source' else 'a')*40,'head_branch':'main','conclusion':'failure' if bad=='run-failed' else 'success','path':'.github/workflows/candidate.yml' if bad=='workflow' else '.github/workflows/build.yml'}
+  run={'head_sha':'bad' if bad=='malformed-head' else ('b' if bad=='different-builder' else 'a')*40,'head_branch':'foreign' if bad=='branch' else 'main','conclusion':'failure' if bad=='run-failed' else 'success','path':'.github/workflows/candidate.yml' if bad=='workflow' else '.github/workflows/build.yml'}
   jobs={'jobs':[{'name':'Build installer ISO / Build installer ISO','conclusion':'skipped' if bad=='job-skipped' else 'success'}]}
   item={'id':99,'name':'omarchy-bootc-testing-installer-x86_64','expired':bad=='expired'}
   artifacts={'artifacts':[item,item] if bad=='duplicate' else [item]}
@@ -69,9 +69,13 @@ for bad in ('', 'source', 'workflow', 'run-failed', 'job-skipped', 'expired', 'd
   gh=bin_dir/'gh';gh.write_text('#!/usr/bin/env bash\ncase "$2" in\n */artifacts*) cat "$FIXTURE_DATA/artifacts.json";;\n */jobs*) cat "$FIXTURE_DATA/jobs.json";;\n *) cat "$FIXTURE_DATA/run.json";;\nesac\n');gh.chmod(0o755)
   env=dict(os.environ,PATH=str(bin_dir)+':'+os.environ['PATH'],FIXTURE_DATA=temp,RUNNER_TEMP=temp,ISO_RUN='42',ISO_SOURCE='a'*40,GITHUB_REPOSITORY='joshyorko/omarchy-bootc',GITHUB_OUTPUT=str(base/'output'))
   result=subprocess.run(['bash','-c',producer],env=env,capture_output=True,text=True,timeout=10)
-  assert (result.returncode==0)==(not bad),(bad,result.stderr)
-  if not bad:assert (base/'output').read_text()=='artifact_id=99\n'
+  accepted=bad in ('','different-builder')
+  assert (result.returncode==0)==accepted,(bad,result.stderr)
+  if accepted:assert (base/'output').read_text()=='artifact_id=99\n'
   else:assert not (base/'output').exists()
+# A newer reviewed builder is permitted only with the separate payload/run/hash
+# receipt gate, whose negative cases live in test-iso-receipt.sh.
+assert workflow.index('bash scripts/ci/verify-iso-receipt.sh') < workflow.index('90m bash scripts/ci/iso-install-acceptance.sh')
 text=script.read_text()
 # The unmodified product requires a sudo password. Exercise the actual status
 # command with only SSH transport substituted; never add NOPASSWD to the image.
