@@ -1,0 +1,68 @@
+{
+  "scope": "Real failed ISO live-boot evidence from run45073812886. The live environment is Bluefin45; the intended signed Omarchy payload was NOT installed. Firmware splash is not GRUB proof. No synthetic or historical pixels.",
+  "screenshots": [
+    {
+      "path": "screenshots/installer-observed-001.png",
+      "stage": "UEFI firmware splash during direct-kernel ISO boot",
+      "phase": "installer",
+      "captured_at": "2026-11-22T21:47:54.184907+00:00",
+      "source_sha": "65a8e151b0bb44762a8cb1b9bdebd03c3a874296",
+      "harness_sha": "201d01c5ff933c5e44fd34e040e7cc7081e3aa5d",
+      "image_digest": "sha256:aca01a25953209b1e38b8aa115fe253283153f159f6f28defaede9c528476386",
+      "install_image_ref": "ghcr.io/joshyorko/omarchy-bootc@sha256:aca01a25953209b1e38b8aa115fe253283153f159f6f28defaede9c528476386",
+      "iso_digest": "sha256:b31a769129ef1438081dbd6deb49516c9903bb9a2c2959bc7946bdd6d7becd15",
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/45073812886",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/45073812886/job/137366525973",
+      "job_name": "installer-acceptance",
+      "step": "Install the ISO on a blank disk and log into the installed desktop; actual capture 2026-11-22T21:47:54.184907+00:00",
+      "provenance": "Actual verified ISO live-boot attempt, not an installed Omarchy guest; raw QMP pixels",
+      "outcome": "FAIL: live desktop reached but installer was not launched; no disk installation, login or desktop qualification",
+      "reviewed_for_publication": true,
+      "sha256": "caf23d672e8def13d39bf3f899ac1fe31c371754160d9ae8d10742dde377dd32",
+      "size_bytes": 11502,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "group": "ISO live boot \u2014 failed installer attempt",
+      "image_digest_role": "intended signed installation payload; NOT an observed installed/booted digest",
+      "iso_builder_source_sha": "5b257506191d6f0aa3716f864509e310c14ad3b9",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/45073812886/artifacts/14775949008",
+      "artifact_member": "screenshots/installer-observed-001.png"
+    },
+    {
+      "path": "screenshots/failure.png",
+      "stage": "Bluefin live welcome; Anaconda never started",
+      "phase": "installer",
+      "captured_at": "2026-11-22T22:47:29.584798+00:00",
+      "source_sha": "65a8e151b0bb44762a8cb1b9bdebd03c3a874296",
+      "harness_sha": "201d01c5ff933c5e44fd34e040e7cc7081e3aa5d",
+      "image_digest": "sha256:aca01a25953209b1e38b8aa115fe253283153f159f6f28defaede9c528476386",
+      "install_image_ref": "ghcr.io/joshyorko/omarchy-bootc@sha256:aca01a25953209b1e38b8aa115fe253283153f159f6f28defaede9c528476386",
+      "iso_digest": "sha256:b31a769129ef1438081dbd6deb49516c9903bb9a2c2959bc7946bdd6d7becd15",
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/45073812886",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/45073812886/job/137366525973",
+      "job_name": "installer-acceptance",
+      "step": "Install the ISO on a blank disk and log into the installed desktop; actual capture 2026-11-22T22:47:29.584798+00:00",
+      "provenance": "Actual verified ISO live-boot attempt, not an installed Omarchy guest; raw QMP pixels",
+      "outcome": "FAIL: live desktop reached but installer was not launched; no disk installation, login or desktop qualification",
+      "reviewed_for_publication": true,
+      "sha256": "ea4c32d85e92bb1e9cffff14c2533582ed74ab42d662a9f5ca3ed2871beca9fd",
+      "size_bytes": 445384,
+      "dimensions": [
+        1280,
+        800
+      ],
+      "group": "ISO live boot \u2014 failed installer attempt",
+      "image_digest_role": "intended signed installation payload; NOT an observed installed/booted digest",
+      "iso_builder_source_sha": "5b257506191d6f0aa3716f864509e310c14ad3b9",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/45073812886/artifacts/14775949008",
+      "artifact_member": "screenshots/failure.png"
+    }
+  ],
+  "not_captured": [
+    "GRUB: direct-kernel boot bypasses its menu",
+    "Anaconda landing, disk/account UI, installation progress/completion: installer never started",
+    "ISO-installed disk-only SDDM/login/Omarchy desktop: installation failed before starting"
+  ]
+}
