@@ -4,6 +4,10 @@ name: Build installer ISO
 on:
   workflow_dispatch:
     inputs:
+      interactive_test_vm:
+        description: 'Export the fixed qualified341dbb8 candidate as an UNSIGNED personal QCOW2, not an ISO'
+        type: boolean
+        default: false
       image_tag:
         description: Intended tracking stream tag (testing or stable)
         required: false
@@ -34,7 +38,7 @@ concurrency:
 
 jobs:
   build-installer-iso:
-    if: inputs.acceptance_artifact_run_id == ''
+    if: inputs.acceptance_artifact_run_id == '' && !inputs.interactive_test_vm
     permissions:
       contents: read
       packages: read
@@ -48,7 +52,7 @@ jobs:
       upload_artifacts: true
 
   installer-acceptance:
-    if: inputs.acceptance_artifact_run_id != ''
+    if: inputs.acceptance_artifact_run_id != '' && !inputs.interactive_test_vm
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     permissions:
@@ -133,3 +137,106 @@ jobs:
             ${{ runner.temp }}/iso-install/screenshots/*.json
           if-no-files-found: warn
           retention-days: 30
+
+  interactive-test-vm:
+    if: inputs.interactive_test_vm
+    needs: interactive-vm-pending
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+      - name: Validate VM fixture and serial-TTY contracts before large download
+        run: bash tests/test-interactive-vm-export.sh
+      - name: Bind the fixed qualified OCI and acceptance receipt to their producer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/verify-candidate-producer.py 44768835123 341dbb85351994fad83012e40c5bb894c96d1cb5 "$RUNNER_TEMP/producer.json"
+          jq -e '.artifact_id==14647899042' "$RUNNER_TEMP/producer.json"
+          gh api repos/joshyorko/omarchy-bootc/actions/artifacts/14649529703 > "$RUNNER_TEMP/accepted-metadata.json"
+          jq -e '.id==14649529703 and .expired==false and .workflow_run.id==44768835123 and .workflow_run.head_sha=="341dbb85351994fad83012e40c5bb894c96d1cb5"' "$RUNNER_TEMP/accepted-metadata.json"
+          gh api 'repos/joshyorko/omarchy-bootc/actions/runs/44768835123/jobs?per_page=100' > "$RUNNER_TEMP/qualified-jobs.json"
+          jq -e 'any(.jobs[]; .id==136417143943 and .conclusion=="success")' "$RUNNER_TEMP/qualified-jobs.json"
+      - uses: ublue-os/container-storage-action@911baca08baf30c8654933e9e9723cb399892140
+        with:
+          target-dir: /var/lib/containers
+          mount-opts: compress-force=zstd:2
+      - name: Prepare hosted build and KVM tools
+        run: |
+          bash scripts/ci/prepare-ubuntu-runner.sh
+          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends python3-pil
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '14647899042'
+          run-id: 44768835123
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/interactive-candidate
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '14649529703'
+          run-id: 44768835123
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/accepted
+          merge-multiple: true
+      - name: Install standalone disk and prove actual UEFI KVM desktop boot
+        run: bash scripts/ci/export-interactive-vm.sh
+      - name: Upload bootable personal VM only after successful boot and shutdown
+        uses: actions/upload-artifact@v4
+        with:
+          name: omarchy-341dbb8-interactive-x86_64-${{ github.run_id }}
+          path: ${{ runner.temp }}/interactive-vm/
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Retain bounded failure evidence without an unproven disk
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interactive-vm-failure-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/interactive-vm/*.log
+            ${{ runner.temp }}/interactive-vm/*.json
+            ${{ runner.temp }}/interactive-vm/*.png
+          retention-days: 7
+          if-no-files-found: warn
+
+  interactive-vm-pending:
+    if: inputs.interactive_test_vm
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+    steps:
+      - name: Report pending VM proof on exact harness commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state=pending -f 'context=Disposable interactive QCOW2 proof' \
+            -f "target_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            -f 'description=Qualified OCI reuse, UEFI KVM boot and standalone disk export in progress'
+
+  interactive-vm-result:
+    if: always() && inputs.interactive_test_vm
+    needs: interactive-test-vm
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+    steps:
+      - name: Report actual VM export outcome
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.interactive-test-vm.result }}
+        run: |
+          state=failure
+          [[ "$RESULT" != success ]] || state=success
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f "state=$state" -f 'context=Disposable interactive QCOW2 proof' \
+            -f "target_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            -f "description=Personal VM export $RESULT; inspect actual KVM receipts and download artifact"
