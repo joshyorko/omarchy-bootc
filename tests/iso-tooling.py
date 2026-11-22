@@ -22,18 +22,24 @@ with tempfile.TemporaryDirectory(prefix="codex-iso-just-", dir="/tmp") as temp:
     recipe.write_text("set lists\n" + original)
     output = path / "output.iso"
     output.write_text("filesystem-output fixture, not an installer ISO")
-    wrapper_before = subprocess.run(["just", "--justfile", str(recipe), "--no-deps", "build"], env=env, capture_output=True)
+    # Fedora's /bin/sh is Bash; Ubuntu's is Dash, which interprets the old
+    # Bash-only &> redirection differently. Reproduce the actual builder shell.
+    bash_wrapper = ["just", "--justfile", str(recipe), "--shell", "bash", "--shell-arg=-cu", "--no-deps", "build"]
+    wrapper_before = subprocess.run(bash_wrapper, env=env, capture_output=True)
     assert wrapper_before.returncode != 0
     recipe.write_text(original)
     subprocess.run(["python3", "-B", str(root / ".dagger/titanoboa-compat.py"), str(recipe)], check=True)
     after = subprocess.run(["just", "--justfile", str(recipe), "--evaluate", "PODMAN"], env=env, capture_output=True, text=True, check=True)
     assert after.stdout.strip() == str(podman)
     subprocess.run(["just", "--justfile", str(recipe), "--summary"], env=env, check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(["just", "--justfile", str(recipe), "--no-deps", "build"], env=env, check=True)
+    wrappers = [["just", "--justfile", str(recipe), "--no-deps", "build"], bash_wrapper]
+    for wrapper in wrappers:
+        subprocess.run(wrapper, env=env, check=True)
     assert output.read_text() == "filesystem-output fixture, not an installer ISO"
     output.unlink()
-    missing = subprocess.run(["just", "--justfile", str(recipe), "--no-deps", "build"], env=env, capture_output=True)
-    assert missing.returncode != 0
+    for wrapper in wrappers:
+        missing = subprocess.run(wrapper, env=env, capture_output=True)
+        assert missing.returncode != 0
     expected = original.replace('    mv ./output.iso {{ justfile_dir() }} &>/dev/null', '    test -s ./output.iso', 1)
     assert recipe.read_text() == "set lists\n" + expected
     assert 'Cannot run in nested containers' in recipe.read_text()
