@@ -53,4 +53,5 @@ jobs:
       - name: Verify host runtime lock permissions and serialization
         run: |
           bash tests/test-host-runtime-lock.sh
+          sudo -n bash tests/test-host-runtime-lock.sh
           bash tests/test-host-runtime-lock.sh --hosted-root-setup

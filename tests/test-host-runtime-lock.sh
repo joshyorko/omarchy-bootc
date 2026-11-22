@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+if ((EUID == 0)); then
+    [[ $# == 0 ]] || { echo 'Hosted privilege proof must start as the runner user' >&2; exit 2; }
+    # Dagger source contracts run as root. Exercise the real permission boundary
+    # as nobody, using only two readable fixture files, never the protected checkout.
+    fixture=$(mktemp -d /tmp/codex-host-lock-nonroot.XXXXXXXX)
+    trap 'rm -rf -- "$fixture"' EXIT
+    chmod 0755 "$fixture"
+    install -d -m 0755 "$fixture/tests" "$fixture/scripts/ci"
+    install -m 0644 "$root/scripts/ci/dagger-host-runtime.sh" "$fixture/scripts/ci/"
+    install -m 0755 "$root/tests/test-host-runtime-lock.sh" "$fixture/tests/"
+    runuser -u nobody -- bash "$fixture/tests/test-host-runtime-lock.sh"
+    exit 0
+fi
 python3 -B - "$root" "${1:-}" <<'PY'
 from pathlib import Path
 import os
