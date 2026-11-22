@@ -33,6 +33,7 @@ cleanup_qemu() {
 capture() {
     local path="$CI_ARTIFACT_DIR/screenshots/$1.png"
     sudo -n python3 "$script_dir/capture-vm-screen.py" "$qmp" "$path"
+    sudo -n chown --no-dereference "$(id -u):$(id -g)" "$path"
     python3 "$script_dir/record-screenshot-evidence.py" record "$path" "${2:-$1}" "$phase"
 }
 cleanup() {
@@ -98,6 +99,9 @@ common=(-machine 'q35,accel=kvm' -cpu host -smp 4 -m 6144
     -drive "file=$disk,if=virtio,format=qcow2"
     -netdev 'user,id=net0,hostfwd=tcp:127.0.0.1:2239-:22' -device 'virtio-net-pci,netdev=net0'
     -vga virtio -display none -qmp "unix:$qmp,server=on,wait=off" -pidfile "$pidfile" -daemonize)
+# QEMU creates serial/PID files as root with mode0600 unless pre-created.
+# Open existing runner-owned files so polling and failure uploads remain readable.
+for path in "$pidfile" "$work/live-serial.log" "$work/installed-serial.log"; do : >"$path"; done
 sudo -n qemu-system-x86_64 "${common[@]}" \
     -drive "file=$iso,media=cdrom,readonly=on" \
     -kernel "$work/vmlinuz" -initrd "$work/initramfs.img" \
@@ -127,6 +131,7 @@ fi
 cleanup_qemu
 sleep 3
 rm -f "$qmp" "$pidfile"
+: >"$pidfile"
 # The installed phase has no CD, kernel/initrd injection or acceptance overlay.
 phase=installed
 sudo -n qemu-system-x86_64 "${common[@]}" -serial "file:$work/installed-serial.log"
