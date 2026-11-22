@@ -60,7 +60,7 @@ set -euo pipefail
 for ((i=0;i<180;i++)); do
     if pgrep -u omarchy -x Hyprland >/dev/null && pgrep -u omarchy -x quickshell >/dev/null; then
         printf 'OMARCHY_BOOTED=' >/dev/ttyS0
-        bootc status --format=json | jq -c . >/dev/ttyS0
+        bootc status --format=json | jq -Mc . >/dev/ttyS0
         printf 'OMARCHY_INTERACTIVE_READY\n' >/dev/ttyS0
         exit 0
     fi
@@ -120,8 +120,16 @@ until grep -Fq OMARCHY_INTERACTIVE_READY "$out/guest-serial.log"; do
 done
 sed -n 's/^.*OMARCHY_BOOTED=//p' "$out/guest-serial.log" | tail -n1 >"$out/booted-status.json"
 jq -e --arg digest "$overlay_digest" '.status.booted.image.imageDigest==$digest' "$out/booted-status.json" >/dev/null
-sudo -n python3 scripts/ci/capture-vm-screen.py "$work/qmp.sock" "$out/desktop.png"
-sudo -n chown --no-dereference "$(id -u):$(id -g)" "$out/desktop.png"
+# Processes can exist before their first rendered frame. Require actual visible
+# pixels as well as guest process/digest proof; retain the raw QMP PNG unchanged.
+deadline=$((SECONDS+120))
+while :; do
+    sudo -n python3 scripts/ci/capture-vm-screen.py "$work/qmp.sock" "$out/desktop.png"
+    sudo -n chown --no-dereference "$(id -u):$(id -g)" "$out/desktop.png"
+    if python3 scripts/ci/check-visible-vm-frame.py "$out/desktop.png"; then break; fi
+    ((SECONDS < deadline))
+    sleep 2
+done
 sudo -n python3 - "$work/qmp.sock" <<'PY'
 import json,socket,sys
 with socket.socket(socket.AF_UNIX) as c:

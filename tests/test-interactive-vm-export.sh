@@ -6,7 +6,7 @@ env -u GITHUB_ACTIONS bash "$root/scripts/ci/export-interactive-vm.sh" >/dev/nul
 [[ $status == 2 ]] || { echo 'Workstation VM export guard failed' >&2; exit 1; }
 python3 -B - "$root" <<'PY'
 from pathlib import Path
-import sys,tempfile,subprocess,os
+import sys,tempfile,subprocess,os,pty,json,select
 root=Path(sys.argv[1]);script=(root/'scripts/ci/export-interactive-vm.sh').read_text()
 # Execute the actual password-removal transformation; never create a guest or
 # invoke Podman, sudo or QEMU locally.
@@ -29,5 +29,18 @@ with tempfile.TemporaryDirectory(prefix='codex-interactive-user-',dir='/tmp') as
    with target.open('w') as f:f.write('runner-readable')
   finally:os.umask(old)
   assert target.read_text()=='runner-readable' and target.stat().st_uid==os.getuid()
+ # A real serial TTY makes jq auto-enable colours. Execute the actual guest
+ # producer line against a harmless bootc-status double, preserving real jq/PTY.
+ line=next(l.strip() for l in script.splitlines() if 'bootc status --format=json | jq ' in l)
+ master,slave=pty.openpty()
+ try:
+  env=dict(os.environ,SERIAL_TTY=os.ttyname(slave),TERM='xterm');env.pop('NO_COLOR',None)
+  command='bootc() { printf \'{"status":{"booted":{"image":{"imageDigest":"sha256:test"}}}}\\n\'; }; '+line.replace('/dev/ttyS0','"$SERIAL_TTY"')
+  subprocess.run(['bash','-eu','-c',command],env=env,check=True)
+  assert select.select([master],[],[],2)[0], 'No serial JSON'
+  raw=os.read(master,65536)
+  assert b'\x1b' not in raw, 'Machine-readable serial receipt contains ANSI colours'
+  assert json.loads(raw)['status']['booted']['image']['imageDigest']=='sha256:test'
+ finally:os.close(master);os.close(slave)
 print('PASS: workstation refusal and removal of reusable password from actual firstboot fixture; no VM proof claimed')
 PY
