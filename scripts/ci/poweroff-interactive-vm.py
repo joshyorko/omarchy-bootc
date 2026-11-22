@@ -26,6 +26,10 @@ def poweroff(qmp, control, timeout=120):
             command.settimeout(timeout)
             command.connect(control)
             channel = command.makefile("rwb")
+            # The guest replies only after the backend is connected. Its earlier
+            # unsolicited UART output would otherwise be dropped by QEMU.
+            channel.write(b"OMARCHY_CONTROL_HELLO\n")
+            channel.flush()
             print("Waiting for guest serial control READY", file=sys.stderr)
             if channel.readline() != b"OMARCHY_CONTROL_READY\n":
                 raise ValueError("missing guest control READY")

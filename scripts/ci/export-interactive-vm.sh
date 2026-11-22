@@ -74,12 +74,16 @@ for ((i=0;i<180;i++)); do
         printf 'OMARCHY_CONTROL_OPENING\n' >/dev/ttyS0
         exec 3<>/dev/ttyS1
         stty raw -echo clocal <&3
+        printf 'OMARCHY_CONTROL_LISTENING\n' >/dev/ttyS0
+        read -r -t 300 greeting <&3
+        [[ $greeting == OMARCHY_CONTROL_HELLO ]]
         printf 'OMARCHY_CONTROL_READY\n' >&3
         printf 'OMARCHY_CONTROL_READY\n' >/dev/ttyS0
         read -r -t 300 command <&3
         [[ $command == OMARCHY_INTERACTIVE_POWEROFF ]]
         printf 'OMARCHY_CONTROL_ACK\n' >&3
         printf 'OMARCHY_INTERACTIVE_POWEROFF_REQUESTED\n' >/dev/ttyS0
+        systemctl disable interactive-desktop-proof.service
         systemctl poweroff --no-block
         exit 0
     fi
@@ -134,7 +138,7 @@ sudo -n qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 2 -m 4096 \
 qemu_pid=$(sudo -n cat "$pidfile")
 [[ $qemu_pid =~ ^[0-9]+$ ]]
 deadline=$((SECONDS+720))
-until grep -Fq OMARCHY_INTERACTIVE_READY "$out/guest-serial.log"; do
+until grep -Fq OMARCHY_INTERACTIVE_READY "$out/guest-serial.log" && grep -Fq OMARCHY_CONTROL_LISTENING "$out/guest-serial.log"; do
     ((SECONDS < deadline))
     sudo -n kill -0 "$qemu_pid"
     sleep 3
