@@ -44,3 +44,4 @@ with tempfile.TemporaryDirectory(prefix='codex-interactive-user-',dir='/tmp') as
  finally:os.close(master);os.close(slave)
 print('PASS: workstation refusal and removal of reusable password from actual firstboot fixture; no VM proof claimed')
 PY
+python3 -B "$root/tests/test-interactive-vm-poweroff.py"

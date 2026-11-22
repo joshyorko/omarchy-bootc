@@ -68,6 +68,13 @@ for ((i=0;i<180;i++)); do
         runuser -u omarchy -- env XDG_RUNTIME_DIR="/run/user/$uid" HYPRLAND_INSTANCE_SIGNATURE="$signature" \
             hyprctl -j monitors >/dev/ttyS0 2>&1 || true
         journalctl -b -u sddm.service -u omarchy-acceptance-firstboot.service -n 40 --no-pager >/dev/ttyS0 2>&1 || true
+        # The desktop handles ACPI power buttons as a menu action. A private
+        # serial control port requests systemd shutdown without SSH credentials.
+        stty -F /dev/ttyS1 -echo
+        read -r -t 300 command </dev/ttyS1
+        [[ $command == OMARCHY_INTERACTIVE_POWEROFF ]]
+        printf 'OMARCHY_INTERACTIVE_POWEROFF_REQUESTED\n' >/dev/ttyS0
+        systemctl poweroff --no-block
         exit 0
     fi
     sleep 2
@@ -115,7 +122,9 @@ sudo -n qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 2 -m 4096 \
     -drive "if=pflash,format=raw,file=$work/vars.fd" \
     -drive "if=virtio,format=qcow2,file=$work/test.qcow2" \
     -netdev user,id=net0 -device virtio-net-pci,netdev=net0 -vga virtio -display none \
-    -serial "file:$out/guest-serial.log" -qmp "unix:$work/qmp.sock,server=on,wait=off" -pidfile "$pidfile" -daemonize
+    -serial "file:$out/guest-serial.log" \
+    -chardev "socket,id=control,path=$work/control.sock,server=on,wait=off" -serial chardev:control \
+    -qmp "unix:$work/qmp.sock,server=on,wait=off" -pidfile "$pidfile" -daemonize
 qemu_pid=$(sudo -n cat "$pidfile")
 [[ $qemu_pid =~ ^[0-9]+$ ]]
 deadline=$((SECONDS+720))
@@ -136,14 +145,8 @@ while :; do
     ((SECONDS < deadline))
     sleep 2
 done
-sudo -n python3 - "$work/qmp.sock" <<'PY'
-import json,socket,sys
-with socket.socket(socket.AF_UNIX) as c:
- c.settimeout(15);c.connect(sys.argv[1]);s=c.makefile('rwb');json.loads(s.readline())
- for i,command in enumerate(['qmp_capabilities','system_powerdown']):
-  s.write((json.dumps({'execute':command,'id':i})+'\n').encode());s.flush()
-  while json.loads(s.readline()).get('id')!=i:pass
-PY
+sudo -n python3 scripts/ci/poweroff-interactive-vm.py "$work/qmp.sock" "$work/control.sock" >"$out/shutdown.json"
+grep -Fq OMARCHY_INTERACTIVE_POWEROFF_REQUESTED "$out/guest-serial.log"
 deadline=$((SECONDS+120))
 while sudo -n kill -0 "$qemu_pid" 2>/dev/null; do ((SECONDS < deadline)); sleep 2; done
 qemu-img check "$work/test.qcow2" >"$out/qcow-check.txt"

@@ -9,7 +9,7 @@ def visible(path):
         colors = frame.convert("RGB").resize((160, 100)).getcolors(16000)
     fraction = sum(count for count, rgb in colors if max(rgb) > 20) / 16000
     print(f"VM frame: {len(colors)} colors, {fraction:.3f} nonblack fraction")
-    return len(colors) >= 100 and fraction >= 0.10
+    return len(colors) >= 1000 and fraction >= 0.10
 
 
 if __name__ == "__main__":
