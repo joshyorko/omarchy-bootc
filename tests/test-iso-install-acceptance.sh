@@ -14,6 +14,29 @@ import threading
 
 root=Path(sys.argv[1])
 script=root/'scripts/ci/iso-install-acceptance.sh'
+# Exercise real command encoding before QMP transport. The previous harness
+# supplied inst.ks but never sent any launcher command to the live desktop.
+launcher=root/'scripts/ci/qmp-run-command.py'
+assert launcher.exists(), 'live desktop needs an explicit installer launcher'
+spec=importlib.util.spec_from_file_location('qmp_command',launcher)
+qmp_command=importlib.util.module_from_spec(spec);spec.loader.exec_module(qmp_command)
+command="sh -c 'curl -fsS http://10.0.2.2:18763/start.sh|bash'"
+keys=qmp_command.command_keys(command)
+assert keys[0]==['alt','f2'] and keys[-1]==['ret']
+# Independently decode the actual QEMU keycodes and modifiers back to the
+# complete shell command, including quotes, uppercase S, colon and pipe.
+plain={'spc':' ','minus':'-','slash':'/','dot':'.','apostrophe':"'",'semicolon':';','backslash':'\\'}
+shift={'semicolon':':','backslash':'|'}
+decoded=''
+for chord in keys[1:-1]:
+ key=chord[-1]
+ if chord[0]=='shift':decoded+=shift.get(key,key.upper())
+ else:decoded+=plain.get(key,key)
+assert decoded==command,(decoded,command)
+for invalid in ('', 'echo\nreboot', 'é', 'x'*513):
+ try:qmp_command.command_keys(invalid)
+ except ValueError:pass
+ else:raise AssertionError('invalid launcher input accepted')
 env=dict(os.environ);env.pop('GITHUB_ACTIONS',None)
 refused=subprocess.run(['bash',str(script)],env=env,capture_output=True,text=True,timeout=5)
 assert refused.returncode==2 and 'GitHub-hosted CI only' in refused.stderr
@@ -21,24 +44,34 @@ assert refused.returncode==2 and 'GitHub-hosted CI only' in refused.stderr
 spec=importlib.util.spec_from_file_location('qmp_login',root/'scripts/ci/qmp-login.py')
 qmp=importlib.util.module_from_spec(spec);spec.loader.exec_module(qmp)
 with tempfile.TemporaryDirectory(prefix='codex-iso-contract-',dir='/tmp') as temp:
- base=Path(temp);path=base/'qmp.sock';requests=[];errors=[]
+ base=Path(temp);path=base/'qmp.sock';requests=[];errors=[];launcher_requests=[]
  with socket.socket(socket.AF_UNIX) as server:
   server.bind(str(path));server.listen(1);server.settimeout(10)
   def serve():
    try:
-    connection,_=server.accept()
-    with connection:
-     stream=connection.makefile('rwb')
-     stream.write(b'{"QMP":{}}\n');stream.flush()
-     for line in stream:
-      value=json.loads(line);requests.append(value)
-      stream.write((json.dumps({'return':{},'id':value['id']})+'\n').encode());stream.flush()
+    for attempt in range(3):
+     connection,_=server.accept()
+     with connection:
+      stream=connection.makefile('rwb')
+      stream.write(b'{"QMP":{}}\n');stream.flush()
+      for line in stream:
+       value=json.loads(line)
+       (requests if attempt==0 else launcher_requests).append(value)
+       reply={'error':{'class':'GenericError','desc':'fixture rejected key'}} if attempt==2 and value['execute']=='send-key' else {'return':{}}
+       stream.write((json.dumps(dict(reply,id=value['id']))+'\n').encode());stream.flush()
    except Exception as error:errors.append(error)
   thread=threading.Thread(target=serve);thread.start()
   qmp.login(path,'abc123')
+  qmp_command.run_command(path,command)
+  try:qmp_command.run_command(path,'a')
+  except ValueError as error:assert 'fixture rejected key' in str(error)
+  else:raise AssertionError('QMP rejection did not fail the launcher')
   thread.join(timeout=10)
   assert not thread.is_alive() and not errors
  assert requests[0]['execute']=='qmp_capabilities'
+ sent=launcher_requests[:len(keys)+1]
+ assert sent[0]['execute']=='qmp_capabilities'
+ assert [[key['data'] for key in r['arguments']['keys']] for r in sent[1:]]==keys
  assert [r['arguments']['keys'][0]['data'] for r in requests[1:]]==list('abc123')+['ret']
  assert all(r['arguments']['hold-time']==60 for r in requests[1:])
  for invalid in ('', 'bad;key', 'PassWord', '\n'):

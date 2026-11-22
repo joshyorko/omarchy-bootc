@@ -67,6 +67,7 @@ qemu-img create -f qcow2 "$disk" 64G
 password=omarchyci2026 # Disposable account only; never a workstation credential.
 password_hash=$(openssl passwd -6 -salt omarchyci "$password")
 mkdir "$work/web"
+cp "$script_dir/iso-live-install-fixture.sh" "$work/web/start.sh"
 cat >"$work/web/install.ks" <<EOF
 graphical
 lang en_US.UTF-8
@@ -105,18 +106,36 @@ for path in "$pidfile" "$work/live-serial.log" "$work/installed-serial.log"; do 
 sudo -n qemu-system-x86_64 "${common[@]}" \
     -drive "file=$iso,media=cdrom,readonly=on" \
     -kernel "$work/vmlinuz" -initrd "$work/initramfs.img" \
-    -append 'root=live:CDLABEL=titanoboa_boot enforcing=0 rd.live.image inst.ks=http://10.0.2.2:18763/install.ks console=ttyS0' \
+    -append 'root=live:CDLABEL=titanoboa_boot enforcing=0 rd.live.image console=ttyS0' \
     -no-reboot -serial "file:$work/live-serial.log"
 deadline=$((SECONDS+3600))
 next_capture=$((SECONDS+30))
 capture_number=0
+launcher_sent=false
+startup_deadline=$((SECONDS+600))
 while ((SECONDS < deadline)); do
     if grep -Fq OMARCHY_ISO_INSTALL_COMPLETE "$work/live-serial.log"; then break; fi
+    if grep -Fq OMARCHY_INSTALLER_EXIT= "$work/live-serial.log"; then
+        echo 'Anaconda exited without the installation completion marker; see live-serial.log' >&2
+        exit 1
+    fi
+    if ((SECONDS >= startup_deadline)) && ! grep -Fq OMARCHY_INSTALLER_BACKEND_READY "$work/live-serial.log"; then
+        echo 'Anaconda did not become ready within ten minutes; see real PNGs, HTTP and serial logs' >&2
+        exit 1
+    fi
     sudo -n kill -0 "$(cat "$pidfile")" 2>/dev/null || { echo 'Installer exited before completion' >&2; exit 1; }
     if ((SECONDS >= next_capture)); then
         capture_number=$((capture_number+1))
         printf -v frame 'installer-observed-%03d' "$capture_number"
         capture "$frame" 'ISO live/installer observation (page requires visual review)'
+        if [[ $launcher_sent == false ]]; then
+            tesseract "$CI_ARTIFACT_DIR/screenshots/$frame.png" "$work/live-screen" 2>"$CI_ARTIFACT_DIR/live-screen-ocr.log"
+            if grep -Eq 'Welcome to Bluefin|Install Bluefin' "$work/live-screen.txt"; then
+                sudo -n python3 "$script_dir/qmp-run-command.py" "$qmp" "sh -c 'curl -fsS http://10.0.2.2:18763/start.sh|bash'"
+                launcher_sent=true
+                capture installer-launch-requested 'Live welcome observed; explicit automated Anaconda fixture requested'
+            fi
+        fi
         next_capture=$((SECONDS+60))
     fi
     sleep 10
