@@ -1,0 +1,38 @@
+{
+  "scope": "Actual personal QCOW2 guest pixels from the qualified341dbb8 parent, with disposable unsigned overlay. This is bootable-disk proof, NOT an installer ISO or signed release qualification. Existing historical OS galleries remain separate.",
+  "screenshots": [
+    {
+      "path": "desktop.png",
+      "group": "Personal QCOW2 \u2014 actual installed KVM guest",
+      "stage": "Console autologin Omarchy Quattro desktop",
+      "source_sha": "341dbb85351994fad83012e40c5bb894c96d1cb5",
+      "harness_sha": "d6106a634bd42d89190be97d5b3eeae0d9ae8814",
+      "image_digest": "sha256:7e4548f1445ce56de012e679083bcd13d65b11b0ea6e88b9acdbc96a88f16f2b",
+      "parent_image_digest": "sha256:9e369b93c9784f7e805cd01951fab60fcff19e5c4bbe24c1737ef91d549bd56d",
+      "iso_digest": null,
+      "run_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/45045937621",
+      "job_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/45045937621/job/137280479982",
+      "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/45045937621/artifacts/14763854396",
+      "artifact_member": "desktop.png",
+      "provenance": "Actual installed Q35/UEFI KVM guest, disposable unsigned personal fixture; not historical and not ISO installer proof",
+      "step": "Hosted QMP capture at2026-11-22T17:05:02Z after booted digest verification, before guest-origin clean shutdown",
+      "outcome": "PASSED KVM desktop boot, matching derived manifest, clean guest shutdown and pre/post-compression QCOW2 checks",
+      "sha256": "a3645aec0a67c951f59ac51e9f07ea7301673f2f38d1d0572f33e884d73530a5",
+      "dimensions": [
+        1280,
+        800
+      ],
+      "reviewed_for_publication": true
+    }
+  ],
+  "not_captured": [
+    "Installer ISO boot, Anaconda, disk/account UI and blank-disk installation: not part of this personal QCOW2 run"
+  ],
+  "qcow2_delivery": {
+    "file": "omarchy-341dbb8-interactive-x86_64.qcow2",
+    "sha256": "2fa73a940e62f26dca5a98f3a59e2414aa591a57699fc1e55173a49edd8bb691",
+    "artifact_url": "https://github.com/joshyorko/omarchy-bootc/actions/runs/45045937621/artifacts/14763854396",
+    "artifact_expires_at": "2026-11-29T17:09:14Z",
+    "scope": "DISPOSABLE UNSIGNED PERSONAL VM, NOT ISO OR RELEASE"
+  }
+}
