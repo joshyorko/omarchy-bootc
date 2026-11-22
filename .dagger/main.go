@@ -91,7 +91,7 @@ func (m *OmarchyBootc) RenderIsoHooks(
 		Directory("/out"), nil
 }
 
-// Prepare the supported outer-toolchain path; keep Titanoboa's nesting guard.
+// Verify the pinned outer toolchain; keep Titanoboa's nesting guard.
 func isoBuilderContainer() *dagger.Container {
 	return dag.Container().From(titanoboaImage).
 		WithUser("root").
@@ -103,8 +103,10 @@ case "$(uname -m)" in
     aarch64) packages+=(grub2-efi-aa64-modules) ;;
     *) echo 'Unsupported ISO builder architecture' >&2; exit 1 ;;
 esac
-dnf install -y --setopt=install_weak_deps=False "${packages[@]}"
-for package in "${packages[@]}"; do rpm -q --whatprovides "$package"; done`}, dagger.ContainerWithExecOpts{InsecureRootCapabilities: true}).
+for package in "${packages[@]}"; do
+    printf '%s -> ' "$package"
+    rpm -q --whatprovides "$package"
+done`}, dagger.ContainerWithExecOpts{InsecureRootCapabilities: true}).
 		WithEnvVariable("TITANOBOA_REF", titanoboaRef).
 		WithNewFile("/usr/libexec/omarchy-titanoboa-compat.py", titanoboaCompatibility).
 		WithExec([]string{"bash", "-lc", strings.Join([]string{
@@ -131,7 +133,15 @@ func (m *OmarchyBootc) IsoBuilderPreflight(ctx context.Context) (string, error) 
 			// No kernel, payload or installer: this only verifies boot-media tooling.
 			"mkdir -p work/iso-root/boot/grub",
 			`printf 'set timeout=0\n' > work/iso-root/boot/grub/grub.cfg`,
-			`bash -ceu "$(just --evaluate iso_dependencies); iso_dependencies"`,
+			`git show "${TITANOBOA_REF}:Justfile" > Justfile.name-only; sed -i '1i set lists' Justfile.name-only`,
+			`baseline=$(bash -ceu "$(just --justfile Justfile.name-only --evaluate iso_dependencies); iso_dependencies"); echo "NAME_ONLY_MISSING=$baseline"; (( baseline > 0 ))`,
+			`dependencies=$(just --evaluate iso_dependencies); missing=$(bash -ceu "$dependencies; iso_dependencies"); echo "PROVIDER_MISSING=$missing"; [[ $missing == 0 ]]`,
+			// Exercise the real installed RPM database with an absent capability;
+			// the actual final recipe must still stop at its nesting guard.
+			`missing_dependencies=$(printf '%s' "$dependencies" | sed 's/local RPMS=(/local RPMS=( omarchy-preflight-absent-capability /')`,
+			`missing=$(bash -ceu "$missing_dependencies; iso_dependencies"); echo "NEGATIVE_MISSING=$missing"; [[ $missing == 1 ]]`,
+			`if CI=true just "iso_dependencies=$missing_dependencies" iso > /tmp/iso-missing.log 2>&1; then echo 'Missing ISO capability was accepted' >&2; exit 1; fi`,
+			`grep -F 'Cannot run in nested containers' /tmp/iso-missing.log`,
 			"CI=true just iso",
 			"test -s /app/output.iso",
 			// Exercise the actual build wrapper without repeating its heavy dependencies.

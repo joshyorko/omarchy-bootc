@@ -41,6 +41,7 @@ with tempfile.TemporaryDirectory(prefix="codex-iso-just-", dir="/tmp") as temp:
         missing = subprocess.run(wrapper, env=env, capture_output=True)
         assert missing.returncode != 0
     expected = original.replace('    mv ./output.iso {{ justfile_dir() }} &>/dev/null', '    test -s ./output.iso', 1)
+    expected = expected.replace('        if ! rpm -q $rpm >/dev/null; then', '        if ! rpm -q --whatprovides "$rpm" >/dev/null; then', 1)
     assert recipe.read_text() == "set lists\n" + expected
     assert 'Cannot run in nested containers' in recipe.read_text()
 print("PASS: real pinned parser and final wrapper regressions; missing output rejected; nesting guard unchanged; no ISO build executed")
