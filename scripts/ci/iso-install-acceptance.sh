@@ -82,6 +82,9 @@ autopart --type=btrfs
 bootloader --location=mbr
 ostreecontainer --url=$INSTALL_IMAGE_REF --transport=containers-storage
 %include /usr/share/anaconda/post-scripts/install-configure-upgrade.ks
+%pre --erroronfail
+printf 'OMARCHY_INSTALLER_KICKSTART_STARTED\n' >/dev/ttyS0
+%end
 %post --erroronfail
 systemctl enable sshd.service
 ufw allow 22/tcp
@@ -92,7 +95,7 @@ cat /tmp/anaconda.log /tmp/program.log /tmp/storage.log >/dev/ttyS0 2>&1 || true
 %end
 reboot --eject
 EOF
-python3 -m http.server 18763 --bind 127.0.0.1 --directory "$work/web" >"$CI_ARTIFACT_DIR/kickstart-http.log" 2>&1 &
+python3 "$script_dir/iso-fixture-server.py" "$work/web" "$CI_ARTIFACT_DIR" >"$CI_ARTIFACT_DIR/kickstart-http.log" 2>&1 &
 http_pid=$!
 common=(-machine 'q35,accel=kvm' -cpu host -smp 4 -m 6144
     -drive "if=pflash,format=raw,readonly=on,file=$code"
@@ -112,15 +115,16 @@ deadline=$((SECONDS+3600))
 next_capture=$((SECONDS+30))
 capture_number=0
 launcher_sent=false
+warning_acknowledged=false
 startup_deadline=$((SECONDS+600))
 while ((SECONDS < deadline)); do
     if grep -Fq OMARCHY_ISO_INSTALL_COMPLETE "$work/live-serial.log"; then break; fi
-    if grep -Fq OMARCHY_INSTALLER_EXIT= "$work/live-serial.log"; then
-        echo 'Anaconda exited without the installation completion marker; see live-serial.log' >&2
+    if [[ -f $CI_ARTIFACT_DIR/live-launcher.log ]] && grep -Fq OMARCHY_LIVE_LAUNCHER_EXIT= "$CI_ARTIFACT_DIR/live-launcher.log"; then
+        echo 'Live installer launcher exited before completion; see live-launcher.log' >&2
         exit 1
     fi
-    if ((SECONDS >= startup_deadline)) && ! grep -Fq OMARCHY_INSTALLER_BACKEND_READY "$work/live-serial.log"; then
-        echo 'Anaconda did not become ready within ten minutes; see real PNGs, HTTP and serial logs' >&2
+    if ((SECONDS >= startup_deadline)) && ! grep -Fq OMARCHY_INSTALLER_KICKSTART_STARTED "$work/live-serial.log"; then
+        echo 'Anaconda did not start kickstart within ten minutes; see live-launcher.log, real PNGs and serial' >&2
         exit 1
     fi
     sudo -n kill -0 "$(cat "$pidfile")" 2>/dev/null || { echo 'Installer exited before completion' >&2; exit 1; }
@@ -128,13 +132,17 @@ while ((SECONDS < deadline)); do
         capture_number=$((capture_number+1))
         printf -v frame 'installer-observed-%03d' "$capture_number"
         capture "$frame" 'ISO live/installer observation (page requires visual review)'
+        tesseract "$CI_ARTIFACT_DIR/screenshots/$frame.png" "$work/live-screen" 2>"$CI_ARTIFACT_DIR/live-screen-ocr.log"
         if [[ $launcher_sent == false ]]; then
-            tesseract "$CI_ARTIFACT_DIR/screenshots/$frame.png" "$work/live-screen" 2>"$CI_ARTIFACT_DIR/live-screen-ocr.log"
             if grep -Eq 'Welcome to Bluefin|Install Bluefin' "$work/live-screen.txt"; then
                 sudo -n python3 "$script_dir/qmp-run-command.py" "$qmp" "sh -c 'curl -fsS http://10.0.2.2:18763/start.sh|bash'"
                 launcher_sent=true
                 capture installer-launch-requested 'Live welcome observed; explicit automated Anaconda fixture requested'
             fi
+        elif [[ $warning_acknowledged == false ]] && grep -Fq 'Configuration not supported' "$work/live-screen.txt" && grep -Fq 'Kickstart is not supported' "$work/live-screen.txt"; then
+            capture installer-kickstart-warning 'Actual liveinst unsupported-kickstart warning; automated fixture only'
+            sudo -n python3 "$script_dir/qmp-run-command.py" "$qmp" --confirm-warning
+            warning_acknowledged=true
         fi
         next_capture=$((SECONDS+60))
     fi

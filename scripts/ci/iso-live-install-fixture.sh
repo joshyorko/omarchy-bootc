@@ -4,43 +4,44 @@ set -euo pipefail
 [[ $(id -un) == liveuser && -e /run/initramfs/live && -n ${WAYLAND_DISPLAY:-} ]]
 base=http://10.0.2.2:18763
 fixture=$(mktemp -d /tmp/omarchy-installer-fixture.XXXXXXXX)
-trap 'rm -rf -- "$fixture"' EXIT
-curl -fsS "$base/install.ks" -o "$fixture/install.ks"
-# Live media does not automatically start Anaconda for inst.ks. The liveinst
-# wrapper explicitly rejects that boot option. This automated fixture instead
-# selects Anaconda's CLI kickstart mode via its documented LIVECMD override,
-# retaining liveinst's device/Wayland/privilege setup. It is NOT interactive UI
-# account/disk-selection coverage and changes neither the ISO nor its payload.
-sudo -n env \
-    DISPLAY="${DISPLAY:-}" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-}" \
-    PKEXEC_UID="$(id -u)" FIXTURE_KS="$fixture/install.ks" bash -s <<'ROOT'
-set -euo pipefail
-exec >/dev/ttyS0 2>&1
+exec 3>&1
+exec >"$fixture/launcher.log" 2>&1
+report() {
+    tail -c 262144 "$fixture/launcher.log" |
+        curl -sS --connect-timeout 2 --max-time 5 --data-binary @- "$base/launcher-log" >/dev/null 2>&1 || true
+}
+reporter=''
 finish() {
     local status=$?
     trap - EXIT
-    printf 'OMARCHY_INSTALLER_EXIT=%s\n' "$status"
-    for log in /tmp/anaconda.log /tmp/program.log /tmp/storage.log /tmp/packaging.log; do
-        if [[ -f $log ]]; then printf '\nGuest log: %s\n' "$log"; cat "$log"; fi
-    done
-    journalctl -b --no-pager -n 150
+    printf 'OMARCHY_LIVE_LAUNCHER_EXIT=%s\n' "$status"
+    if [[ -n $reporter ]]; then kill "$reporter" 2>/dev/null || true; wait "$reporter" 2>/dev/null || true; fi
+    report
+    cat "$fixture/launcher.log" >&3
+    rm -rf -- "$fixture"
     exit "$status"
 }
 trap finish EXIT
-printf 'OMARCHY_INSTALLER_LAUNCH_REQUESTED\n'
-rpm -qa 'anaconda*'
-cat /proc/cmdline
-# Announce only an actual backend-ready flag; this is not a completion claim.
-(
-    for ((attempt=0; attempt<120; attempt++)); do
-        if [[ -e /run/anaconda/backend_ready ]]; then
-            printf 'OMARCHY_INSTALLER_BACKEND_READY\n'
-            exit 0
-        fi
-        sleep 5
-    done
-) &
-export LIVECMD="anaconda --liveinst --graphical --kickstart=$FIXTURE_KS"
-/usr/bin/liveinst
-ROOT
+id
+printf 'liveinst=%s\n' "$(command -v liveinst)"
+printf 'session=%s runtime=%s display=%s\n' "${XDG_SESSION_TYPE:-}" "$XDG_RUNTIME_DIR" "$WAYLAND_DISPLAY"
+rpm -qa 'anaconda*' 'livesys*'
+# Capture the actual live-media launch/branding and authorization files, rather
+# than infer them from a newer upstream checkout or the installed payload.
+shopt -s nullglob
+for file in /etc/os-release /usr/share/applications/liveinst.desktop \
+    /usr/share/anaconda/gnome/fedora-welcome /etc/xdg/autostart/*welcome* \
+    /usr/share/polkit-1/actions/*liveinst* /etc/polkit-1/rules.d/*liveinst*; do
+    if [[ -r $file ]]; then printf '\nGuest file: %s\n' "$file"; head -n 120 "$file"; fi
+done
+# Record privilege diagnostics without depending on arbitrary passwordless sudo.
+if command -v sudo >/dev/null; then sudo -n -l || true; fi
+report
+(while true; do report; sleep 5; done) &
+reporter=$!
+curl -fsS "$base/install.ks" -o "$fixture/install.ks"
+# Use the ISO's actual desktop/polkit entry point. Do not replace authorization
+# policy or inject an arbitrary root shell/LIVECMD override. liveinst displays
+# its kickstart warning; the host captures and acknowledges that exact dialog.
+# This remains an automated CLI fixture, NOT interactive account/disk coverage.
+liveinst --kickstart="$fixture/install.ks"

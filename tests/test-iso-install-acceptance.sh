@@ -3,6 +3,8 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 python3 -B - "$root" <<'PY'
 import importlib.util
+import functools
+import http.server
 import json
 import os
 from pathlib import Path
@@ -11,9 +13,42 @@ import subprocess
 import sys
 import tempfile
 import threading
+import urllib.error
+import urllib.request
 
 root=Path(sys.argv[1])
 script=root/'scripts/ci/iso-install-acceptance.sh'
+# Launcher failures previously vanished before reaching privileged serial.
+# Exercise the actual bounded log receiver and its file/path error boundary.
+receiver=root/'scripts/ci/iso-fixture-server.py'
+assert receiver.exists(), 'launcher failures need an unprivileged diagnostic channel'
+spec=importlib.util.spec_from_file_location('fixture_http',receiver)
+fixture_http=importlib.util.module_from_spec(spec);spec.loader.exec_module(fixture_http)
+with tempfile.TemporaryDirectory(prefix='codex-iso-http-',dir='/tmp') as temp:
+ base=Path(temp);web=base/'web';web.mkdir();(web/'start.sh').write_text('fixture script')
+ out=base/'out';out.mkdir()
+ handler=functools.partial(fixture_http.Handler,directory=str(web),evidence=out)
+ with http.server.ThreadingHTTPServer(('127.0.0.1',0),handler) as server:
+  thread=threading.Thread(target=server.serve_forever);thread.start()
+  try:
+   url=f'http://127.0.0.1:{server.server_port}'
+   assert urllib.request.urlopen(url+'/start.sh',timeout=5).read()==b'fixture script'
+   for path,data,status in [('/launcher-log',b'sudo: a password is required\n',204),('/../other',b'bad',404),('/launcher-log',b'x'*(256*1024+1),413)]:
+    request=urllib.request.Request(url+path,data=data,method='POST')
+    try:response=urllib.request.urlopen(request,timeout=5);actual=response.status;response.close()
+    except urllib.error.HTTPError as error:actual=error.code
+    assert actual==status,(path,actual,status)
+   assert (out/'live-launcher.log').read_bytes()==b'sudo: a password is required\n'
+   for data in (b'OMARCHY_LIVE_LAUNCHER_EXIT=1\n', b'an older in-flight snapshot\n'):
+    response=urllib.request.urlopen(urllib.request.Request(url+'/launcher-log',data=data,method='POST'),timeout=5)
+    assert response.status==204;response.close()
+   assert b'OMARCHY_LIVE_LAUNCHER_EXIT=1\n' in (out/'live-launcher.log').read_bytes()
+   malformed=urllib.request.Request(url+'/launcher-log',data=b'',method='POST',headers={'Content-Length':'invalid'})
+   try:urllib.request.urlopen(malformed,timeout=5)
+   except urllib.error.HTTPError as error:assert error.code==400
+   else:raise AssertionError('invalid log size accepted')
+   assert sorted(p.name for p in out.iterdir())==['live-launcher.log']
+  finally:server.shutdown();thread.join(timeout=5)
 # Exercise real command encoding before QMP transport. The previous harness
 # supplied inst.ks but never sent any launcher command to the live desktop.
 launcher=root/'scripts/ci/qmp-run-command.py'

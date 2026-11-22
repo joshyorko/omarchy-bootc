@@ -57,6 +57,12 @@ def run_command(path, command):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('socket', type=Path)
-    parser.add_argument('command')
+    parser.add_argument('command', nargs='?')
+    parser.add_argument('--confirm-warning', action='store_true', help='Press Return after the host captures the literal kickstart warning')
     args = parser.parse_args()
-    run_command(args.socket, args.command)
+    if args.confirm_warning and args.command is None:
+        send_keys(args.socket, [['ret']])
+    elif args.command is not None and not args.confirm_warning:
+        run_command(args.socket, args.command)
+    else:
+        parser.error('provide a command or --confirm-warning, not both')
