@@ -49,6 +49,7 @@ jobs:
 
   installer-acceptance:
     if: inputs.acceptance_artifact_run_id != ''
+    needs: installer-pending
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     permissions:
@@ -77,7 +78,7 @@ jobs:
       - name: Prepare hosted KVM tools
         run: |
           bash scripts/ci/prepare-ubuntu-runner.sh
-          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends xorriso openssl
+          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends xorriso openssl tesseract-ocr
       - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
         with:
           cosign-release: v2.6.0
@@ -136,3 +137,35 @@ jobs:
             ${{ runner.temp }}/iso-install/screenshots/*.json
           if-no-files-found: warn
           retention-days: 30
+
+  installer-pending:
+    if: inputs.acceptance_artifact_run_id != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+    steps:
+      - name: Report pending blank-disk proof on exact harness source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state=pending -f 'context=Blank-disk ISO installer acceptance' \
+            -f "target_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+  installer-result:
+    if: always() && inputs.acceptance_artifact_run_id != ''
+    needs: installer-acceptance
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+    steps:
+      - name: Report actual installer test outcome
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.installer-acceptance.result }}
+        run: |
+          state=failure
+          [[ "$RESULT" != success ]] || state=success
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f "state=$state" -f 'context=Blank-disk ISO installer acceptance' \
+            -f "target_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

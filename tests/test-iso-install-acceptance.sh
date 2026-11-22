@@ -3,6 +3,8 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 python3 -B - "$root" <<'PY'
 import importlib.util
+import functools
+import http.server
 import json
 import os
 from pathlib import Path
@@ -11,9 +13,65 @@ import subprocess
 import sys
 import tempfile
 import threading
+import urllib.error
+import urllib.request
 
 root=Path(sys.argv[1])
 script=root/'scripts/ci/iso-install-acceptance.sh'
+# Launcher failures previously vanished before reaching privileged serial.
+# Exercise the actual bounded log receiver and its file/path error boundary.
+receiver=root/'scripts/ci/iso-fixture-server.py'
+assert receiver.exists(), 'launcher failures need an unprivileged diagnostic channel'
+spec=importlib.util.spec_from_file_location('fixture_http',receiver)
+fixture_http=importlib.util.module_from_spec(spec);spec.loader.exec_module(fixture_http)
+with tempfile.TemporaryDirectory(prefix='codex-iso-http-',dir='/tmp') as temp:
+ base=Path(temp);web=base/'web';web.mkdir();(web/'start.sh').write_text('fixture script')
+ out=base/'out';out.mkdir()
+ handler=functools.partial(fixture_http.Handler,directory=str(web),evidence=out)
+ with http.server.ThreadingHTTPServer(('127.0.0.1',0),handler) as server:
+  thread=threading.Thread(target=server.serve_forever);thread.start()
+  try:
+   url=f'http://127.0.0.1:{server.server_port}'
+   assert urllib.request.urlopen(url+'/start.sh',timeout=5).read()==b'fixture script'
+   for path,data,status in [('/launcher-log',b'sudo: a password is required\n',204),('/../other',b'bad',404),('/launcher-log',b'x'*(256*1024+1),413)]:
+    request=urllib.request.Request(url+path,data=data,method='POST')
+    try:response=urllib.request.urlopen(request,timeout=5);actual=response.status;response.close()
+    except urllib.error.HTTPError as error:actual=error.code
+    assert actual==status,(path,actual,status)
+   assert (out/'live-launcher.log').read_bytes()==b'sudo: a password is required\n'
+   for data in (b'OMARCHY_LIVE_LAUNCHER_EXIT=1\n', b'an older in-flight snapshot\n'):
+    response=urllib.request.urlopen(urllib.request.Request(url+'/launcher-log',data=data,method='POST'),timeout=5)
+    assert response.status==204;response.close()
+   assert b'OMARCHY_LIVE_LAUNCHER_EXIT=1\n' in (out/'live-launcher.log').read_bytes()
+   malformed=urllib.request.Request(url+'/launcher-log',data=b'',method='POST',headers={'Content-Length':'invalid'})
+   try:urllib.request.urlopen(malformed,timeout=5)
+   except urllib.error.HTTPError as error:assert error.code==400
+   else:raise AssertionError('invalid log size accepted')
+   assert sorted(p.name for p in out.iterdir())==['live-launcher.log']
+  finally:server.shutdown();thread.join(timeout=5)
+# Exercise real command encoding before QMP transport. The previous harness
+# supplied inst.ks but never sent any launcher command to the live desktop.
+launcher=root/'scripts/ci/qmp-run-command.py'
+assert launcher.exists(), 'live desktop needs an explicit installer launcher'
+spec=importlib.util.spec_from_file_location('qmp_command',launcher)
+qmp_command=importlib.util.module_from_spec(spec);spec.loader.exec_module(qmp_command)
+command="sh -c 'curl -fsS http://10.0.2.2:18763/start.sh|bash'"
+keys=qmp_command.command_keys(command)
+assert keys[0]==['alt','f2'] and keys[-1]==['ret']
+# Independently decode the actual QEMU keycodes and modifiers back to the
+# complete shell command, including quotes, uppercase S, colon and pipe.
+plain={'spc':' ','minus':'-','slash':'/','dot':'.','apostrophe':"'",'semicolon':';','backslash':'\\'}
+shift={'semicolon':':','backslash':'|'}
+decoded=''
+for chord in keys[1:-1]:
+ key=chord[-1]
+ if chord[0]=='shift':decoded+=shift.get(key,key.upper())
+ else:decoded+=plain.get(key,key)
+assert decoded==command,(decoded,command)
+for invalid in ('', 'echo\nreboot', 'é', 'x'*513):
+ try:qmp_command.command_keys(invalid)
+ except ValueError:pass
+ else:raise AssertionError('invalid launcher input accepted')
 env=dict(os.environ);env.pop('GITHUB_ACTIONS',None)
 refused=subprocess.run(['bash',str(script)],env=env,capture_output=True,text=True,timeout=5)
 assert refused.returncode==2 and 'GitHub-hosted CI only' in refused.stderr
@@ -21,24 +79,34 @@ assert refused.returncode==2 and 'GitHub-hosted CI only' in refused.stderr
 spec=importlib.util.spec_from_file_location('qmp_login',root/'scripts/ci/qmp-login.py')
 qmp=importlib.util.module_from_spec(spec);spec.loader.exec_module(qmp)
 with tempfile.TemporaryDirectory(prefix='codex-iso-contract-',dir='/tmp') as temp:
- base=Path(temp);path=base/'qmp.sock';requests=[];errors=[]
+ base=Path(temp);path=base/'qmp.sock';requests=[];errors=[];launcher_requests=[]
  with socket.socket(socket.AF_UNIX) as server:
   server.bind(str(path));server.listen(1);server.settimeout(10)
   def serve():
    try:
-    connection,_=server.accept()
-    with connection:
-     stream=connection.makefile('rwb')
-     stream.write(b'{"QMP":{}}\n');stream.flush()
-     for line in stream:
-      value=json.loads(line);requests.append(value)
-      stream.write((json.dumps({'return':{},'id':value['id']})+'\n').encode());stream.flush()
+    for attempt in range(3):
+     connection,_=server.accept()
+     with connection:
+      stream=connection.makefile('rwb')
+      stream.write(b'{"QMP":{}}\n');stream.flush()
+      for line in stream:
+       value=json.loads(line)
+       (requests if attempt==0 else launcher_requests).append(value)
+       reply={'error':{'class':'GenericError','desc':'fixture rejected key'}} if attempt==2 and value['execute']=='send-key' else {'return':{}}
+       stream.write((json.dumps(dict(reply,id=value['id']))+'\n').encode());stream.flush()
    except Exception as error:errors.append(error)
   thread=threading.Thread(target=serve);thread.start()
   qmp.login(path,'abc123')
+  qmp_command.run_command(path,command)
+  try:qmp_command.run_command(path,'a')
+  except ValueError as error:assert 'fixture rejected key' in str(error)
+  else:raise AssertionError('QMP rejection did not fail the launcher')
   thread.join(timeout=10)
   assert not thread.is_alive() and not errors
  assert requests[0]['execute']=='qmp_capabilities'
+ sent=launcher_requests[:len(keys)+1]
+ assert sent[0]['execute']=='qmp_capabilities'
+ assert [[key['data'] for key in r['arguments']['keys']] for r in sent[1:]]==keys
  assert [r['arguments']['keys'][0]['data'] for r in requests[1:]]==list('abc123')+['ret']
  assert all(r['arguments']['hold-time']==60 for r in requests[1:])
  for invalid in ('', 'bad;key', 'PassWord', '\n'):
